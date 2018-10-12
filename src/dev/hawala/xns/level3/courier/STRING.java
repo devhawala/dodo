@@ -40,11 +40,11 @@ public class STRING implements iWireData {
 	
 	private String str;
 	
-	STRING(int maxLen) {
+	protected STRING(int maxLen) {
 		this.maxLength = maxLen;
 	}
 	
-	STRING() { this(0xFFFF); }
+	protected STRING() { this(0xFFFF); }
 
 	public STRING set(String value) {
 		this.str = (value != null && value.length() > this.maxLength) ? value.substring(0, this.maxLength) :value;
@@ -96,6 +96,6 @@ public class STRING implements iWireData {
 		return to;
 	}
 	
-	public static STRING create() { return new STRING(); }
+	public static STRING make() { return new STRING(); }
 	
 }

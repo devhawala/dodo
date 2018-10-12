@@ -120,11 +120,11 @@ public abstract class CrProgram {
 		}
 		
 		public ENUM<T> get() {
-			return this.create();
+			return this.make();
 		}
 
 		@Override
-		public ENUM<T> create() {
+		public ENUM<T> make() {
 			return new RealENUM<T>(this.wire2enum, this.enum2wire);
 		}
 	}
@@ -246,7 +246,7 @@ public abstract class CrProgram {
 			if (contentMaker == null) {
 				throw new IllegalArgumentException("value for CHOICE has no mapped content definition");
 			}
-			return contentMaker.create();
+			return contentMaker.make();
 		}
 		
 	}
@@ -263,8 +263,8 @@ public abstract class CrProgram {
 		}
 
 		@Override
-		public CHOICE<T> create() {
-			return new RealCHOICE<T>(this.choiceEnumBuilder.create(), this.choiceMap);
+		public CHOICE<T> make() {
+			return new RealCHOICE<T>(this.choiceEnumBuilder.make(), this.choiceMap);
 		}
 		
 	}
@@ -315,7 +315,7 @@ public abstract class CrProgram {
 		}
 
 		@Override
-		public T create() {
+		public T make() {
 			try {
 				return this.errorRecordClass.newInstance();
 			} catch (InstantiationException | IllegalAccessException e) {
@@ -413,8 +413,8 @@ public abstract class CrProgram {
 			}
 			
 			// create the call and return data structures
-			P inParams = this.callParameters.create();
-			R outParams = this.returnParameters.create();
+			P inParams = this.callParameters.make();
+			R outParams = this.returnParameters.make();
 			
 			// read then call parameters and signal a rejection if the data length does not match
 			try {

@@ -61,8 +61,8 @@ public class BulkData1 extends CrProgram {
 	 *     hostRelativeIdentifier: UNSPECIFIED2 ];
 	 */
 	public static class Identifier extends RECORD {
-		public final UNSPECIFIED3 host = mkMember(UNSPECIFIED3::create);
-		public final UNSPECIFIED2 hostRelativeIdentifier = mkMember(UNSPECIFIED2::create);
+		public final UNSPECIFIED3 host = mkMember(UNSPECIFIED3::make);
+		public final UNSPECIFIED2 hostRelativeIdentifier = mkMember(UNSPECIFIED2::make);
 		
 		public static Identifier make() { return new Identifier(); }
 	}
@@ -79,8 +79,8 @@ public class BulkData1 extends CrProgram {
 	public enum DescriptorKind { nullKind, immediate, passive, active };
 	public static final EnumMaker<DescriptorKind> mkDescriptorKind = buildEnum(DescriptorKind.class).get();
 	public static class Descriptor_active_passive extends RECORD {
-		public final UNSPECIFIED2 network = mkMember(UNSPECIFIED2::create);
-		public final UNSPECIFIED3 host = mkMember(UNSPECIFIED3::create);
+		public final UNSPECIFIED2 network = mkMember(UNSPECIFIED2::make);
+		public final UNSPECIFIED3 host = mkMember(UNSPECIFIED3::make);
 		public final Identifier   identifier = mkRECORD(Identifier::make);
 		
 		public static Descriptor_active_passive make() { return new Descriptor_active_passive(); }

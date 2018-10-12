@@ -37,8 +37,6 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 public class CARDINAL implements iWireData {
 	
 	private int value = 0;
-	
-	CARDINAL() {}
 
 	public CARDINAL set(int val) {
 		this.value = val & 0xFFFF;
@@ -65,6 +63,6 @@ public class CARDINAL implements iWireData {
 		return to;
 	}
 	
-	public static CARDINAL create() { return new CARDINAL(); }
+	public static CARDINAL make() { return new CARDINAL(); }
 	
 }

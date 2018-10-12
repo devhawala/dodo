@@ -24,7 +24,7 @@ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package dev.hawala.xns.level4.time;
+package dev.hawala.xns.level4.common;
 
 import dev.hawala.xns.level3.courier.CARDINAL;
 import dev.hawala.xns.level3.courier.CHOICE;
@@ -50,15 +50,19 @@ public class Time2 extends CrProgram {
 	public int getVersionNumber() { return VERSION; }
 
 	/*
-	-- number of seconds since 12:00:00 AM, 1 Jan. 1901, GMT --
-	Time: TYPE = LONG CARDINAL;
-	*/
+	 * -- number of seconds since 12:00:00 AM, 1 Jan. 1901, GMT --
+	 * Time: TYPE = LONG CARDINAL;
+	 */
+	public static class Time extends LONG_CARDINAL {
+		private Time() {}
+		public static Time make() { return new Time(); }
+	}
 	
 	/*
-	-- Thurs., 12:00:00AM, 1 Jan. 1968 --
-	earliestTime: Time = 2114294400;
-	*/
-	public final long earliestTime = 2114294400L;
+	 * -- Thurs., 12:00:00AM, 1 Jan. 1968 --
+	 * earliestTime: Time = 2114294400;
+	 */
+	public static final long earliestTime = 2114294400;
 	
 	/*
 	 * PacketType:      TYPE = {request(1), response(2)};
@@ -140,4 +144,20 @@ public class Time2 extends CrProgram {
 		public static Packet make() { return new Packet(); }
 	}
 	
+	
+	/*
+	 * *********************** non-Courier public methods 
+	 */
+	
+	/**
+	 * Compute the current time in Mesa resp. Pilot representation.
+	 * 
+	 * @return number of seconds since 12:00:00 AM, 1 Jan. 1901, GMT
+	 */
+	public static long getMesaTime() {
+		long unixTimeMillis = System.currentTimeMillis();
+		long unixTimeSecs = unixTimeMillis / 1000;
+		long mesaSecs = (unixTimeSecs + (731 * 86400) + earliestTime) & 0x00000000FFFFFFFFL;
+		return mesaSecs;
+	}
 }

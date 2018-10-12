@@ -38,8 +38,6 @@ public class LONG_INTEGER implements iWireData {
 
 	private int value = 0;
 	
-	LONG_INTEGER() { }
-	
 	public int get() {
 		return this.value;
 	}
@@ -65,6 +63,6 @@ public class LONG_INTEGER implements iWireData {
 		return to;
 	}
 	
-	public static LONG_INTEGER create() { return new LONG_INTEGER(); }
+	public static LONG_INTEGER make() { return new LONG_INTEGER(); }
 		
 }

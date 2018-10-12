@@ -100,13 +100,13 @@ public abstract class RECORD implements iWireData {
 	}
 	
 	public <T extends Enum<T>> ENUM<T> mkENUM(iWireDynamic<ENUM<T>> enumMaker) {
-		ENUM<T> en = enumMaker.create();
+		ENUM<T> en = enumMaker.make();
 		this.wire(en);
 		return en;
 	}
 	
 	public <T extends Enum<T>> CHOICE<T> mkCHOICE(iWireDynamic<CHOICE<T>> choiceMaker) {
-		CHOICE<T> en = choiceMaker.create();
+		CHOICE<T> en = choiceMaker.make();
 		this.wire(en);
 		return en;
 	}
@@ -130,7 +130,7 @@ public abstract class RECORD implements iWireData {
 	}
 	
 	public <T extends RECORD> T mkRECORD(iWireDynamic<T> recordMaker) {
-		T record = recordMaker.create();
+		T record = recordMaker.make();
 		this.wire(record);
 		return record;
 	}
@@ -154,7 +154,7 @@ public abstract class RECORD implements iWireData {
 	}
 	
 	public <T extends iWireData> T mkMember(iWireDynamic<T> maker) {
-		T member = maker.create();
+		T member = maker.make();
 		this.wire(member);
 		return member;
 	}
@@ -185,7 +185,7 @@ public abstract class RECORD implements iWireData {
 		for (int i = 0; i < memberNames.length; i++) {
 			memberNames[i] = "<anon>";
 		}
-		for(Field field: clazz.getDeclaredFields()) {
+		for(Field field: clazz.getFields()) {
 			if (!java.lang.reflect.Modifier.isFinal(field.getModifiers())) {
 				continue;
 			}

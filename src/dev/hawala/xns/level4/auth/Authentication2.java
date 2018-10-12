@@ -54,7 +54,22 @@ public class Authentication2 extends AuthChsCommon {
 	 * ********* plain data structures 
 	 */
 	
-	// none so far
+	/*
+	 * CredentialsPackage: TYPE = RECORD [
+	 *     credentials: Credentials,
+	 *     nonce: LONG CARDINAL,
+	 *     recipient: Clearinghouse_Name,
+	 *     conversationKey: Key ];
+	 */
+	public static class CredentialsPackage extends RECORD {
+		public final Credentials   credentials = mkMember(Credentials::make);
+		public final LONG_CARDINAL nonce = mkLONG_CARDINAL();
+		public final Name          recipient = mkRECORD(Name::make);
+		public final Key           conversationKey = mkMember(Key::make);
+		
+		private CredentialsPackage() {}
+		public static CredentialsPackage make() { return new CredentialsPackage(); }
+	}
 	
 	
 	/*
@@ -178,15 +193,15 @@ public class Authentication2 extends AuthChsCommon {
 	 * 	REPORTS [ CallError ] = 1;
 	 */
 	public static class GetStrongCredentialsParams extends RECORD {
-		public final ThreePartName initiator = mkRECORD(AuthChsCommon.ThreePartName::make);
-		public final ThreePartName recipient = mkRECORD(AuthChsCommon.ThreePartName::make);
+		public final Name initiator = mkRECORD(Name::make);
+		public final Name recipient = mkRECORD(Name::make);
 		public final LONG_CARDINAL nonce = mkLONG_CARDINAL();
 		
 		private GetStrongCredentialsParams() {}
 		public static GetStrongCredentialsParams make() { return new GetStrongCredentialsParams(); }
 	}
 	public static class GetStrongCredentialsResults extends RECORD {
-		public final SEQUENCE<UNSPECIFIED> credentialsPackage = mkSEQUENCE(UNSPECIFIED::create);
+		public final SEQUENCE<UNSPECIFIED> credentialsPackage = mkSEQUENCE(UNSPECIFIED::make);
 		
 		private GetStrongCredentialsResults() {}
 		public static GetStrongCredentialsResults make() { return new GetStrongCredentialsResults(); }

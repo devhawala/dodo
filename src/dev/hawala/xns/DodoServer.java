@@ -26,6 +26,9 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.xns;
 
+import java.io.File;
+import java.io.FileInputStream;
+
 import dev.hawala.xns.level1.IDP;
 import dev.hawala.xns.level3.courier.CourierServer;
 import dev.hawala.xns.level4.auth.Authentication2Impl;
@@ -50,12 +53,92 @@ import dev.hawala.xns.level4.time.TimeServiceResponder;
  */
 public class DodoServer {
 	
+	private static final String DEFAULT_CONFIG_FILE = "dodo.properties";
+	
+	// the machine running the Dodo server
 	private static iNetMachine localSite;
+	
+	// configuration data
+	private static String configFilename;
+	private static long networkNo = 0x0401;
+	private static long machineId = LocalSite.getMachineId();
+	private static boolean doChecksums = true;
+	private static String netHubHost = "localhost";
+	private static int netHubPort = 3333;
+	private static int localTimeOffsetMinutes = 0;
+	private static int daysBackInTime = 0;
+	
+
+	private static boolean initializeConfiguration(String filename) {
+		if (!filename.endsWith(".properties")) { filename += ".properties"; }
+		File cfgFile = new File(filename);
+		if (!cfgFile.canRead()) {
+			System.err.printf("Error: unable to read configuration properties file: %s\n", filename);
+			return false;
+		}
+		configFilename = filename;
+		
+		PropertiesExt props = new PropertiesExt();
+		try {
+			FileInputStream fis = new FileInputStream(cfgFile);
+			props.load(fis);
+			fis.close();
+		} catch (Exception e) {
+			System.err.printf("Error: unable to load configuration from properties file: %s\n", filename);
+			System.err.printf("=> %s\n", e.getMessage());
+			return false;
+		}
+		
+		networkNo = props.getLong("networkNo", networkNo);
+		String mId = props.getString("machineId", null);
+		doChecksums = props.getBoolean("useChecksums", doChecksums);
+		netHubHost = props.getString("netHubHost", netHubHost);
+		netHubPort = props.getInt("netHubPort", netHubPort);
+		localTimeOffsetMinutes = props.getInt("localTimeOffsetMinutes", localTimeOffsetMinutes);
+		daysBackInTime = props.getInt("daysBackInTime", daysBackInTime);
+		
+		if (mId != null) {
+			String[] submacs = mId.split("-");
+			if (submacs.length != 6) {
+				System.err.printf("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): %s\n", mId);
+				return false;
+			}
+			
+			long macId = 0;
+			for (int i = 0; i < submacs.length; i++) {
+				macId = macId << 8;
+				try {
+					macId |= Integer.parseInt(submacs[i], 16) & 0xFF;
+				} catch (Exception e) {
+					System.err.printf("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): %s\n", mId); 
+					return false;
+				}
+			}
+			machineId = macId;
+		}
+		
+		return true;
+	}
 
 	public static void main(String[] args) throws XnsException {
+		String cfgFile = null;
+
+		for (String arg : args) {
+			if (cfgFile == null) {
+				cfgFile = arg;
+			} else {
+				System.out.printf("Warning: ignoring unknown argument: %s\n", arg);
+			}
+		}
+		if (cfgFile == null && (new File(DEFAULT_CONFIG_FILE)).canRead()) {
+			cfgFile = DEFAULT_CONFIG_FILE;
+		}
+		if (cfgFile != null && !initializeConfiguration(cfgFile)) {
+			return;
+		}
 		
-//		LocalSite.configureHub(null, 0);
-		LocalSite.configureLocal(0x0401, LocalSite.getMachineId(), "DodoServer", true);
+		LocalSite.configureHub(netHubHost, netHubPort);
+		LocalSite.configureLocal(networkNo, machineId, "DodoServer", doChecksums);
 		localSite = LocalSite.getInstance();
 		
 		// echo service
@@ -66,7 +149,7 @@ public class DodoServer {
 		// time service
 		localSite.pexListen(
 				IDP.KnownSocket.TIME.getSocket(), 
-				new TimeServiceResponder());
+				new TimeServiceResponder(localTimeOffsetMinutes, daysBackInTime));
 		
 		// wakeup requestor
 		iWakeupRequestor wakeupper = null;

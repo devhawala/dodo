@@ -27,8 +27,10 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns.level4.common;
 
 import dev.hawala.xns.Log;
+import dev.hawala.xns.level3.courier.ARRAY;
 import dev.hawala.xns.level3.courier.CrProgram;
 import dev.hawala.xns.level3.courier.ENUM;
+import dev.hawala.xns.level3.courier.LONG_CARDINAL;
 import dev.hawala.xns.level3.courier.RECORD;
 import dev.hawala.xns.level3.courier.SEQUENCE;
 import dev.hawala.xns.level3.courier.STRING;
@@ -37,6 +39,7 @@ import dev.hawala.xns.level3.courier.UNSPECIFIED2;
 import dev.hawala.xns.level3.courier.UNSPECIFIED3;
 import dev.hawala.xns.level3.courier.WireSeqOfUnspecifiedReader;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
+import dev.hawala.xns.level4.common.Time2.Time;
 
 /**
  * Definition of the Courier items common to the Courier
@@ -79,6 +82,14 @@ public abstract class AuthChsCommon extends CrProgram {
 	}
 	
 	/*
+	 * DomainName: TYPE = TwoPartName;
+	 */
+	public static class DomainName extends TwoPartName {
+		private DomainName() {}
+		public static DomainName make() { return new DomainName(); }
+	}
+	
+	/*
 	 * ThreePartName: TYPE = RECORD [
 	 *     organization: Organization,
 	 *     domain: Domain,
@@ -92,6 +103,22 @@ public abstract class AuthChsCommon extends CrProgram {
 		private ThreePartName() {}
 		public static ThreePartName make() { return new ThreePartName(); }
 	}
+	
+	/*
+	 * ObjectName: TYPE = ThreePartName;
+	 */
+	public static class ObjectName extends ThreePartName {
+		private ObjectName() {}
+		public static ObjectName make() { return new ObjectName(); }
+	}
+	
+	/*
+	 * Name: TYPE = ThreePartName;
+	 */
+	public static class Name extends ThreePartName {
+		private Name() {}
+		public static Name make() { return new Name(); }
+	}
 
 	/*
 	 * NetworkAddress: TYPE = RECORD [
@@ -100,12 +127,17 @@ public abstract class AuthChsCommon extends CrProgram {
 	 *     socket: UNSPECIFIED ];
 	 */
 	public static class NetworkAddress extends RECORD {
-		public final UNSPECIFIED2 network = mkMember(UNSPECIFIED2::create);
-		public final UNSPECIFIED3 host    = mkMember(UNSPECIFIED3::create);
-		public final UNSPECIFIED  socket  = mkUNSPECIFIED();
+		public final UNSPECIFIED2    network = mkMember(UNSPECIFIED2::make);
+		public final UNSPECIFIED3    host    = mkMember(UNSPECIFIED3::make);
+		public final UNSPECIFIED     socket  = mkUNSPECIFIED();
 		
 		private NetworkAddress() {}
 		public static NetworkAddress make() { return new NetworkAddress(); } 
+	}
+	
+	public static class NetworkAddressList extends SEQUENCE<NetworkAddress> {
+		private NetworkAddressList() { super(40, NetworkAddress::make); }
+		public static NetworkAddressList make() { return new NetworkAddressList(); } 
 	}
 	
 	/*
@@ -125,7 +157,7 @@ public abstract class AuthChsCommon extends CrProgram {
 	 */
 	public static class Credentials extends RECORD {
 		public final ENUM<CredentialsType> type = mkENUM(mkCredentialsType);
-		public final SEQUENCE<UNSPECIFIED> value = mkSEQUENCE(UNSPECIFIED::create);
+		public final SEQUENCE<UNSPECIFIED> value = mkSEQUENCE(UNSPECIFIED::make);
 		
 		private Credentials() {}
 		public static Credentials make() { return new Credentials(); }
@@ -136,10 +168,53 @@ public abstract class AuthChsCommon extends CrProgram {
 	 */
 	public static class Verifier extends SEQUENCE<UNSPECIFIED> {
 		
-		public Verifier() { super(12, UNSPECIFIED::create); }
-		
+		public Verifier() { super(12, UNSPECIFIED::make); }
 		public static Verifier make() { return new Verifier(); }
 		
+	}
+	
+	/*
+	 * Key: TYPE = ARRAY 4 OF UNSPECIFIED;  -- lsb of each octet is odd parity bit --
+	 */
+	public static class Key extends ARRAY<UNSPECIFIED> {
+		private Key() { super(4, UNSPECIFIED::make); }
+		public static Key make() { return new Key(); }
+	}
+	
+	/*
+	 * Block: TYPE = ARRAY 4 OF UNSPECIFIED;  -- cipher text or plain text block --
+	 */
+	public static class Block extends ARRAY<UNSPECIFIED> {
+		private Block() { super(4, UNSPECIFIED::make); }
+		public static Block make() { return new Block(); }
+	}
+	
+	/*
+	 * StrongCredentials: TYPE = RECORD [
+	 *     conversationKey: Key,
+	 *     expirationTime: Time.Time,
+	 *     initiator: Clearinghouse_Name ];
+	 */
+	public static class StrongCredentials extends RECORD {
+		public final Key             conversationKey = mkMember(Key::make);
+		public final Time            expirationTime = mkMember(Time::make);
+		public final Name            initiator = mkMember(Name::make);
+		
+		private StrongCredentials() {}
+		public static StrongCredentials make() { return new StrongCredentials(); }
+	}
+	
+	/*
+	 * StrongVerifier: TYPE = RECORD [
+	 *     timeStamp: Time.Time,
+	 *     ticks: LONG CARDINAL ];
+	 */
+	public static class StrongVerifier extends RECORD {
+		public final Time            timeStamp = mkMember(Time::make);
+		public final LONG_CARDINAL   ticks = mkLONG_CARDINAL();
+		
+		private StrongVerifier() {}
+		public static StrongVerifier make() { return new StrongVerifier(); }
 	}
 	
 	/*
@@ -179,7 +254,7 @@ public abstract class AuthChsCommon extends CrProgram {
 	 */
 	
 	public static class RetrieveAddressesResult extends RECORD {
-		public final SEQUENCE<NetworkAddress> address = mkSEQUENCE(40, NetworkAddress::make);
+		public final NetworkAddressList address = mkMember(NetworkAddressList::make);
 		
 		private RetrieveAddressesResult() {}
 		public static RetrieveAddressesResult make() { return new RetrieveAddressesResult(); }
@@ -213,26 +288,15 @@ public abstract class AuthChsCommon extends CrProgram {
 		int verifierHash = verifier.get(0).get();
 		
 		WireSeqOfUnspecifiedReader credReader = new WireSeqOfUnspecifiedReader(credentials.value);
-		ThreePartName credsObject = ThreePartName.make();
+		Name credsObject = Name.make();
 		credsObject.deserialize(credReader);
-		int usernameHash = computePasswdHash(credsObject.object.get());
+		int usernameHash = ChsDatabase.getSimplePassword(credsObject); //computePasswordHash(credsObject.object.get());
 		
 		StringBuilder sb = new StringBuilder();
 		String credsObjectString = credsObject.append(sb, "", "credentials.value").toString();
 		Log.C.printf("AuthChs", "AuthChsCommon.simpleCheckPasswordForSimpleCredentials(), %s \n", credsObjectString);
 		
 		return (verifierHash == usernameHash);
-	}
-	
-	private static int computePasswdHash(String password) {
-		String passwd = password.toLowerCase();
-		int hash = 0;
-		for (int i = 0; i < passwd.length(); i++) {
-			char c = passwd.charAt(i);
-			int cv = c;
-			hash = ((hash << 16) + cv) % 65357;
-		}
-		return hash;
 	}
 
 }

@@ -64,6 +64,6 @@ public class BOOLEAN implements iWireData {
 		return to;
 	}
 	
-	public static BOOLEAN create() { return new BOOLEAN(); }
+	public static BOOLEAN make() { return new BOOLEAN(); }
 	
 }

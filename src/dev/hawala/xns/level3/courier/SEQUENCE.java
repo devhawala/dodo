@@ -78,7 +78,7 @@ public class SEQUENCE<T extends iWireData> implements iWireData {
 	}
 	
 	public T add() {
-		T elem = this.elemBuilder.create();
+		T elem = this.elemBuilder.make();
 		this.add(elem);
 		return elem;
 	}
@@ -96,7 +96,7 @@ public class SEQUENCE<T extends iWireData> implements iWireData {
 		int elemCount = ws.readI16() & 0xFFFF;
 		this.elems.clear();
 		for (int i = 0; i < elemCount; i++) {
-			T elem = this.elemBuilder.create();
+			T elem = this.elemBuilder.make();
 			elem.deserialize(ws);
 			if (this.elems.size() < this.maxElemCount) {
 				this.elems.add(elem);

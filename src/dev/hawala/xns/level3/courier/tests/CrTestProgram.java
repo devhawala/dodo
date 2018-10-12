@@ -131,7 +131,7 @@ public class CrTestProgram extends CrProgram {
 	}
 	
 	public static class Content_complex extends RECORD {
-		public final ARRAY<BOOLEAN> flags = mkARRAY(4, BOOLEAN::create);
+		public final ARRAY<BOOLEAN> flags = mkARRAY(4, BOOLEAN::make);
 		public final STRING string = mkSTRING();
 		public final LONG_CARDINAL longCardinal = mkLONG_CARDINAL();
 		
@@ -195,8 +195,8 @@ public class CrTestProgram extends CrProgram {
 		public final LONG_INTEGER zeLongInteger = mkLONG_INTEGER();
 		public final STRING zeString = mkSTRING();
 		public final UNSPECIFIED zeUnspec = mkUNSPECIFIED();
-		public final UNSPECIFIED2 zeUnspec2 = mkMember(UNSPECIFIED2::create);
-		public final UNSPECIFIED3 zeUnspec3 = mkMember(UNSPECIFIED3::create);
+		public final UNSPECIFIED2 zeUnspec2 = mkMember(UNSPECIFIED2::make);
+		public final UNSPECIFIED3 zeUnspec3 = mkMember(UNSPECIFIED3::make);
 	}
 	
 	/*
@@ -257,11 +257,11 @@ public class CrTestProgram extends CrProgram {
 	
 	public static class CrSequences extends RECORD {
 		public final INTEGER check1 = mkINTEGER();
-		public final SEQUENCE<INTEGER> seqInt = mkSEQUENCE(INTEGER::create);
+		public final SEQUENCE<INTEGER> seqInt = mkSEQUENCE(INTEGER::make);
 		public final INTEGER check2 = mkINTEGER();
 		public final StreamOf<Data> sOfData = mkStreamOf(4, Data::make);
 		public final INTEGER check3 = mkINTEGER();
-		public final SEQUENCE<STRING> seqString = mkSEQUENCE(STRING::create);
+		public final SEQUENCE<STRING> seqString = mkSEQUENCE(STRING::make);
 		public final INTEGER check4 = mkINTEGER();
 		public final StreamOf<CHOICE<ContentType>> sOfContent = mkStreamOf(3, mkContent);
 		public final INTEGER check5 = mkINTEGER();

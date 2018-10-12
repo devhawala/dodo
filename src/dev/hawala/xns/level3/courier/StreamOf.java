@@ -84,7 +84,7 @@ public class StreamOf<T extends iWireData> implements iWireData {
 	}
 	
 	public T add() {
-		T elem = this.elemBuilder.create();
+		T elem = this.elemBuilder.make();
 		this.elems.add(elem);
 		return elem;
 	}
@@ -120,7 +120,7 @@ public class StreamOf<T extends iWireData> implements iWireData {
 			
 			int segmentLength = ws.readI16();
 			for (int i = 0; i < segmentLength; i++) {
-				T elem = this.elemBuilder.create();
+				T elem = this.elemBuilder.make();
 				elem.deserialize(ws);
 				this.elems.add(elem);
 			}

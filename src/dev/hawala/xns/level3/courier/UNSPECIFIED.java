@@ -37,8 +37,6 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 public class UNSPECIFIED implements iWireData {
 	
 	private int value = 0;
-	
-	UNSPECIFIED() {}
 
 	public UNSPECIFIED set(int val) {
 		this.value = val & 0xFFFF;
@@ -65,6 +63,6 @@ public class UNSPECIFIED implements iWireData {
 		return to;
 	}
 	
-	public static UNSPECIFIED create() { return new UNSPECIFIED(); }
+	public static UNSPECIFIED make() { return new UNSPECIFIED(); }
 	
 }

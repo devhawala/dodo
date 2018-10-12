@@ -93,6 +93,10 @@ public class Log {
 	
 	public final static Logger I = new Logger("", "-INFO-");
 	
+	public final static Logger CHS = new Logger("", "#CHS##");
+	
+	public final static Logger AUTH = new Logger("", "#AUTH");
+	
 	public final static Logger L0 = new Logger("");
 	
 	public final static Logger L1 = new Logger(INDENT_SEP);

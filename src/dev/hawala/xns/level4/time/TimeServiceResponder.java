@@ -33,13 +33,42 @@ import dev.hawala.xns.level2.PEX.ClientType;
 
 /**
  * Time server implementation.
- * <p>
- * TODO: make the time zone and daylight saving configurable
- * </p>
  * 
  * @author Dr. Hans-Walter Latz / Berlin (2018)
  */
 public class TimeServiceResponder implements iPexResponder {
+
+	// local time offset data computed in constructor from 
+	private final short direction; // 0 = west, 1 = east
+	private final short offsetHours;
+	private final short offsetMinutes;
+	private final int mesaSecondsAdjust;
+	
+	/**
+	 * Initialize the internal time service with the time zone information
+	 * (without DST, meaning if DST is active, the {@code gmtOffsetMinutes}
+	 * value must be adjusted accordingly).
+	 * 
+	 * @param gmtOffsetMinutes difference between local time and GMT in
+	 * 		minutes, with positive values being to the east and negative
+	 * 		to the west (e.g. Germany is +60 without DST and +120 with DST
+	 * 		whereas Alaska is -560 without DST resp -480 with DST).
+	 * @param moveDateBackDays number of days to subtract from the current
+	 * 		date to get the final mesa timestamp, with 0 not changing the date.
+	 */
+	public TimeServiceResponder(int gmtOffsetMinutes, int moveDateBackDays) {
+		if (gmtOffsetMinutes >= 0) {
+			this.direction = 1;
+		} else {
+			this.direction = 0;
+			gmtOffsetMinutes = -gmtOffsetMinutes;
+		}
+		gmtOffsetMinutes = gmtOffsetMinutes % 720;
+		this.offsetHours = (short)(gmtOffsetMinutes / 60);
+		this.offsetMinutes = (short)(gmtOffsetMinutes % 60);
+		
+		this.mesaSecondsAdjust = -86400 * moveDateBackDays;
+	}
 
 	@Override
 	public void handlePacket(
@@ -64,23 +93,23 @@ public class TimeServiceResponder implements iPexResponder {
 		long unixTimeMillis = System.currentTimeMillis();
 		int  milliSecs = (int)(unixTimeMillis % 1000);
 		long unixTimeSecs = unixTimeMillis / 1000;
-		int mesaSecs = (int)((unixTimeSecs + (731 * 86400) + 2114294400) & 0x00000000FFFFFFFFL);
+		int mesaSecs = (int)((unixTimeSecs + (731 * 86400) + 2114294400) & 0x00000000FFFFFFFFL) + this.mesaSecondsAdjust;
 		short mesaSecs0 = (short)(mesaSecs >>> 16);
 		short mesaSecs1 = (short)(mesaSecs & 0xFFFF);
 		
 		// payload: time response (12 words)
 		byte[] b = new byte[24];
-		setWord(b, 0, 2);         // version(0): WORD -- TimeVersion = 2
-		setWord(b, 1, 2);         // tsBody(1): SELECT type(1): PacketType FROM -- timeResponse = 2
-		setWord(b, 2, mesaSecs0); // time(2): WireLong -- computed mesa time
-		setWord(b, 3, mesaSecs1); // ...
-		setWord(b, 4, 1);         // zoneS(4): System.WestEast -- east
-		setWord(b, 5, 1);         // zoneH(5): [0..177B] -- +1 hour
-		setWord(b, 6, 0);         // zoneM(6): [0..377B] -- +0 minutes
-		setWord(b, 7, 0);         // beginDST(7): WORD -- no dst (temp)
-		setWord(b, 8, 0);         // endDST(8): WORD -- no dst (temp)
-		setWord(b, 9, 1);         // errorAccurate(9): BOOLEAN -- true
-		setWord(b, 10, 0);        // absoluteError(10): WireLong]
+		setWord(b, 0, 2);                  // version(0): WORD -- TimeVersion = 2
+		setWord(b, 1, 2);                  // tsBody(1): SELECT type(1): PacketType FROM -- timeResponse = 2
+		setWord(b, 2, mesaSecs0);          // time(2): WireLong -- computed mesa time
+		setWord(b, 3, mesaSecs1);          // ...
+		setWord(b, 4, this.direction);     // zoneS(4): System.WestEast
+		setWord(b, 5, this.offsetHours);   // zoneH(5): [0..177B]
+		setWord(b, 6, this.offsetMinutes); // zoneM(6): [0..377B]
+		setWord(b, 7, 0);                  // beginDST(7): WORD -- no dst (temp)
+		setWord(b, 8, 0);                  // endDST(8): WORD -- no dst (temp)
+		setWord(b, 9, 1);                  // errorAccurate(9): BOOLEAN -- true
+		setWord(b, 10, 0);                 // absoluteError(10): WireLong]
 		setWord(b, 11, (short)((milliSecs > 500) ? 1000 - milliSecs : milliSecs)); // no direction ?? (plus or minus)?
 
 		Log.L2.printf(null, "TimeServiceResponder.handlePacket(): sending back time response\n");

@@ -36,6 +36,6 @@ package dev.hawala.xns.level3.courier;
 @FunctionalInterface
 public interface iWireDynamic<T extends iWireData> {
 
-	T create();
+	T make();
 	
 }

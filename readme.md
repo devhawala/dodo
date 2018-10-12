@@ -96,6 +96,7 @@ is denied by claiming that the user's strong password is not available.
 
 Besides the XNS client systems, at least 2 components need to run as independent programs
 for using Dodo services:
+
 - NetHub    
 this is the backbone of the virtual network, to which all other components connect
 with a TCP connection. The NetHub forwards each packet received from one attached
@@ -182,7 +183,47 @@ and is started with:
 
 The sample Windows batch file is: `run-dodoserver.cmd`
 
-This program has no command line parameters and connects to port 3333 on `localhost`.
+This program takes as optional parameter the name of a `.properties` file
+for configuration of the Dodo server. If no file is given, the program looks
+for a file `dodo.properties` in the current directory and uses this file
+if found.    
+A sample configuration file is available in the directory `dist`.
+
+The following parameters can be specified in the configuration file:
+
+- `networkNo`    
+the (decimal) network number that Dodo server belongs to and which is provided in
+time and BfS service responses     
+_optional_, _default_: 1025
+
+- `machineId`    
+the processor or machine id for the Dodo machine (or MAC address in todays wording)  
+(it should be ensured that **all** machines on the network have an unique processor id,
+or Pilot-based machines will stop by entering 0915 state)    
+_optional_, _default_: `10-00-FF-12-34-01`
+
+- `useChecksums`    
+specifies if checksums are to be verified resp. generated at IDP level    
+_optional_, _default_: `true`
+
+- `netHubHost`    
+the name of the NetHub host to connect to    
+_optional_, _default_: `localhost`
+
+- `netHubPort`    
+the port where the NetHub is listening (must be in range 1..65535)    
+_optional_, _default_: `3333`
+
+- `localTimeOffsetMinutes`    
+time zone parameter for the time service as
+difference between local time and GMT in minutes, with positive values being
+to the east and negative to the west (e.g. Germany is 60 without DST and 120
+with DST, whereas Alaska should be -560 without DST resp. -480 with DST)    
+_optional_, _default_: 0 (i.e. GMT)
+
+- `daysBackInTime`    
+number of days to subtract from the current date to get the final timestamp    
+_optional_, _default_: `0` (i.e. no date change)
 
 #### NetHubGateway
 
@@ -330,6 +371,11 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2018-10-12    
+added configuration file for Dodo program    
+minor code unifications in Courier infrastructure    
+(not yet used extensions to Courier authentication and clearinghouse definitions)
+
 - 2018-09-10    
 Initial commit to Github    
 basic XNS infrastructure    
@@ -347,5 +393,5 @@ Dodo is released under the BSD license, see the file `License.txt`.
 ### Disclaimer
 
 All product names, trademarks and registered trademarks mentioned herein and in the
-source files for the Dwarf program are the property of their respective owners.
+source files for the Dodo programs are the property of their respective owners.
 

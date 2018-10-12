@@ -38,8 +38,6 @@ public class LONG_CARDINAL implements iWireData {
 
 	private long value = 0;
 	
-	LONG_CARDINAL() { }
-	
 	public long get() {
 		return value;
 	}
@@ -65,6 +63,6 @@ public class LONG_CARDINAL implements iWireData {
 		return to;
 	}
 	
-	public static LONG_CARDINAL create() { return new LONG_CARDINAL(); } 
+	public static LONG_CARDINAL make() { return new LONG_CARDINAL(); } 
 	
 }

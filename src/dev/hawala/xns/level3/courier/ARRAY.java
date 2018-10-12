@@ -44,11 +44,11 @@ public class ARRAY<T extends iWireData> implements iWireData {
 	
 	private final List<T> elems = new ArrayList<T>();
 	
-	ARRAY(int count, iWireDynamic<T> builder) {
+	protected ARRAY(int count, iWireDynamic<T> builder) {
 		this.elemCount = count;
 		this.elemBuilder = builder;
 		for(int i = 0; i < this.elemCount; i++) {
-			this.elems.add(this.elemBuilder.create());
+			this.elems.add(this.elemBuilder.make());
 		}
 	}
 	

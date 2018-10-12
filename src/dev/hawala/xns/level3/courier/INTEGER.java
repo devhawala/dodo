@@ -38,8 +38,6 @@ public class INTEGER implements iWireData {
 
 	private short value;
 	
-	INTEGER() { }
-	
 	public int get() {
 		return this.value;
 	}
@@ -65,5 +63,5 @@ public class INTEGER implements iWireData {
 		return to;
 	}
 	
-	public static INTEGER create() { return new INTEGER(); }
+	public static INTEGER make() { return new INTEGER(); }
 }
