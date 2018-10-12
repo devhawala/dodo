@@ -320,6 +320,8 @@ public class NetHubGateway implements Runnable {
 			if (printDevs) { System.out.printf("#%d: %s [%s]\n", i++, ifDev.getName(), description); }
 			if (ifName.equalsIgnoreCase(description)) {
 				device = ifDev;
+			} else if (ifName.equals(ifDev.getName())) {
+				device = ifDev;
 			}
 		}
 		
@@ -356,7 +358,7 @@ public class NetHubGateway implements Runnable {
 			thr.start();
 			
 		} catch(Exception e) {
-			System.err.printf("Unable to open connection to hub (host='%s', port=%d): %d\n",
+			System.err.printf("Unable to open connection to hub (host='%s', port=%d): %s\n",
 					hubHost, port, e.getMessage());
 			pcap.close();
 			return;
