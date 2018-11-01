@@ -26,6 +26,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.xns;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.util.Properties;
 
 /**
@@ -37,6 +39,24 @@ import java.util.Properties;
  */
 public class PropertiesExt extends Properties {
 	private static final long serialVersionUID = 5762795344856778618L;
+	
+	public PropertiesExt() {
+		super();
+	}
+	
+	public PropertiesExt(File cfgFile) {
+		if (cfgFile == null || !cfgFile.isFile() || !cfgFile.canRead()) {
+			return;
+		}
+		try {
+			FileInputStream fis = new FileInputStream(cfgFile);
+			this.load(fis);
+			fis.close();
+		} catch (Exception e) {
+			System.err.printf("Error: unable to load configuration from properties file: %s\n", cfgFile.getName());
+			System.err.printf("=> %s\n", e.getMessage());
+		}
+	}
 
 	/**
 	 * Read a string property with a default value.

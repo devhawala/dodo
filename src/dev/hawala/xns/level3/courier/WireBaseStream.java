@@ -52,7 +52,7 @@ public abstract class WireBaseStream implements iWireStream {
 	 */
 	
 	private boolean wrPadByte = false;
-	private void writePad() throws NoMoreWriteSpaceException {
+	protected void writePad() throws NoMoreWriteSpaceException {
 		if (this.wrPadByte) {
 			this.putByte((byte)0);
 			this.wrPadByte = false;
@@ -60,7 +60,7 @@ public abstract class WireBaseStream implements iWireStream {
 	}
 	
 	private boolean rdPadByte = false;
-	private void readPad() throws EndOfMessageException {
+	protected void readPad() throws EndOfMessageException {
 		if (this.rdPadByte) {
 			this.getByte();
 			this.rdPadByte = false;

@@ -27,7 +27,6 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns;
 
 import java.io.File;
-import java.io.FileInputStream;
 
 import dev.hawala.xns.level1.IDP;
 import dev.hawala.xns.level3.courier.CourierServer;
@@ -35,6 +34,7 @@ import dev.hawala.xns.level4.auth.Authentication2Impl;
 import dev.hawala.xns.level4.auth.BfsAuthenticationResponder;
 import dev.hawala.xns.level4.chs.BfsClearinghouseResponder;
 import dev.hawala.xns.level4.chs.Clearinghouse3Impl;
+import dev.hawala.xns.level4.common.ChsDatabase;
 import dev.hawala.xns.level4.echo.EchoResponder;
 import dev.hawala.xns.level4.rip.RipResponder;
 import dev.hawala.xns.level4.time.TimeServiceResponder;
@@ -68,8 +68,19 @@ public class DodoServer {
 	private static int localTimeOffsetMinutes = 0;
 	private static int daysBackInTime = 0;
 	
+	private static boolean startEchoService = true;
+	private static boolean startTimeService = true;
+	private static boolean startChsAndAuth = true;
+	private static boolean startRipService = true;
+	
+	private static String organizationName = "home.o";
+	private static String domainName = "dev.d";
+	private static boolean strongKeysAsSpecified = true;
+	private static String chsDatabaseRoot = null;
+	
 
 	private static boolean initializeConfiguration(String filename) {
+		// load the properties file
 		if (!filename.endsWith(".properties")) { filename += ".properties"; }
 		File cfgFile = new File(filename);
 		if (!cfgFile.canRead()) {
@@ -78,17 +89,9 @@ public class DodoServer {
 		}
 		configFilename = filename;
 		
-		PropertiesExt props = new PropertiesExt();
-		try {
-			FileInputStream fis = new FileInputStream(cfgFile);
-			props.load(fis);
-			fis.close();
-		} catch (Exception e) {
-			System.err.printf("Error: unable to load configuration from properties file: %s\n", filename);
-			System.err.printf("=> %s\n", e.getMessage());
-			return false;
-		}
+		PropertiesExt props = new PropertiesExt(cfgFile);
 		
+		// get the values
 		networkNo = props.getLong("networkNo", networkNo);
 		String mId = props.getString("machineId", null);
 		doChecksums = props.getBoolean("useChecksums", doChecksums);
@@ -97,27 +100,55 @@ public class DodoServer {
 		localTimeOffsetMinutes = props.getInt("localTimeOffsetMinutes", localTimeOffsetMinutes);
 		daysBackInTime = props.getInt("daysBackInTime", daysBackInTime);
 		
+		startEchoService = props.getBoolean("startEchoService", startEchoService);
+		startTimeService = props.getBoolean("startTimeService", startTimeService);
+		startChsAndAuth = props.getBoolean("startChsAndAuthServices", startChsAndAuth);
+		startRipService = props.getBoolean("startRipService", startRipService);
+		
+		strongKeysAsSpecified = props.getBoolean("strongKeysAsSpecified", strongKeysAsSpecified);
+		organizationName = props.getString("organizationName", organizationName);
+		domainName = props.getString("domainName", domainName);
+		chsDatabaseRoot = props.getString("chsDatabaseRoot", chsDatabaseRoot);
+		
+		// do verifications
+		boolean outcome = true;
+		
 		if (mId != null) {
 			String[] submacs = mId.split("-");
 			if (submacs.length != 6) {
 				System.err.printf("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): %s\n", mId);
-				return false;
-			}
-			
-			long macId = 0;
-			for (int i = 0; i < submacs.length; i++) {
-				macId = macId << 8;
-				try {
-					macId |= Integer.parseInt(submacs[i], 16) & 0xFF;
-				} catch (Exception e) {
-					System.err.printf("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): %s\n", mId); 
-					return false;
+				outcome = false;
+			} else {
+				long macId = 0;
+				for (int i = 0; i < submacs.length; i++) {
+					macId = macId << 8;
+					try {
+						macId |= Integer.parseInt(submacs[i], 16) & 0xFF;
+					} catch (Exception e) {
+						System.err.printf("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): %s\n", mId); 
+						outcome = false;
+					}
 				}
+				machineId = macId;
 			}
-			machineId = macId;
 		}
 		
-		return true;
+		if (startChsAndAuth) {
+			if (isEmpty(organizationName)) {
+				System.err.printf("Error: organizationName may not be empty\n");
+				outcome = false;
+			}
+			if (isEmpty(domainName)) {
+				System.err.printf("Error: domainName may not be empty\n");
+				outcome = false;
+			}
+		}
+		
+		return outcome;
+	}
+	
+	private static boolean isEmpty(String s) {
+		return (s == null || s.isEmpty());
 	}
 
 	public static void main(String[] args) throws XnsException {
@@ -142,45 +173,51 @@ public class DodoServer {
 		localSite = LocalSite.getInstance();
 		
 		// echo service
-		localSite.clientBindToSocket(
-				IDP.KnownSocket.ECHO.getSocket(), 
-				new EchoResponder());
+		if (startEchoService) {
+			localSite.clientBindToSocket(
+					IDP.KnownSocket.ECHO.getSocket(), 
+					new EchoResponder());
+		}
 		
 		// time service
-		localSite.pexListen(
-				IDP.KnownSocket.TIME.getSocket(), 
-				new TimeServiceResponder(localTimeOffsetMinutes, daysBackInTime));
+		if (startTimeService) {
+			localSite.pexListen(
+					IDP.KnownSocket.TIME.getSocket(), 
+					new TimeServiceResponder(localTimeOffsetMinutes, daysBackInTime));
+		}
 		
-		// wakeup requestor
-		iWakeupRequestor wakeupper = null;
-//		wakeupper = new WakeupRequestor();
-//		localSite.clientBindToFreeSocket(wakeupper);
-		// wakeupper = new WsInfoRequestor(localSite);
-		
-		// broadcast for clearinghouse service
-		// one common implementation for versions 2 and 3, as both versions have the same RetrieveAddresses method
-		Clearinghouse3Impl.init(localSite.getNetworkId(), localSite.getMachineId());
-		localSite.pexListen(
-				IDP.KnownSocket.CLEARINGHOUSE.getSocket(), 
-				new BfsClearinghouseResponder(),
-				wakeupper);
-		
-		// broadcast for authentication service
-		// one common implementation for versions 1, 2 and 3, as all versions are assumed to have
-		// the same (undocumented) RetrieveAddresses method
-		Authentication2Impl.init(localSite.getNetworkId(), localSite.getMachineId());
-		localSite.pexListen(
-				IDP.KnownSocket.AUTH.getSocket(), 
-				new BfsAuthenticationResponder());
+		// clearinghouse and authentication services
+		if (startChsAndAuth) {
+			// create the clearinghouse database
+			ChsDatabase chsDatabase = new ChsDatabase(organizationName, domainName, chsDatabaseRoot, strongKeysAsSpecified);
+			
+			// broadcast for clearinghouse service
+			// one common implementation for versions 2 and 3, as both versions have the same RetrieveAddresses method
+			Clearinghouse3Impl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase);
+			localSite.pexListen(
+					IDP.KnownSocket.CLEARINGHOUSE.getSocket(), 
+					new BfsClearinghouseResponder(),
+					null);
+			
+			// broadcast for authentication service
+			// one common implementation for versions 1, 2 and 3, as all versions are assumed to have
+			// the same (undocumented) RetrieveAddresses method
+			Authentication2Impl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase);
+			localSite.pexListen(
+					IDP.KnownSocket.AUTH.getSocket(), 
+					new BfsAuthenticationResponder());
+			
+			// register courier programs in registry
+			Clearinghouse3Impl.register();
+			Authentication2Impl.register();
+		}
 		
 		// routing protocol responder
-		localSite.clientBindToSocket(
-				IDP.KnownSocket.ROUTING.getSocket(),
-				new RipResponder());
-		
-		// register courier programs in registry
-		Clearinghouse3Impl.register();
-		Authentication2Impl.register();
+		if (startRipService) {
+			localSite.clientBindToSocket(
+					IDP.KnownSocket.ROUTING.getSocket(),
+					new RipResponder());
+		}
 		
 		// Courier server with dispatcher
 		CourierServer courierServer = new CourierServer(localSite);

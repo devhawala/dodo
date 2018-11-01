@@ -223,14 +223,14 @@ public class Clearinghouse3 extends AuthChsCommon {
 	 *   REPORTS [ArgumentError, AuthenticationError, CallError, WrongServer] = 4;
 	 */
 	public static class LookupObjectParams extends RECORD {
-		public final ThreePartName name = mkRECORD(ThreePartName::make);
+		public final ObjectNamePattern name = mkRECORD(ObjectNamePattern::make);
 		public final Authenticator agent = mkRECORD(Authenticator::make);
 		
 		private LookupObjectParams() {}
 		public static LookupObjectParams make() { return new LookupObjectParams(); }
 	}
 	public static class LookupObjectResults extends RECORD {
-		public final ThreePartName distinguishedObject = mkRECORD(ThreePartName::make);
+		public final ObjectName distinguishedObject = mkRECORD(ObjectName::make);
 		
 		private LookupObjectResults() {}
 		public static LookupObjectResults make() { return new LookupObjectResults(); }

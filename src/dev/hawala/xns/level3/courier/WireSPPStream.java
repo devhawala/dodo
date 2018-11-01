@@ -86,11 +86,13 @@ public class WireSPPStream extends WireBaseStream {
 
 	@Override
 	public void writeEOM() throws NoMoreWriteSpaceException {
+		this.writePad(); // last write was a single byte at upper nibble position?
 		this.writeBuf(true);
 	}
 
 	@Override
 	public void beginStreamType(byte datastreamType) throws NoMoreWriteSpaceException {
+		this.writePad(); // last write was a single byte at upper nibble position?
 		if (this.outSst == datastreamType) {
 			// no-op as in Pilot
 			return;

@@ -30,11 +30,22 @@ import dev.hawala.xns.Log;
 import dev.hawala.xns.level1.IDP;
 import dev.hawala.xns.level3.courier.CourierRegistry;
 import dev.hawala.xns.level3.courier.RECORD;
+import dev.hawala.xns.level3.courier.SEQUENCE;
+import dev.hawala.xns.level3.courier.UNSPECIFIED;
+import dev.hawala.xns.level3.courier.WireWriter;
+import dev.hawala.xns.level3.courier.iWireData;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level4.auth.Authentication2.CallProblem;
+import dev.hawala.xns.level4.auth.Authentication2.CredentialsPackage;
 import dev.hawala.xns.level4.auth.Authentication2.Which;
 import dev.hawala.xns.level4.common.AuthChsCommon;
+import dev.hawala.xns.level4.common.AuthChsCommon.CredentialsType;
+import dev.hawala.xns.level4.common.AuthChsCommon.Name;
 import dev.hawala.xns.level4.common.AuthChsCommon.NetworkAddress;
+import dev.hawala.xns.level4.common.AuthChsCommon.StrongCredentials;
+import dev.hawala.xns.level4.common.ChsDatabase;
+import dev.hawala.xns.level4.common.StrongAuthUtils;
+import dev.hawala.xns.level4.common.Time2;
 
 /**
  * Implementation of the (so far supported) functionality
@@ -43,6 +54,9 @@ import dev.hawala.xns.level4.common.AuthChsCommon.NetworkAddress;
  * @author Dr. Hans-Walter Latz / Berlin (2018)
  */
 public class Authentication2Impl {
+	
+	// the clearinghouse database
+	private static ChsDatabase chsDatabase = null;
 	
 	/*
 	 * ************************* collection of data to respond (very rudimentary)
@@ -58,9 +72,10 @@ public class Authentication2Impl {
 	 * @param network networkId for 'retrieveAddresses'
 	 * @param machine hostId for 'retrieveAddresses'
 	 */
-	public static void init(long network, long machine) {
+	public static void init(long network, long machine, ChsDatabase chsDb) {
 		networkId = network;
 		machineId = machine;
+		chsDatabase = chsDb;
 	}
 	
 	/*
@@ -129,11 +144,96 @@ public class Authentication2Impl {
 		String paramsString = params.append(sb, "", "params").toString();
 		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials(), %s \n", paramsString);
 		
+		// get the strong passwords
+		byte[] strongPwInitiator = getStrongPw(params.initiator, Which.initiator);
+		byte[] strongPwRecipient = getStrongPw(params.recipient, Which.recipient);
+		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials() -- got both strong passwords\n");
+		
+		// the credentials package built step by step
+		CredentialsPackage credPackage = CredentialsPackage.make();
+		
+		// build the strong Credentials
+		int[] conversationKey = StrongAuthUtils.createConversationKey();
+		long expiration = Time2.getMesaTime() + 86400L; // now + 1 day
+		StrongCredentials creds = StrongCredentials.make();
+		for (int i = 0; i < 4; i++) {
+			creds.conversationKey.get(i).set(conversationKey[i]);
+		}
+		creds.expirationTime.set(expiration);
+		creds.initiator.object.set(params.initiator.object.get());
+		creds.initiator.domain.set(params.initiator.domain.get());
+		creds.initiator.organization.set(params.initiator.organization.get());
+		logObject(creds, "strong credentials");
+		
+		// encrypt the strong credentials
+		credPackage.credentials.type.set(CredentialsType.strong);
+		encryptInto(strongPwRecipient, creds, credPackage.credentials.value);
+		
+		// proceed with the credentials package
+		credPackage.nonce.set(params.nonce.get());
+		credPackage.recipient.object.set(params.recipient.object.get());
+		credPackage.recipient.domain.set(params.recipient.domain.get());
+		credPackage.recipient.organization.set(params.recipient.organization.get());
+		for (int i = 0; i < 4; i++) {
+			credPackage.conversationKey.get(i).set(conversationKey[i]);
+		}
+		logObject(credPackage, "credentials package");
+		
+		// encrypt the credentials package
+		encryptInto(strongPwInitiator, credPackage, results.credentialsPackage);
+		
+		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials() -- credentials package encrypted => done\n");
+	}
+	
+	private static void logObject(iWireData data, String prefix) {
+		StringBuilder sb = new StringBuilder();
+		data.append(sb, "   ", prefix);
+		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials() ::\n%s \n", sb.toString());
+	}
+	
+	private static byte[] getStrongPw(Name forName, Which which) {
+//		// begin temp: pretend there is no strong key to force simple authentication
+//		Authentication2.CallErrorRecord err = new Authentication2.CallErrorRecord(
+//				CallProblem.strongKeyDoesNotExist,
+//				which);
+//		Log.C.printf("Auth2", "Authentication2Impl.getStrongPw() -> CallError[strongKeyDoesNotExist,%s]\n", which);
+//		err.raise();
+//		// end temp
+		
+		try {
+			byte[] pw = chsDatabase.getStrongPassword(forName);
+			if (pw != null) {
+				return pw;
+			}
+		} catch (IllegalArgumentException iae) {
+			Log.C.printf("Auth2", "Authentication2Impl.getStrongPw() -> CallError[badName,%s]\n", which);
+			new Authentication2.CallErrorRecord(CallProblem.badName, which).raise();
+		}
 		Authentication2.CallErrorRecord callError = new Authentication2.CallErrorRecord(
 				CallProblem.strongKeyDoesNotExist,
-				Which.initiator);
-		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials() -> CallError[strongKeyDoesNotExist,initiator]\n");
+				which);
+		Log.C.printf("Auth2", "Authentication2Impl.getStrongPw() -> CallError[strongKeyDoesNotExist,%s]\n", which);
 		callError.raise();
+		return null; // keep the compiler happy (cannot know the .raise() does not return...)
+	}
+	
+	private static void encryptInto(byte[] strongPw, iWireData source, SEQUENCE<UNSPECIFIED> target) {
+		WireWriter writer = new WireWriter();
+		try {
+			source.serialize(writer);
+			int[] sourceBytes = writer.getWords();
+			int[] encrypted = StrongAuthUtils.xnsDesEncrypt(strongPw, sourceBytes);
+			for (int i = 0; i < encrypted.length; i++) {
+				target.add().set(encrypted[i]);
+			}
+		} catch (Exception e) {
+			// report an "other" error if encrypting fails
+			Authentication2.CallErrorRecord err = new Authentication2.CallErrorRecord(
+					CallProblem.other,
+					Which.notApplicable);
+			Log.C.printf("Auth2", "Authentication2Impl.encryptInto() -> CallError[other,notApplicable] :: %s\n", e.getMessage());
+			err.raise();
+		}
 	}
 
 	
@@ -146,10 +246,15 @@ public class Authentication2Impl {
 						Authentication2.CheckSimpleCredentialsParams params,
 						Authentication2.CheckSimpleCredentialsResults results) {
 		try {
-			results.ok.set(AuthChsCommon.simpleCheckPasswordForSimpleCredentials(params.credentials, params.verifier));
+			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() -- invoking AuthChsCommon.simpleCheckPasswordForSimpleCredentials()\n");
+			results.ok.set(AuthChsCommon.simpleCheckPasswordForSimpleCredentials(chsDatabase, params.credentials, params.verifier));
+			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() -- result.ok = %s\n", Boolean.toString(results.ok.get()));
 		} catch (EndOfMessageException e) {
 			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() EndOfMessageException when deserializing credsObject -> returning 'false'\n");
 			results.ok.set(false);
+		} catch (IllegalArgumentException iae) {
+			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() -> CallError[badName,%s]\n", Which.initiator);
+			new Authentication2.CallErrorRecord(CallProblem.badName, Which.initiator).raise();
 		}
 	}
 }

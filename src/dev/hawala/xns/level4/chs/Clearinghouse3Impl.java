@@ -41,7 +41,9 @@ import dev.hawala.xns.level4.common.AuthChsCommon.CredentialsType;
 import dev.hawala.xns.level4.common.AuthChsCommon.NetworkAddress;
 import dev.hawala.xns.level4.common.AuthChsCommon.Problem;
 import dev.hawala.xns.level4.common.AuthChsCommon.RetrieveAddressesResult;
+import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
 import dev.hawala.xns.level4.common.AuthChsCommon.TwoPartName;
+import dev.hawala.xns.level4.common.ChsDatabase;
 
 /**
  * Implementation of the Clearinghouse Courier protocols defined
@@ -60,15 +62,19 @@ public class Clearinghouse3Impl {
 	private static long networkId = 0x0001_0120;
 	private static long machineId = 0x0000_1000_FF12_3401L;
 	
+	// the clearinghouse database
+	private static ChsDatabase chsDatabase = null;
+	
 	/**
 	 * Set values to use for responses
 	 * 
 	 * @param network networkId for 'retrieveAddresses'
 	 * @param machine hostId for 'retrieveAddresses'
 	 */
-	public static void init(long network, long machine) {
+	public static void init(long network, long machine, ChsDatabase chsDb) {
 		networkId = network;
 		machineId = machine;
+		chsDatabase = chsDb;
 	}
 	
 	/*
@@ -160,23 +166,11 @@ public class Clearinghouse3Impl {
 						RECORD results) {
 		Log.C.printf("CHS3", "Clearinghouse3.listDomainServed() :: start\n");
 		
-		// create some dummy data for transfer
+		// create data for transfer the single domain we serve
 		StreamOf<TwoPartName> streamData = new StreamOf<>(0, 1, 2, TwoPartName::make);
 		TwoPartName name1 = streamData.add();
-		name1.organization.set("home.o");
-		name1.domain.set("dev.d");
-		
-//		name1.organization.set("TU-Berlin");
-//		name1.domain.set("SYS");
-//		TwoPartName name2 = streamData.add();
-//		name2.organization.set("TU-Berlin");
-//		name2.domain.set("ZRZ");
-//		TwoPartName name3 = streamData.add();
-//		name3.organization.set("local"); // .set("Cornell-Univ");
-//		name3.domain.set("home");        // .set("Computer Science");
-//		TwoPartName name4 = streamData.add();
-//		name4.organization.set("home"); // .set("private");
-//		name4.domain.set("local");      // .set("at home");
+		name1.organization.set(chsDatabase.getOrganizationName());
+		name1.domain.set(chsDatabase.getDomainName());
 
 		Log.C.printf("CHS3", "Clearinghouse3.listDomainServed() :: sending data via bulk data transfer\n");
 		try {
@@ -211,8 +205,13 @@ public class Clearinghouse3Impl {
 		boolean credentialsOk = false;
 		try {
 			credentialsOk = AuthChsCommon.simpleCheckPasswordForSimpleCredentials(
+								chsDatabase,
 								params.agent.credentials,
 								params.agent.verifier);
+		} catch (IllegalArgumentException iac) {
+			AuthenticationErrorRecord err = new AuthenticationErrorRecord(Problem.credentialsInvalid);
+			Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject() IllegalArgumentException (name not existing) -> rejecting with AuthenticationError[credentialsInvalid]\n");
+			err.raise();
 		} catch (EndOfMessageException e) {
 			AuthenticationErrorRecord err = new AuthenticationErrorRecord(Problem.inappropriateCredentials);
 			Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject() EndOfMessageException when deserializing credsObject -> rejecting with AuthenticationError[inappropriateCredentials]\n");
@@ -225,7 +224,8 @@ public class Clearinghouse3Impl {
 		}
 		
 		/*
-		 * TODO: use CHS-database (currently we return the name to lookup if it is a real name and not a pattern) 
+		 * resolve the name to lookup to the primary distinguished name, rejecting patern lookups (not supportd so far)
+		 * TODO: add pattern matching 
 		 */
 		boolean isPatternLookup = 
 				params.name.object.get().contains("*")
@@ -236,12 +236,21 @@ public class Clearinghouse3Impl {
 			Clearinghouse3.ArgumentErrorRecord err = new Clearinghouse3.ArgumentErrorRecord(
 					Clearinghouse3.ArgumentProblem.noSuchObject,
 					Clearinghouse3.WhichArgument.first);
-			Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject() -> ArgumentErrorRecord[noSuchObject,first]\n");
+			Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject() -> ArgumentErrorRecord[noSuchObject,first], reason: pattern\n");
 			err.raise();
 		} else {
-			results.distinguishedObject.object.set(params.name.object.get());
-			results.distinguishedObject.domain.set(params.name.domain.get());
-			results.distinguishedObject.organization.set(params.name.organization.get());
+			ThreePartName dn = (chsDatabase == null) ? params.name : chsDatabase.getDistinguishedName(params.name);
+			if (dn == null) {
+				Clearinghouse3.ArgumentErrorRecord err = new Clearinghouse3.ArgumentErrorRecord(
+						Clearinghouse3.ArgumentProblem.noSuchObject,
+						Clearinghouse3.WhichArgument.first);
+				Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject() -> ArgumentErrorRecord[noSuchObject,first], reason: not found in CHS\n");
+				err.raise();
+			}
+			
+			results.distinguishedObject.object.set(dn.object.get());
+			results.distinguishedObject.domain.set(dn.domain.get());
+			results.distinguishedObject.organization.set(dn.organization.get());
 			sb.setLength(0);
 			String resultsString = results.append(sb, "", "results").toString();
 			Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject(), %s \n", resultsString);

@@ -34,6 +34,7 @@ import dev.hawala.xns.level2.PEX;
 import dev.hawala.xns.level2.SPP;
 import dev.hawala.xns.level4.chs.BfsClearinghouseResponder;
 import dev.hawala.xns.level4.chs.Clearinghouse3Impl;
+import dev.hawala.xns.level4.common.ChsDatabase;
 import dev.hawala.xns.level4.time.TimeServiceResponder;
 
 /*
@@ -583,7 +584,8 @@ public class DodoTest {
 	}
 	
 	private static void testBfsChsService() throws XnsException {
-		Clearinghouse3Impl.init(0x1122_3344, 0xAABB_CCDD_EEFFL);
+		ChsDatabase chsDatabase = new ChsDatabase("organization", "domain", null, true);
+		Clearinghouse3Impl.init(0x1122_3344, 0xAABB_CCDD_EEFFL, chsDatabase);
 		localSite.pexListen(
 				IDP.KnownSocket.CLEARINGHOUSE.getSocket(), 
 				new BfsClearinghouseResponder());

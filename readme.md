@@ -77,20 +77,8 @@ information
 	currently a small procedure subset is implemented, mainly to allow users
 	to login to XDE
 
-In the current implementation, the configuration of the provided functionality
-is very simplified in the sense that all parameters are hard-coded:
-- xerox network number: 0x0401 = 1025
-- server hardware-id: 10-00-FF-12-34-01
-- time service: GMT derived from local time, CET time zone without daylight savings
-- clearinghouse:    
-no clearinghouse database, so no users or services are defined; however the
-server responds to the Courier "list domains served" request with:
-    - organization: home.o
-	- domain: dev.d
-- authentication:    
-all user names are accepted, the password is the user name (case-insensitive);
-only simple authentication (16 bit hashed password) is supported, strong authentication
-is denied by claiming that the user's strong password is not available.
+The network configuration of a Dodo server instance and the services provided
+can be configured through a property file specified when starting the Dodo program.
 	
 ### Topology
 
@@ -214,6 +202,23 @@ _optional_, _default_: `localhost`
 the port where the NetHub is listening (must be in range 1..65535)    
 _optional_, _default_: `3333`
 
+- `startEchoService`    
+do start Dodo's Echo service?    
+_optional_, _default_: `true`
+
+- `startTimeService`    
+do start Dodo's Time service?    
+_optional_, _default_: `true`
+
+- `startRipService`    
+do start Dodo's Routing Information Protocol service?    
+_optional_, _default_: `true`
+
+- `startChsAndAuthServices`    
+do start Dodo's Clearinghouse service and Authentication service? (both can only
+be started (or not) together, as they serve the same domain jointly)    
+_optional_, _default_: `true`
+
 - `localTimeOffsetMinutes`    
 time zone parameter for the time service as
 difference between local time and GMT in minutes, with positive values being
@@ -222,8 +227,40 @@ with DST, whereas Alaska should be -560 without DST resp. -480 with DST)
 _optional_, _default_: 0 (i.e. GMT)
 
 - `daysBackInTime`    
-number of days to subtract from the current date to get the final timestamp    
+number of days to subtract from the current date to get the final timestamp
+in the time service    
 _optional_, _default_: `0` (i.e. no date change)
+
+- `organization`    
+the name of the organization to be handled (served) by the clearinghouse and
+authentication services    
+_optional_, _default_: `home.o`
+
+- `domain`    
+the name of the domain to be handled (served) by the clearinghouse and
+authentication services    
+_optional_, _default_: `dev.d`
+
+- `chsDatabaseRoot`    
+the name of the directory where the property files defining the objects known
+in the clearinghouse database for `domain:organization` are located;
+the format of the property files for the different object types is defined
+in [clearinghouse configuration](./chs-config-files.md);    
+if no value is specified (or it is invalid), then no users or services are
+defined, but all user names are accepted, with the password being the user name
+(case-insensitive) given for login    
+_optional_ (no default)
+
+- `strongKeysAsSpecified`    
+how to handle the contradiction in the specification _Authentication Protocol_
+(XSIS 098404, April 1984), where the data used in the example does not match the
+specification for the strong key generation (section 5.3):    
+if `true` encode each 4 char-block with the password to produce the next password
+(as specified, but this does match <i>not</i> the data in the example),    
+else (if `false`) swap the encryption parameters, i.e. use each 4 char-block to
+encrypt the password of the last iteration to produce the new password (this
+contradicts the specification, but creates the data in the example...)    
+_optional_, _default_: `true`
 
 #### NetHubGateway
 
@@ -348,7 +385,7 @@ on a Core2Duo 2.4 GHz with Linux Mint
 
 Further investigation is necessary to find out why the same software (meaning the Pilot-based XDE OS)
 behaves differently if booted in differently fast environments. But chances are low to find the real
-root cause for this behaviour (it's not even sure that whichever "speed" is the reason) and get the
+root cause for this behavior (it's not even sure that whichever "speed" is the reason) and get the
 problem fixed, as the internals of the Pilot OS are effectively hidden and obfuscated (no sources,
 no Mesa development environment etc.).
 
@@ -367,9 +404,18 @@ still missing, like Mail protocols)
     - [Xerox_Office_System_Technology_Jan1984](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/8010_dandelion/OSD-R8203A_Xerox_Office_System_Technology_Jan1984.pdf)
     - [Courier_The_Remote_Procedure_Call_Protocol_Dec1981](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/XSIS_038112_Courier_The_Remote_Procedure_Call_Protocol_Dec1981.pdf)    
     (Dodo's Courier infrastructure was almost done when this document was uploaded to bitsavers, but it confirmed the implementation concepts derived from the BSD 4.3 source codes)
-    - [Authentication_Protocol_Apr1984.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/XSIS_098404_Authentication_Protocol_Apr1984.pdf) 
+    - [Authentication_Protocol_Apr1984.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/XSIS_098404_Authentication_Protocol_Apr1984.pdf)
+    - [Clearinghouse_Entry_Formats_Apr1984.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/XSIS_168404_Clearinghouse_Entry_Formats_Apr1984.pdf)
 
 ### Development history
+
+- 2018-11-01    
+introduced simple read-only clearinghouse database (set of property files, defining users, groups and services), currently only used for authentication    
+switch login functionality to use the clearinghouse database    
+experimental support for strong credentials creation    
+made starting of Dodo services configurable, e.g. for using Dodo only as Time server    
+bugfix: overflow when computing password hashes for simple credentials    
+bugfix: serialization error for strings at end of courier messages ("authentication service not available")
 
 - 2018-10-12    
 added configuration file for Dodo program    

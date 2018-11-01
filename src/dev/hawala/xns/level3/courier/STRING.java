@@ -69,6 +69,9 @@ public class STRING implements iWireData {
 		for (byte b : bytes) {
 			ws.writeI8(b);
 		}
+		if ((this.str.length() % 2) != 0) {
+			ws.writeI8(0);
+		}
 		
 	}
 
@@ -83,6 +86,9 @@ public class STRING implements iWireData {
 		byte[] bytes = new byte[len];
 		for (int i = 0; i < len; i++) {
 			bytes[i] = (byte)(ws.readI8() & 0xFF);
+		}
+		if ((len % 2) != 0) {
+			ws.readI8();
 		}
 		
 		// TODO: recode XNS Character Encoding Standard => UNICODE !!

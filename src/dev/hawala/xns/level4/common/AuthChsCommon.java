@@ -119,6 +119,14 @@ public abstract class AuthChsCommon extends CrProgram {
 		private Name() {}
 		public static Name make() { return new Name(); }
 	}
+	
+	/*
+	 * ObjectNamePattern: TYPE = ThreePartName;
+	 */
+	public static class ObjectNamePattern extends ThreePartName {
+		private ObjectNamePattern() {}
+		public static ObjectNamePattern make() { return new ObjectNamePattern(); }
+	}
 
 	/*
 	 * NetworkAddress: TYPE = RECORD [
@@ -268,7 +276,8 @@ public abstract class AuthChsCommon extends CrProgram {
 	
 	/**
 	 * Check that the password encoded in the {@code verifier} is the
-	 * username ({@code credentials.value.object} of the simple credentials. 
+	 * username ({@code credentials.value.object} of the simple credentials.
+	 * @param chsDatabase the clearinghouse database to check against
 	 * @param credentials the simple credentials (3-part username)
 	 * @param verifier the verifier (hashed password)
 	 * @return {@code false} if {@code credentials} is not 'simple, if the
@@ -277,7 +286,7 @@ public abstract class AuthChsCommon extends CrProgram {
 	 * 		the hash value in {@code verifier}, else {@code true}.
 	 * @throws EndOfMessageException
 	 */
-	public static boolean simpleCheckPasswordForSimpleCredentials(Credentials credentials, Verifier verifier) throws EndOfMessageException {
+	public static boolean simpleCheckPasswordForSimpleCredentials(ChsDatabase chsDatabase, Credentials credentials, Verifier verifier) throws EndOfMessageException {
 		if (credentials.type.get() != CredentialsType.simple) {
 			return false;
 		}
@@ -290,11 +299,16 @@ public abstract class AuthChsCommon extends CrProgram {
 		WireSeqOfUnspecifiedReader credReader = new WireSeqOfUnspecifiedReader(credentials.value);
 		Name credsObject = Name.make();
 		credsObject.deserialize(credReader);
-		int usernameHash = ChsDatabase.getSimplePassword(credsObject); //computePasswordHash(credsObject.object.get());
+		int usernameHash = chsDatabase.getSimplePassword(credsObject);
 		
 		StringBuilder sb = new StringBuilder();
 		String credsObjectString = credsObject.append(sb, "", "credentials.value").toString();
 		Log.C.printf("AuthChs", "AuthChsCommon.simpleCheckPasswordForSimpleCredentials(), %s \n", credsObjectString);
+		
+		System.out.printf(
+				"*** simpleCheckPasswordForSimpleCredentials() for '%s:%s:%s' :: verifierHash = %d , userHash = %d\n",
+				credsObject.object.get(), credsObject.domain.get(), credsObject.organization.get(),
+				verifierHash, usernameHash);
 		
 		return (verifierHash == usernameHash);
 	}
