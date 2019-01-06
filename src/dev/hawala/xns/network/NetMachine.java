@@ -170,6 +170,10 @@ public class NetMachine implements iNetMachine {
 		}
 	}
 	
+	public iIDPSender getIdpSender() {
+		return this.sender;
+	}
+	
 	/*
 	 * incoming packet handling
 	 */
@@ -320,6 +324,7 @@ public class NetMachine implements iNetMachine {
 			pex.rdBytes(0, payload.length, payload, 0, payload.length);
 			Log.L1.printf(idp, "PexServer.accept[localEndpoint = %s](): invoking responder.handlePacket()\n", localEndpoint.toString());
 			this.responder.handlePacket(
+					pex.idp.getSrcHost(),
 					pex.getClientType(),
 					payload,
 					(buffer,offset,length) -> { // ResponseSender

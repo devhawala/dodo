@@ -59,7 +59,7 @@ public class BfsAuthenticationResponder extends AbstractBfsResponder {
 	}
 
 	@Override
-	protected void processRequest(int programNo, int versionNo, int procNo, int transaction, WirePEXRequestResponse wire) throws NoMoreWriteSpaceException, EndOfMessageException {
+	protected void processRequest(long fromMachineId, int programNo, int versionNo, int procNo, int transaction, WirePEXRequestResponse wire) throws NoMoreWriteSpaceException, EndOfMessageException {
 		Log.C.printf("BfsAth", "BfsAuthenticationResponder.processRequest() - begin\n");
 		this.bfsImpl.RetrieveAddresses.process(transaction, wire);
 		Log.C.printf("BfsAth", "BfsAuthenticationResponder.processRequest() - done\n");

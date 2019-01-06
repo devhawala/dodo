@@ -30,6 +30,7 @@ import dev.hawala.xns.Log;
 import dev.hawala.xns.iPexResponder;
 import dev.hawala.xns.level2.Error.ErrorCode;
 import dev.hawala.xns.level2.PEX.ClientType;
+import dev.hawala.xns.level4.common.Time2;
 
 /**
  * Time server implementation.
@@ -42,7 +43,6 @@ public class TimeServiceResponder implements iPexResponder {
 	private final short direction; // 0 = west, 1 = east
 	private final short offsetHours;
 	private final short offsetMinutes;
-	private final int mesaSecondsAdjust;
 	
 	/**
 	 * Initialize the internal time service with the time zone information
@@ -53,10 +53,8 @@ public class TimeServiceResponder implements iPexResponder {
 	 * 		minutes, with positive values being to the east and negative
 	 * 		to the west (e.g. Germany is +60 without DST and +120 with DST
 	 * 		whereas Alaska is -560 without DST resp -480 with DST).
-	 * @param moveDateBackDays number of days to subtract from the current
-	 * 		date to get the final mesa timestamp, with 0 not changing the date.
 	 */
-	public TimeServiceResponder(int gmtOffsetMinutes, int moveDateBackDays) {
+	public TimeServiceResponder(int gmtOffsetMinutes) {
 		if (gmtOffsetMinutes >= 0) {
 			this.direction = 1;
 		} else {
@@ -66,12 +64,11 @@ public class TimeServiceResponder implements iPexResponder {
 		gmtOffsetMinutes = gmtOffsetMinutes % 720;
 		this.offsetHours = (short)(gmtOffsetMinutes / 60);
 		this.offsetMinutes = (short)(gmtOffsetMinutes % 60);
-		
-		this.mesaSecondsAdjust = -86400 * moveDateBackDays;
 	}
 
 	@Override
 	public void handlePacket(
+					long fromMachineId,
 					int clientType,
 					byte[] payload,
 					ResponseSender responseSender,
@@ -90,10 +87,8 @@ public class TimeServiceResponder implements iPexResponder {
 		}
 		
 		// time data
-		long unixTimeMillis = System.currentTimeMillis();
-		int  milliSecs = (int)(unixTimeMillis % 1000);
-		long unixTimeSecs = unixTimeMillis / 1000;
-		int mesaSecs = (int)((unixTimeSecs + (731 * 86400) + 2114294400) & 0x00000000FFFFFFFFL) + this.mesaSecondsAdjust;
+		int mesaSecs = (int)(Time2.getMesaTime() & 0xFFFFFFFFL);
+		int milliSecs = (int)(System.currentTimeMillis() % 1000L);
 		short mesaSecs0 = (short)(mesaSecs >>> 16);
 		short mesaSecs1 = (short)(mesaSecs & 0xFFFF);
 		

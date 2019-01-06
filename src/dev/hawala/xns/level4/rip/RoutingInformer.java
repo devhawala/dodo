@@ -24,38 +24,22 @@ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-package dev.hawala.xns;
-
-import dev.hawala.xns.level2.Error.ErrorCode;
+package dev.hawala.xns.level4.rip;
 
 /**
- * Handler for PEX request packets sent to a service socket
- * on the local machine,
- * <p>
- * An instance of this interface is registered as listener for
- * a local socket and will invoked for each packet directed to
- * this socket. 
- * </p>
+ * Requestor interface for propagating routing information for the XNS network.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2016-2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018)
  */
-@FunctionalInterface
-public interface iPexResponder {
+public interface RoutingInformer {
 
-	@FunctionalInterface
-	public interface ResponseSender {
-		void sendResponse(byte[] buffer, int offset, int length);
-	}
+	/**
+	 * Broadcast the current routing information due to an
+	 * event produced the the {@code requestingMachineId}.
+	 * 
+	 * @param requestingMachineId the machineId the produced the event
+	 * 		suggesting that routing information should be broadcasted.
+	 */
+	void requestBroadcast(long requestingMachineId);
 	
-	@FunctionalInterface
-	public interface ErrorSender {
-		void sendError(ErrorCode code, int param);
-	}
-	
-	void handlePacket(
-			long fromMachineId,
-			int clientType,
-			byte[] payload,
-			ResponseSender responseSender,
-			ErrorSender errorSender);
 }

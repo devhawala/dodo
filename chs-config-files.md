@@ -3,14 +3,19 @@
 Dodo provides a simple read-only database used for resolving distinguished names
 in the Clearinghouse service and handling passwords in the Authentication service.
 
-Based on this database, Dodo's clearinghouse and authentication services provide
-the minimal set of Courier operations for both protocols to allow a login in the
-XDE environment (specifically Dawn's XDE disk).
-
-Higher level functionality to search the Clearinghouse for users, groups, services
-etc. are not implemented yet. However such items can already be defined through
+The Clearinghouse items required for both services are defined through
 property files, each item being defined by its own property file located in the
 directory specified by the `chsDatabaseRoot` parameter of the Dodo configuration.
+
+Based on this database, Dodo's clearinghouse and authentication services provide
+all Courier operations for both protocols to allow:
+- login to XDE and GlobalView
+- search and query Clearinghouse for users, groups, services etc. 
+
+Although the service implementations provide all procedures defined by the Courier
+protocols, the modifying operations (create, modify, delete items, change passwords, add
+or remove members on groups etc.) are rejected with error `accessRightsInsufficient`,
+as the database is read-only at runtime, being exclusively defined by property files. 
 
 The property files in this directory must follow the following naming conventions:
 
@@ -151,3 +156,8 @@ _required_
 
 See the `chs-database` subdirectory in the distribution archive for examples
 of all supported clearinghouse entry types.
+
+The following image shows the network directory navigation in GlobalView for this
+clearinghouse with defaulted domain and organization (`dev:hawala`):
+
+![gvwin-directory-navigation](gvwin-directory.png)

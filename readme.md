@@ -4,18 +4,15 @@ Dodo Services is an attempt to implement Xerox Network Services (XNS) in Java. I
 currently much more work in progress than useful to provide services to existing emulated
 (or real) Xerox client environments like XDE or GlobalView. The work is focused up to now
 on building up the necessary infrastructure to provide XNS services (see section
-**Functionality**).
+**Functionality**).    
+Currently the following XNS services are provided by Dodo: Time, Routing Information,
+Clearinghouse and Authentication.
 
 In fact, it is not a single Java program, but a set of programs creating a
 simple virtual network infrastructure, a kind of XNS-over-TCP/IP. This virtual
 network allows different programs to inter-connect, among them the Dodo server proper,
 a gateway to a (real) network device and of course the Xerox client machines wanting
 to access the server component (see section **Topology**).
-
-However support for Xerox (and other) client environments is somewhat restricted (see
-section **Environments known (not) to work**). Besides a large heap of missing XNS
-functionality it seems that Pilot-based Xerox environments were not prepared to run
-on fast "hardware" available as emulations on contemporary computers.
 
 As for the maybe exotic name: although Dodo is not based on the Mesa-architecgure but
 an almost pure Java implementation, the name had to start with the letter *D* to be in
@@ -45,9 +42,9 @@ information
 
 - Level 2    
     - PEX (Packet EXchange)    
-    both responder (server-side) and requestor (client-side)
+    API for both responder (server-side) and requestor (client-side)
     - SPP (Sequenced Packet Protocol)    
-    both server-sockets and client-connections, including the connection close
+    API both server-sockets and client-connections, including the connection close
 	protocol (based on sub-sequence types 254 and 255)
     - Echo    
     responder for echo protocol packets
@@ -56,8 +53,11 @@ information
     having produced the problem
 
 - Level 3
-    - Time of Day protocol   
+    - Time of Day protocol    
     responder for time request broadcasts
+    -  Routing Information protocol    
+    broadcaster for routing information as well as responder to
+    client requests
     - Courier    
     infrastructure for implementing both Courier server programs and
     Courier clients;    
@@ -70,12 +70,15 @@ information
 	responder for Clearinghouse BfS and Authentication BfS requests
     - Clearinghouse (CHS)
 	(Courier program 2, versions 2 and 3)    
-	currently a small procedure subset is implemented, mainly to allow users
-	to login to XDE (disk from the Dawn emulator)
+	all protocol procedures are implemented for a *read-only* clearinghouse
+	database, allowing to log in to XDE and GlobalView, to navigate the network
+	directory in GlobalView as well to query clearinghouse entries with `Maintain.bcd`
+	in XDE; however changes to the	database are rejected
     - Authentication (Auth)
-	(Courier program 14, version 2) 
-	currently a small procedure subset is implemented, mainly to allow users
-	to login to XDE
+	(Courier program 14, version 2)    
+	all protocol procedures are implemented for a *read-only* clearinghouse
+	database, allowing to log in to XDE and GVWin; however changes to the
+	database are rejected
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -112,7 +115,7 @@ NetHub protocol.
 this is a "read-only program" connecting to the NetHub with the only purpose to
 receive all packets traveling in the virtual network and to dump the packet
 content to `stdout`; in addition to the raw packet content, it issues the recognized
-packet type specific structural data at the differend layers (ethernet, IDP, PEX,
+packet type specific structural data at the different layers (ethernet, IDP, PEX,
 SPP etc. headers, type specific payload). 
 
 
@@ -234,12 +237,12 @@ _optional_, _default_: `0` (i.e. no date change)
 - `organization`    
 the name of the organization to be handled (served) by the clearinghouse and
 authentication services    
-_optional_, _default_: `home.o`
+_optional_, _default_: `hawala`
 
 - `domain`    
 the name of the domain to be handled (served) by the clearinghouse and
 authentication services    
-_optional_, _default_: `dev.d`
+_optional_, _default_: `dev`
 
 - `chsDatabaseRoot`    
 the name of the directory where the property files defining the objects known
@@ -261,6 +264,10 @@ else (if `false`) swap the encryption parameters, i.e. use each 4 char-block to
 encrypt the password of the last iteration to produce the new password (this
 contradicts the specification, but creates the data in the example...)    
 _optional_, _default_: `true`
+
+If `startChsAndAuthServices` is `true`, then specifying the optional command
+line parameter `-dumpchs` will dump the content of the Clearinghouse database loaded
+from the configuration files.
 
 #### NetHubGateway
 
@@ -303,15 +310,28 @@ The sample Windows batch file is: `run-netspy.cmd`
 This program has no command line parameters and connects to port 3333 on `localhost`.
 
 
-### Environments known (not) to work
+### Environments known to work
 
-First the environments that do work with Dodo:
+Dodo was successfully tested in several environments with different emulators, with
+"successful" meaning that it was at least possible to log on to the Xerox operating system
+and optionally to verify that Clearinghouse entries can be searched resp. queried,
+e.g. under XDE using the `Maintain.bcd` program or by navigating the network
+directory under GlobalView (see the examples section in the
+[clearinghouse configuration](./chs-config-files.md) document.
+
+The following environments were tested with Dodo server and nethub, using the
+default Clearinghouse database found in `dist.zip`:
+
+- Dwarf emulator on Windows-Vista (32 bit) and Linux-Mint (64 bit) on a Core2Duo 2.4 GHz    
+both XDE and GlobalView work; all components (Dwarf, Dodo server and nethub)
+run on the same (hardware) machine
+
+- Guam-Emulator with an experimental NetworkAgent on a Core2Duo 2.4 GHz with Linux Mint    
+the emulator's NetworkAgent was modified for directly connecting to a local Nethub;
+connection to Dodo was tested with XDE
 
 - Don Woodward's Dawn-emulator with Dawn's XNS driver and XDE disk    
-with a very special (i.e. slow) setup, it is possible to log in on this system (i.e.
-the user name is displayed in the top left corner of the *Herald Window* without a
-"wrong password" or the like message).    
-The following configuration was required for this to work:
+The following configuration was used:
     - real hardware: Laptop with 2.4 GHz Core2Duo processor
 	- ... running Windows-Vista 32 bit as host OS
     - Windows 2000 installed in a MS VirtualPC virtual machine
@@ -319,15 +339,6 @@ The following configuration was required for this to work:
 	- ... running the Dawn emulator with the Dawn XDE disk
 	- ... the virtual machine connected to the network through the MS Loopback adapter
 	- NetHub with NetHubGateway and Dodo server running on the host OS
-
-	With this configuration, XDE started to open SPP connections to the Courier port
-	on the machine it received the address with the BfS requests, and issued Courier
-	calls to the Authentication and Clearinghouse services.
-	
-    BUT: this setup results in an extremely slow XDE environment; keyboard and
-    mouse actions are easily lost, screen operations are visible (e.g. the copyright
-    banner takes 2-3 seconds to build up). XDE probably runs at half the speed compared
-    to a Dandelion...  
 
 - BSD 4.3    
 Starting with this vintage OS version, BSD had support for XNS protocols for a while, until
@@ -339,55 +350,10 @@ The test environment was a network-capable SIMH emulation for VAX running the
 system (a meanwhile outdated beta version).   
 BSD 4.3 has the program `xnsbfs` allowing to do the Broadcast for Servers request (either for
 clearinghouse ot authentication servers) and then invoke the "list domains served" Courier
-request. This program works with Dodo, issuing "dev.d:home.o" as result (the only domain served
-by Dodo).    
-Other XNS programs in BSD 4.3 were not tested, as requiring "higher" XNS functionality than
+request.    
+Other XNS programs in BSD 4.3 were not tested, as requiring "higher" XNS functionality not yet
 provided by Dodo.
 
-As one XDE instance is able to fully use the XNS protocols (meaning PEX *and* SPP) and to
-invoke the few available Dodo Courier services, it was expected that other setups of the
-same XDE environment would also be able to use Dodo.
-
-This is sadly not the case: in any other - faster - setup, the *same* XDE environment
-(always the Dawn XDE disk) does not connect to the Dodo Courier services, no matter which emulator
-was used. More precisely:
-- instead of actively opening SPP connections to the Courier port on the Dodo machine,
-the Xerox OS continues to issue BfS broadcasts, apparently ignoring the answers received for these
-requests
-- the only packet received by the Xerox OS that has any effect is the *first* time request
-response at boot time (maintenance panel code 0937); but any subsequent time request responses
-are ignored. This was tested by subtracting one day to the timestamp returned on each query: the
-time at the XDE machine was taken from the first response, although time requests are routinely
-repeated during a boot session (and received their response by Dodo).
-
-The key difference between the first broadcast (querying for network time during MP 0937) and any
-other transmissions is that the first query is issued and the response is received by the germ
-at boot time: as the germ runs without the Mesa processes machinery, it must poll (and
-it does) for the status of the packet sent resp. the receive buffer. Any subsequent network I/O
-is controlled by the Pilot OS kernel, using interrupt-driven I/O event handling.
-
-As the same XDE environment does work in a slow and does not in a faster environment, a timing
-dependency in the Pilot OS is the obvious candidate for the problem. However artificially slowing
-down the Dwarf emulation did not help, either by delaying interrupts or packets or adding
-cpu-spinlocks for slower instruction execution: even when the performance was worse than the
-only working setup described above, there was no attempt to open an SPP connection when doing the
-login in XDE. So maybe the obvious is still not the relevant reason...
-
-In summary, the following variants were tried without XDE trying to open a Courier SSP connection:
-- Dwarf-Emulator with an experimental NetworkAgent connecting to NetHub    
-    - both with native speed and with various artifial slow down
-    - on different fast (or slow) laptop hardware and OS environments    
-    (Core2Duo 2.4 GHz with Windows-Vista or Linux Mint, Pentium-M 1,6 GHz with Windows-XP)
-- Dawn-Emulator    
-on a Pentium-M 1,6 GHz with Windows-XP and Dawn XNS protocol driver installed
-- Guam-Emulator with an modified NetworkAgent connecting to a Nethub    
-on a Core2Duo 2.4 GHz with Linux Mint
-
-Further investigation is necessary to find out why the same software (meaning the Pilot-based XDE OS)
-behaves differently if booted in differently fast environments. But chances are low to find the real
-root cause for this behavior (it's not even sure that whichever "speed" is the reason) and get the
-problem fixed, as the internals of the Pilot OS are effectively hidden and obfuscated (no sources,
-no Mesa development environment etc.).
 
 ### Bibliography
 
@@ -406,8 +372,27 @@ still missing, like Mail protocols)
     (Dodo's Courier infrastructure was almost done when this document was uploaded to bitsavers, but it confirmed the implementation concepts derived from the BSD 4.3 source codes)
     - [Authentication_Protocol_Apr1984.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/XSIS_098404_Authentication_Protocol_Apr1984.pdf)
     - [Clearinghouse_Entry_Formats_Apr1984.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/XSIS_168404_Clearinghouse_Entry_Formats_Apr1984.pdf)
+    - [Services_8.0_Programmers_Guide_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Programmers_Guide_Nov84.pdf)
 
 ### Development history
+
+- 2019-01-06    
+routing information protocol: extended to broadcast routing data on a regular as well as
+event driven base    
+clearinghouse service: all courier procedures are now implemented, allowing to query all CHS entries,
+however modifications are rejected as the CHS database is read-only    
+authentication service: all courier procedures are now implemented, allowing to log in to XDE (simple
+credentials) and to GlobalView (strong credentials), however modifications are rejected as the CHS database
+is read-only    
+bugfix: ethernet packets now have a minimal length of 60 bytes (smaller packets are silently
+ignored by Pilot)    
+bugfix: SPP now automatically re-sends packets if not acknowledged (even if output queue still
+has space)    
+bugfix: sending packets by a single SPP connection is throttled to prevent packet losses at
+the recipients side (avoid packet resends)    
+bugfix: a time shift defined with configuration parameter `daysBackInTime` is applied to
+all timestamps issued and used by Dodo server (i.e. also when generating and checking expiration
+timestamps for credentials)
 
 - 2018-11-01    
 introduced simple read-only clearinghouse database (set of property files, defining users, groups and services), currently only used for authentication    

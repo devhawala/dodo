@@ -265,6 +265,8 @@ public class NetSpy {
 		logf("              socket  : %04X%s%s\n", w5, (socket == null) ? "" : " - ", (socket == null) ? "" : socket);
 	}
 	
+	private static final String blanks = "                                                                 ";
+	
 	private static boolean dumpXnsBody(String prefix, int byteLength, int xnsSkip) {
 		int offset = 22 + xnsSkip;
 		byteLength -= (15 + xnsSkip) * 2;
@@ -272,6 +274,7 @@ public class NetSpy {
 		short w = 0;
 		int b = 0;
 		boolean isTimeReq = (byteLength == 4);
+		StringBuilder sb = new StringBuilder();
 		for (int i = 0; i < byteLength; i++) {
 			if ((i % 2) == 0) {
 				w = readWord(offset + (i / 2));
@@ -282,11 +285,20 @@ public class NetSpy {
 				b = w & 0xFF;
 			}
 			if ((i % 16) == 0) {
-				logf("\n              0x%03X :", i);
+				logf("%s\n              0x%03X :", sb.toString(), i);
+				sb.setLength(0);
+				sb.append("  ");
 			}
 			logf(" %02X", b);
+			if (b >= 32 && b < 127) {
+				sb.append((char)b);
+			} else {
+				sb.append("∙");
+			}
 		}
-		logf("\n");
+		int gap = byteLength % 16;
+		String filler = (gap == 0) ? "" : blanks.substring(0, (16 - gap) * 3);
+		logf("%s%s\n", filler, sb.toString());
 		return isTimeReq;
 	}
 }

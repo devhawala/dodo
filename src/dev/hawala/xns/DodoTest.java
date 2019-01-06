@@ -50,7 +50,7 @@ import dev.hawala.xns.level4.time.TimeServiceResponder;
  * 
  * - connectionClose initierung/antworten: aktuelle direktes Senden? (besser/richtig: normalen daten packete?!?!?) 
  *   
- * - (erl.) keine Pr�fung ob die eigene und remote ConnId des Packets mit denen der Connection übereinstimmen
+ * - (erl.) keine Pr�fung ob die eigene und remote ConnId des Packets mit denen der Connection übereinstimmen
  * 
  * 
  */
@@ -559,7 +559,7 @@ public class DodoTest {
 	private static void testTimeService() throws XnsException {
 		localSite.pexListen(
 				IDP.KnownSocket.TIME.getSocket(), 
-				new TimeServiceResponder(0, 0));
+				new TimeServiceResponder(0));
 		
 		byte[] requestData = { 0x00, 0x02, 0x00, 0x01 };
 		Payload response = localSite.pexRequest(
@@ -584,7 +584,7 @@ public class DodoTest {
 	}
 	
 	private static void testBfsChsService() throws XnsException {
-		ChsDatabase chsDatabase = new ChsDatabase("organization", "domain", null, true);
+		ChsDatabase chsDatabase = new ChsDatabase(0x1122_3344, "organization", "domain", null, true);
 		Clearinghouse3Impl.init(0x1122_3344, 0xAABB_CCDD_EEFFL, chsDatabase);
 		localSite.pexListen(
 				IDP.KnownSocket.CLEARINGHOUSE.getSocket(), 

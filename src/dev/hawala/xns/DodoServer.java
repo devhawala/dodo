@@ -35,6 +35,7 @@ import dev.hawala.xns.level4.auth.BfsAuthenticationResponder;
 import dev.hawala.xns.level4.chs.BfsClearinghouseResponder;
 import dev.hawala.xns.level4.chs.Clearinghouse3Impl;
 import dev.hawala.xns.level4.common.ChsDatabase;
+import dev.hawala.xns.level4.common.Time2;
 import dev.hawala.xns.level4.echo.EchoResponder;
 import dev.hawala.xns.level4.rip.RipResponder;
 import dev.hawala.xns.level4.time.TimeServiceResponder;
@@ -49,7 +50,7 @@ import dev.hawala.xns.level4.time.TimeServiceResponder;
  * extinct Dodo bird came up).   
  *  </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
  */
 public class DodoServer {
 	
@@ -73,8 +74,8 @@ public class DodoServer {
 	private static boolean startChsAndAuth = true;
 	private static boolean startRipService = true;
 	
-	private static String organizationName = "home.o";
-	private static String domainName = "dev.d";
+	private static String organizationName = "hawala";
+	private static String domainName = "dev";
 	private static boolean strongKeysAsSpecified = true;
 	private static String chsDatabaseRoot = null;
 	
@@ -153,9 +154,13 @@ public class DodoServer {
 
 	public static void main(String[] args) throws XnsException {
 		String cfgFile = null;
+		boolean dumpChs = false;
 
+		// get commandline args and load basic configuration
 		for (String arg : args) {
-			if (cfgFile == null) {
+			if ("-dumpchs".equalsIgnoreCase(arg)) {
+				dumpChs = true;
+			} else if (cfgFile == null) {
 				cfgFile = arg;
 			} else {
 				System.out.printf("Warning: ignoring unknown argument: %s\n", arg);
@@ -168,9 +173,13 @@ public class DodoServer {
 			return;
 		}
 		
+		// configure and start the network engine
 		LocalSite.configureHub(netHubHost, netHubPort);
 		LocalSite.configureLocal(networkNo, machineId, "DodoServer", doChecksums);
 		localSite = LocalSite.getInstance();
+		
+		// set time base for all time dependent items
+		Time2.setTimeWarp(daysBackInTime);
 		
 		// echo service
 		if (startEchoService) {
@@ -183,20 +192,31 @@ public class DodoServer {
 		if (startTimeService) {
 			localSite.pexListen(
 					IDP.KnownSocket.TIME.getSocket(), 
-					new TimeServiceResponder(localTimeOffsetMinutes, daysBackInTime));
+					new TimeServiceResponder(localTimeOffsetMinutes));
+		}
+		
+		// routing protocol responder
+		RipResponder ripResponder = null;
+		if (startRipService) {
+			ripResponder = new RipResponder();
+			localSite.clientBindToSocket(IDP.KnownSocket.ROUTING.getSocket(), ripResponder);
 		}
 		
 		// clearinghouse and authentication services
 		if (startChsAndAuth) {
 			// create the clearinghouse database
-			ChsDatabase chsDatabase = new ChsDatabase(organizationName, domainName, chsDatabaseRoot, strongKeysAsSpecified);
+			ChsDatabase chsDatabase = new ChsDatabase(localSite.getNetworkId(), organizationName, domainName, chsDatabaseRoot, strongKeysAsSpecified);
+			
+			if (dumpChs) {
+				chsDatabase.dump();
+			}
 			
 			// broadcast for clearinghouse service
 			// one common implementation for versions 2 and 3, as both versions have the same RetrieveAddresses method
 			Clearinghouse3Impl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase);
 			localSite.pexListen(
 					IDP.KnownSocket.CLEARINGHOUSE.getSocket(), 
-					new BfsClearinghouseResponder(),
+					new BfsClearinghouseResponder(ripResponder),
 					null);
 			
 			// broadcast for authentication service
@@ -207,19 +227,12 @@ public class DodoServer {
 					IDP.KnownSocket.AUTH.getSocket(), 
 					new BfsAuthenticationResponder());
 			
-			// register courier programs in registry
+			// register clearinghouse and authentication courier programs in registry
 			Clearinghouse3Impl.register();
 			Authentication2Impl.register();
 		}
 		
-		// routing protocol responder
-		if (startRipService) {
-			localSite.clientBindToSocket(
-					IDP.KnownSocket.ROUTING.getSocket(),
-					new RipResponder());
-		}
-		
-		// Courier server with dispatcher
+		// run courier server with dispatcher
 		CourierServer courierServer = new CourierServer(localSite);
 		
 		// silence logging a bit

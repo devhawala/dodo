@@ -32,43 +32,78 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import dev.hawala.xns.Log;
 import dev.hawala.xns.PropertiesExt;
+import dev.hawala.xns.level3.courier.STRING;
+import dev.hawala.xns.level3.courier.iWireData;
+import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 import dev.hawala.xns.level4.chs.CHEntries0;
+import dev.hawala.xns.level4.chs.CHEntries0.AuthenticationLevelValue;
+import dev.hawala.xns.level4.chs.CHEntries0.MailboxesValue;
+import dev.hawala.xns.level4.chs.CHEntries0.UserDataValue;
+import dev.hawala.xns.level4.chs.Clearinghouse3;
+import dev.hawala.xns.level4.chs.Clearinghouse3.Item;
+import dev.hawala.xns.level4.chs.Clearinghouse3.Properties;
 import dev.hawala.xns.level4.common.AuthChsCommon.Name;
+import dev.hawala.xns.level4.common.AuthChsCommon.NetworkAddress;
+import dev.hawala.xns.level4.common.AuthChsCommon.NetworkAddressList;
+import dev.hawala.xns.level4.common.AuthChsCommon.ObjectName;
 import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
 
 /**
  * Clearinghouse database, supporting exactly one domain and
  * initialized from property files holding the entry data.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
  */
 public class ChsDatabase {
 	
 	private final boolean produceStrongKeyAsSpecified;
 
+	private final int networkId;
 	private final String organizationName;
 	private final String domainName;
 	private final String domOrgPartLc;
 	private final String domainAndOrganization;
+	
+	// public name/password-items for enumerating the clearinghouse
+	private final String chsQueryUser = "Clearinghouse Service:CHServers:CHServers";
+	private final Name chsQueryName;
+	private final String chsQueryUserPwPlain = "chsp";
+	private final byte[] chsQueryUserPwStrong;
+	private final int chsQueryUserPwSimple;
+	
+	public String getChsQueryUser() { return this.chsQueryUser; }
+	
+	public Name getChsQueryName() { return this.chsQueryName; }
+	
+	public byte[] getChsQueryUserPwStrong() { return this.chsQueryUserPwStrong; }
 	
 	// naming:
 	//   fqn = full qualified name :: mixed case primary 3-part name (also called "distinguished name")
 	//   nqn = normalized qualified name :: lowercase version of the fqn used for searching/lookups
 	//   pn  = primary name :: first component of the fqn
 	
-	// map any-lc(nqn,alias) => fqn
+	/** map any-lc(nqn,alias) => fqn */
 	private final Map<String,String> fqns;
 	
-	// map fqn => chs-entry
+	/** map fqn => chs-entry */
 	private final Map<String,ChsEntry> entries;
+	
+	/** all lowercase fqn-local-names */
+	private final List<String> localNames = new ArrayList<>();
+	
+	/** all lowercase-aliases */
+	private final List<String> localAliases = new ArrayList<>();
 	
 	/**
 	 * Construction of a clearinghouse database from a set of propewrty files defining the
 	 * objects in this domain and organization.
 	 * 
+	 * @param networkId the network number for all machines registered in this clearinghouse database.
 	 * @param organization the organization handled by this clearinghouse database.
 	 * @param domain the domain handled by this clearinghouse database.
 	 * @param chsDatabaseRoot the name of the directory where the property files
@@ -83,13 +118,20 @@ public class ChsDatabase {
 	 * 		encrypt the password of the last iteration to produce the new password (this
 	 * 		contradicts the specification, but creates the data in the example...)
 	 */
-	public ChsDatabase(String organization, String domain, String chsDatabaseRoot, boolean strongKeysAsSpecified) {
+	public ChsDatabase(long networkId, String organization, String domain, String chsDatabaseRoot, boolean strongKeysAsSpecified) {
 		// save configuration data
+		this.networkId = (int)(networkId & 0xFFFFFFFFL);
 		this.organizationName = organization;
 		this.domainName = domain;
 		this.domOrgPartLc = ":" + domain.toLowerCase() + ":" + organization.toLowerCase();
 		this.domainAndOrganization = ":" + domain + ":" + organization;
 		this.produceStrongKeyAsSpecified = strongKeysAsSpecified;
+		
+		// create chs query user items
+		this.chsQueryName = Name.make();
+		this.chsQueryName.from(this.chsQueryUser);
+		this.chsQueryUserPwStrong = this.computePasswordStrongHash(this.chsQueryUserPwPlain);
+		this.chsQueryUserPwSimple = this.computePasswordSimpleHash(this.chsQueryUserPwPlain);
 		
 		// check for CHS database existence
 		// if none => allow any user with password = name-part of user
@@ -130,7 +172,7 @@ public class ChsDatabase {
 				continue;
 			}
 			
-			String fqn = entry.getPn() + this.domainAndOrganization;
+			String fqn = entry.getObjectName() + this.domainAndOrganization;
 			String nqn = fqn.toLowerCase();
 			if (this.entries.containsKey(nqn)) {
 				System.out.printf(
@@ -164,6 +206,19 @@ public class ChsDatabase {
 		for (Entry<String, ChsEntry> entry : this.entries.entrySet()) {
 			entry.getValue().postcheck();
 		}
+		
+		// create localNames and localAliases lists
+		for (String fqn : this.entries.keySet()) {
+			String[] fqnParts = fqn.split(":");
+			this.localNames.add(fqnParts[0].toLowerCase());
+		}
+		for (String name : this.fqns.keySet()) {
+			String[] nameParts = name.split(":");
+			String cand = nameParts[0].toLowerCase();
+			if (!this.localNames.contains(cand) && !this.localAliases.contains(cand)) {
+				this.localAliases.add(cand);
+			}
+		}
 	}
 	
 	/**
@@ -181,24 +236,61 @@ public class ChsDatabase {
 	}
 	
 	/**
-	 * Find the distinguished name for a given name, returning
-	 * {@code null} if the name to look for is not defined in the
-	 * clearinghouse database as object name or as alias.
+	 * Get the distinguished name for a given name.
 	 * 
 	 * @param forName the name to find and return the distinguished name for.
-	 * @return the distinguished name or {@code null} if no such clearinghouse
-	 * 		entry exists.
+	 * @param distinguishedName the name to fill with the matching name.
+	 * @return {@code true} if the object was found or {@code false} if no such
+	 * 		clearinghouse entry exists.
 	 */
-	public ThreePartName getDistinguishedName(ThreePartName forName) {
-		if (this.fqns == null) { return forName; }
+	public boolean getDistinguishedName(ThreePartName forName, ThreePartName distinguishedName) {
+		if (this.fqns == null) {
+			distinguishedName.object.set(forName.object.get());
+			distinguishedName.domain.set(forName.domain.get());
+			distinguishedName.organization.set(forName.organization.get());
+			return true;
+		}
 		String fqn = this.getFqnForName(forName);
-		if (fqn == null) { return null; }
+		if (fqn == null) { return false; }
 		String[] parts = fqn.split(":");
-		Name dn = Name.make();
-		dn.object.set(parts[0]);
-		dn.domain.set(parts[1]);
-		dn.organization.set(parts[2]);
-		return dn;
+		distinguishedName.object.set(parts[0]);
+		distinguishedName.domain.set(parts[1]);
+		distinguishedName.organization.set(parts[2]);
+		return true;
+	}
+	
+	/**
+	 * Find the distinguished name matching a pattern be it a
+	 * distinguished name or an alias.
+	 * 
+	 * @param forPattern the name pattern to find and return the distinguished
+	 *     name for, the name must already be a lowercase {@code String}-pattern.
+	 * @param distinguishedName the name to fill with the matching name.
+	 * @return {@code true} if the object was found or {@code false} if no such
+	 * 		clearinghouse entry exists.
+	 */
+	public boolean findDistinguishedName(ThreePartName forPattern, ThreePartName distinguishedName) {
+		String objectName = forPattern.object.get();
+		String domain = forPattern.domain.get();
+		String organization = forPattern.organization.get();
+		String fullname = objectName + ":" + domain + ":" + organization;
+		String nqn = fullname.toLowerCase();
+		
+		if (!nqn.contains("*")) {
+			return this.getDistinguishedName(forPattern, distinguishedName);
+		}
+		
+		for (Entry<String, String> cand : this.fqns.entrySet()) {
+			if (Pattern.matches(nqn, cand.getKey())) {
+				String[] parts = cand.getValue().split(":");
+				distinguishedName.object.set(parts[0]);
+				distinguishedName.domain.set(parts[1]);
+				distinguishedName.organization.set(parts[2]);
+				return true;
+			}
+		}
+		
+		return false;
 	}
 
 	/**
@@ -218,6 +310,10 @@ public class ChsDatabase {
 		if (this.fqns != null) {
 			ChsEntry entry = this.getEntryForName(forName);
 			if (entry == null) {
+				String fqn = this.getNqnForName(forName);
+				if (this.chsQueryUser.equalsIgnoreCase(fqn)) {
+					return this.chsQueryUserPwSimple;
+				}
 				Log.AUTH.printf("ChsDb", "getSimplePassword(): forName '%s:%s:%s' does not exist\n",
 						forName.object.get(), forName.domain.get(), forName.organization.get());
 				throw new IllegalArgumentException("Object not found");
@@ -246,10 +342,14 @@ public class ChsDatabase {
 	 * 		if the user does not have a simple password.
 	 * @throws IllegalArgumentException if the user does not exist.
 	 */
-	public byte[] getStrongPassword(Name forName) {
+	public byte[] getStrongPassword(ThreePartName forName) {
 		if (this.fqns != null) {
 			ChsEntry entry = this.getEntryForName(forName);
 			if (entry == null) {
+				String fqn = this.getNqnForName(forName);
+				if (this.chsQueryUser.equalsIgnoreCase(fqn)) {
+					return this.chsQueryUserPwStrong;
+				}
 				Log.AUTH.printf("ChsDb", "getStrongPassword(): forName '%s:%s:%s' does not exist\n",
 						forName.object.get(), forName.domain.get(), forName.organization.get());
 				throw new IllegalArgumentException("Object not found");
@@ -279,18 +379,44 @@ public class ChsDatabase {
 	 */
 	
 	private String getFqnForName(ThreePartName name) {
+		String nqn = this.getNqnForName(name);
+		return this.fqns.get(nqn);
+	}
+	
+	private String getNqnForName(ThreePartName name) {
 		String objectName = name.object.get();
 		String domain = name.domain.get();
 		String organization = name.organization.get();
 		String fullname = objectName + ":" + domain + ":" + organization;
-		String nqn = fullname.toLowerCase();
-		return this.fqns.get(nqn);
+		return fullname.toLowerCase();
 	}
 	
-	private ChsEntry getEntryForName(Name name) {
+	private ChsEntry getEntryForName(ThreePartName name) {
 		String fqn = this.getFqnForName(name);
 		if (fqn == null) { return null; }
 		return this.entries.get(fqn);
+	}
+	
+	private ChsEntry findEntryForPattern(ThreePartName forPattern) {
+		String objectName = forPattern.object.get();
+		String domain = forPattern.domain.get();
+		String organization = forPattern.organization.get();
+		String fullname = objectName + ":" + domain + ":" + organization;
+		String nqn = fullname.toLowerCase();
+		
+		final String fqn;
+		if (!nqn.contains("*")) {
+			fqn = this.fqns.get(nqn);
+		} else {
+			String tmp = null;
+			for (Entry<String, String> cand : this.fqns.entrySet()) {
+				if (Pattern.matches(nqn, cand.getKey())) {
+					tmp = cand.getValue();
+				}
+			}
+			fqn = tmp;
+		}
+		return (fqn != null) ? this.entries.get(fqn) : null;
 	}
 	
 	private byte[] computePasswordStrongHash(String password) {
@@ -330,6 +456,9 @@ public class ChsDatabase {
 		
 		protected String fqn = null;
 		
+		private final Map<Integer,Item> itemProperties = new HashMap<>();
+		private final Map<Integer,List<ThreePartName>> groupProperties = new HashMap<>();
+		
 		public ChsEntry(int type, File propsFile) {
 			this.cfgFilename = propsFile.getName();
 			this.entryType = type;
@@ -363,19 +492,35 @@ public class ChsDatabase {
 		
 		public abstract String getDescription();
 		
-		public abstract String getPn();
+		public abstract String getObjectName();
 		
 		public void postpare(String fqn) {
 			this.fqn = fqn;
+			this.putItemProperty(this.entryType, STRING.make().set(this.getDescription()));
+		}
+		
+		protected void putItemProperty(int property, iWireData value) {
+			try {
+				this.itemProperties.put(property, Item.from(value));
+			} catch (NoMoreWriteSpaceException nmse) {
+				// tell about the error but ignore this property...
+				System.out.printf(
+					"Warning: '%s' has invalid property %d (value size exceeds 500 words!)\n",
+					this.fqn, property);
+			}
+		}
+		
+		protected void putGroupProperty(int property, List<ThreePartName> groupMemberss) {
+			this.groupProperties.put(property, groupMemberss);
 		}
 		
 		public void postcheck() {
-			// check consistence, e.g. for cyclic references, recursive groups
+			// check consistency, e.g. for cyclic references, recursive groups
 		}
 		
 		@Override
 		public String toString() {
-			return this.getClass().getSimpleName() + "[ pn='" + this.getPn() + "' , description='" + this.getDescription() + "' ]";
+			return this.getClass().getSimpleName() + "[ pn='" + this.getObjectName() + "' , description='" + this.getDescription() + "' ]";
 		}
 		
 		protected void dumpSpecifics() {
@@ -394,6 +539,37 @@ public class ChsDatabase {
 					System.out.printf("      %s\n", m);
 				}
 				System.out.printf("  ---------------------------------- end aliases\n");
+			}
+			
+			this.getItemProperty(-1); // possibly complete initializations
+			if (!this.itemProperties.isEmpty()) {
+				System.out.printf("  item properties:\n");
+				for (Entry<Integer, Item> e : this.itemProperties.entrySet()) {
+					System.out.printf("    %7d : 0x", e.getKey());
+					Item item = e.getValue();
+					for (int i = 0; i < item.size(); i++) {
+						System.out.printf(" %04X", item.get(i).get() & 0xFFFF);
+					}
+					System.out.println();
+				}
+			}
+			
+			this.getGroupProperty(-1); // possibly complete initializations
+			if (!this.groupProperties.isEmpty()) {
+				System.out.printf("  group properties:\n");
+				for (Entry<Integer, List<ThreePartName>> e : this.groupProperties.entrySet()) {
+					System.out.printf("    %7d :", e.getKey());
+					List<ThreePartName> members = e.getValue();
+					String sep = " ";
+					for (ThreePartName member : members) {
+						System.out.printf(
+								"%s%s:%s:%s", 
+								sep,
+								member.object.get(), member.domain.get(), member.organization.get());
+						sep = " ; ";
+					}
+					System.out.println();
+				}
 			}
 		}
 		
@@ -423,6 +599,22 @@ public class ChsDatabase {
 		
 		public List<String> getAliases() {
 			return this.aliasFqns;
+		}
+		
+		public Item getItemProperty(int property) {
+			return this.itemProperties.get(property);
+		}
+		
+		public List<ThreePartName> getGroupProperty(int property) {
+			return this.groupProperties.get(property);
+		}
+		
+		public Set<Integer> getItemPropertyIds() {
+			return this.itemProperties.keySet();
+		}
+		
+		public Set<Integer> getGroupPropertyIds() {
+			return this.groupProperties.keySet();
 		}
 		
 	}
@@ -467,6 +659,7 @@ public class ChsDatabase {
 		private final int lastnameIndex;
 		
 		private final String mailservice;
+		private final long mailboxTimeMillisecs;
 		private final String fileservice;
 		
 		public ChsUser(File propsFile) {
@@ -489,6 +682,22 @@ public class ChsDatabase {
 
 			this.fileservice = this.getLcObjName(this.props.getProperty("fileservice", "none")) + domOrgPartLc;
 			this.mailservice = this.getLcObjName(this.props.getProperty("mailservice", "none")) + domOrgPartLc;
+			this.mailboxTimeMillisecs = propsFile.lastModified();
+		}
+		
+		@Override
+		public void postpare(String fqn) {
+			super.postpare(fqn);
+			
+			UserDataValue userDataValue = UserDataValue.make();
+			userDataValue.fileService.from(fqns.get(this.fileservice));
+			userDataValue.lastNameIndex.set(this.lastnameIndex);
+			this.putItemProperty(CHEntries0.userData, userDataValue);
+			
+			MailboxesValue mailboxesValue = MailboxesValue.make();
+			mailboxesValue.mailService.add().from(fqns.get(this.mailservice));
+			mailboxesValue.time.fromUnixMillisecs(this.mailboxTimeMillisecs);
+			this.putItemProperty(CHEntries0.mailboxes, mailboxesValue);
 		}
 		
 		protected void dumpSpecifics() {
@@ -505,7 +714,7 @@ public class ChsDatabase {
 		}
 
 		@Override
-		public String getPn() {
+		public String getObjectName() {
 			return this.username;
 		}
 
@@ -587,6 +796,23 @@ public class ChsDatabase {
 			this.machineId = macId;
 		}
 		
+		@Override
+		public void postpare(String fqn) {
+			super.postpare(fqn);
+			
+			AuthenticationLevelValue authLevelValue = AuthenticationLevelValue.make();
+			authLevelValue.simpleSupported.set(this.authLevelSimple);
+			authLevelValue.strongSupported.set(this.authLevelStrong);
+			this.putItemProperty(CHEntries0.authenticationLevel, authLevelValue);
+			
+			NetworkAddressList addrList = NetworkAddressList.make();
+			NetworkAddress addr = addrList.add();
+			addr.network.set(networkId);
+			addr.host.set(this.machineId);
+			addr.socket.set(0);
+			this.putItemProperty(CHEntries0.addressList, addrList);
+		}
+		
 		protected void dumpSpecifics() {
 			super.dumpSpecifics();
 			System.out.printf("  description  : %s\n", this.description);
@@ -601,7 +827,7 @@ public class ChsDatabase {
 		}
 
 		@Override
-		public String getPn() {
+		public String getObjectName() {
 			return this.objNameFromCfgFile;
 		}
 
@@ -622,10 +848,22 @@ public class ChsDatabase {
 	private class ChsClearinghouseSvc extends ChsSvc {
 		
 		private final String mailservice;
+		private final long mailboxTimeMillisecs;
 		
 		public ChsClearinghouseSvc(File cfgFile) {
 			super(CHEntries0.clearinghouseService, cfgFile);
 			this.mailservice = this.getLcObjName(this.props.getProperty("mailservice", "none")) + domOrgPartLc;
+			this.mailboxTimeMillisecs = cfgFile.lastModified();
+		}
+		
+		@Override
+		public void postpare(String fqn) {
+			super.postpare(fqn);
+			
+			MailboxesValue mailboxesValue = MailboxesValue.make();
+			mailboxesValue.mailService.add().from(fqns.get(this.mailservice));
+			mailboxesValue.time.fromUnixMillisecs(this.mailboxTimeMillisecs);
+			this.putItemProperty(CHEntries0.mailboxes, mailboxesValue);
 		}
 
 		public String getMailserviceFqn() {
@@ -704,7 +942,7 @@ public class ChsDatabase {
 		}
 
 		@Override
-		public String getPn() {
+		public String getObjectName() {
 			return this.objNameFromCfgFile;
 		}
 		
@@ -762,11 +1000,169 @@ public class ChsDatabase {
 	
 	private class ChsUserGroup extends ChsGroupEntry {
 		
+		private boolean initializeGroupProperties = true;
+		
 		public ChsUserGroup(File cfgFile) {
 			super(CHEntries0.userGroup, cfgFile);
 		}
 		
+		@Override
+		public List<ThreePartName> getGroupProperty(int property) {
+			if (this.initializeGroupProperties) {
+				List<ThreePartName> memberNames = new ArrayList<>();
+				for (String fqn : this.getMemberFqns()) {
+					memberNames.add(Name.make().from(fqn));
+				}
+				this.putGroupProperty(CHEntries0.members, memberNames);
+				this.initializeGroupProperties = false;
+			}
+			
+			return super.getGroupProperty(property);
+		}
+		
 	}
+	
+	/*
+	 * methods to access database entries
+	 */
+	
+	public boolean isValidName(ThreePartName name) {
+		ChsEntry e = this.getEntryForName(name);
+		return (e != null);
+	}
+	
+	public List<String> findNames(String pattern, long reqProperty) {
+		return this.findObjectNames(this.localNames, pattern, reqProperty);
+	}
+	
+	public List<String> findAliases(String pattern, long reqProperty) {
+		return this.findObjectNames(this.localAliases, pattern, reqProperty);
+	}
+	
+	private List<String> findObjectNames(List<String> list, String pattern, long reqProperty) {
+		
+		System.out.printf("+++ ChsDatabase.findObjectNames( pattern = '%s' , reqProperty = %d )\n",
+				pattern, reqProperty);
+		
+		int property = (int)(reqProperty & 0xFFFFFFFFL);
+		List<String> names = new ArrayList<>();
+		boolean isAnyName = ".*".equals(pattern);
+		boolean isAnyProperty = (property == Clearinghouse3.all);
+		
+		for (String cand : list) {
+			if (isAnyName || Pattern.matches(pattern, cand)) {
+				if (isAnyProperty) {
+					if (!names.contains(cand)) { names.add(cand); }
+					continue;
+				}
+				String candFqn = this.fqns.get(cand + this.domOrgPartLc);
+				ChsEntry candEntry = this.entries.get(candFqn);
+				if (candEntry != null && candEntry.getItemProperty(property) != null) {
+					if (!names.contains(cand)) {
+						String candName = candEntry.getObjectName();
+						System.out.printf("+++ ChsDatabase.findObjectNames() -> found '%s'\n", candName);
+						names.add(candName);
+					}
+				}
+			}
+		}
+		
+		return names;
+	}
+	
+	public List<String> getAliasesOf(ThreePartName name) {
+		List<String> aliases = new ArrayList<>();
+		ChsEntry entry = this.getEntryForName(name);
+		if (entry != null) {
+			for (String aliasFqn : entry.getAliases()) {
+				String[] aliasParts = aliasFqn.split(":");
+				aliases.add(aliasParts[0]);
+			}
+		}
+		return aliases; 
+	}
+	
+	// returns if entry was found, 'distinguishedObject' and 'properties' filled accordingly
+	public boolean getPropertyList(
+			ThreePartName forPattern,
+			ObjectName distinguishedObject,
+			Properties properties) {
+		ChsEntry e = this.findEntryForPattern(forPattern);
+		if (e == null) { return false; }
+		
+		if (distinguishedObject != null) {
+			distinguishedObject.object.set(e.getObjectName());
+			distinguishedObject.domain.set(this.domainName);
+			distinguishedObject.organization.set(this.organizationName);
+		}
+		
+		for (int propId : e.getItemPropertyIds()) {
+			properties.add().set(propId & 0xFFFFFFFFL);
+		}
+		for (int propId : e.getGroupPropertyIds()) {
+			properties.add().set(propId & 0xFFFFFFFFL);
+		}
+		
+		return true;
+	}
+	
+	// 0 => entry not found
+	// 1 => entry found, but not property
+	// 2 => entry found, but wrong property type (group, not item)
+	// 3 => both found
+	public int getEntryProperty(
+						ThreePartName forPattern,
+						int property,
+						ObjectName distinguishedObject,
+						Item value) {
+		ChsEntry e = this.findEntryForPattern(forPattern);
+		if (e == null) { return 0; }
+		
+		if (distinguishedObject != null) {
+			distinguishedObject.object.set(e.getObjectName());
+			distinguishedObject.domain.set(this.domainName);
+			distinguishedObject.organization.set(this.organizationName);
+		}
+		
+		Item item = e.getItemProperty(property);
+		if (item != null) {
+			value.clear();
+			for (int i = 0; i < item.size(); i++) {
+				value.add().set(item.get(i).get());
+			}
+			return 3;
+		} else {
+			return (e.getGroupProperty(property) != null) ? 2 : 1;
+		}
+	}
+	
+	// IllegalArgumentexception => entry not found
+	// null => entry found, but property not found
+	// (other) => entry and group property found
+	public List<ThreePartName> getEntryGroupMembers(
+						ThreePartName forPattern,
+						int property,
+						ObjectName distinguishedObject) {
+		ChsEntry e = this.findEntryForPattern(forPattern);
+		if (e == null) {
+			throw new IllegalArgumentException("forPattern not found");
+		}
+		
+		if (distinguishedObject != null) {
+			distinguishedObject.object.set(e.getObjectName());
+			distinguishedObject.domain.set(this.domainName);
+			distinguishedObject.organization.set(this.organizationName);
+		}
+		
+		List<ThreePartName> members = e.getGroupProperty(property);
+		if (members == null) { return null; }
+		
+		return new ArrayList<>(members);
+	}
+	
+	/*
+	 * debug functionality
+	 */
 	
 	public void dump() {
 		if (this.fqns == null) {

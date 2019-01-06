@@ -26,6 +26,9 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.xns.level4.rip;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import dev.hawala.xns.EndpointAddress;
 import dev.hawala.xns.level1.IDP;
 import dev.hawala.xns.level2.Error;
@@ -33,19 +36,59 @@ import dev.hawala.xns.network.iIDPReceiver;
 import dev.hawala.xns.network.iIDPSender;
 
 /**
- * (Attempt for a) XNS Routing protocol responder.
+ * XNS Routing protocol service.
+ * <p>
+ * This service broadcasts the minimal routing information
+ * for the local network at regular intervals (once a minute).
+ * Broadcasting can also be triggered by a server internal event,
+ * for example a workstation having sent a BfS request.
+ * <br/>This service also implements the responder for answering
+ * explicit routing information requests by a machine.
+ * </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
  */
-public class RipResponder implements iIDPReceiver {
+public class RipResponder implements iIDPReceiver, RoutingInformer, Runnable {
+	
+	private static final long BROADCAST_INTERVAL = 60000L; // ms, interval between regular broadcasts
+	private static final long CHECK_INTERVAL = 2; // ms, interval for checking if a broadcast should happen
+	private static final long INHIBIT_INTERVAL = 3000L; // ms, interval before an implicit broadcast request is honored for the same machine
 	
 	private EndpointAddress localEndpoint = null;
 	private iIDPSender sender = null;
 
+	private Thread broadcaster = null;
+	private long nextBroadcastTS = System.currentTimeMillis() + BROADCAST_INTERVAL;
+	private Map<Long,Long> machineInhibits = new HashMap<>();
+	
+	private final IDP broadcastIdp = new IDP();
+
 	@Override
-	public void start(EndpointAddress localEndpoint, iIDPSender sender) {
+	public synchronized void start(EndpointAddress localEndpoint, iIDPSender sender) {
 		this.localEndpoint = localEndpoint;
 		this.sender = sender;
+		
+		// setup broadcast packet (one single packet is used, as the routing information does not change)
+		// 1. data part: routing response, local network is 1 hop away
+		this.broadcastIdp.wrCardinal(0, 2); // response
+		this.broadcastIdp.wrCardinal(2, (int)((localEndpoint.network >> 16) & 0xFFFF));
+		this.broadcastIdp.wrCardinal(4, (int)(localEndpoint.network & 0xFFFF));
+		this.broadcastIdp.wrCardinal(6, 1); // 1 hop
+		this.broadcastIdp.setPayloadLength(8);
+		this.broadcastIdp.setPacketType(IDP.PacketType.RIP);
+		// 2. destination: broadcast in this network to RIP port
+		this.broadcastIdp.setDstHost(IDP.BROADCAST_ADDR);
+		this.broadcastIdp.setDstNetwork(localEndpoint.network);
+		this.broadcastIdp.setDstSocket(IDP.KnownSocket.ROUTING.getSocket());
+		// 3. source: this machine in this network from RIP port
+		this.broadcastIdp.setSrcHost(localEndpoint.host);
+		this.broadcastIdp.setSrcNetwork(localEndpoint.network);
+		this.broadcastIdp.setSrcSocket(IDP.KnownSocket.ROUTING.getSocket());
+		
+		// setup sending broadcasts
+		this.broadcaster = new Thread(this);
+		this.broadcaster.setName("Routing broadcaster");
+		this.broadcaster.start();
 	}
 
 	@Override
@@ -60,44 +103,55 @@ public class RipResponder implements iIDPReceiver {
 		int operation = idp.rdCardinal(0);
 		if (operation != 1) { return; } // not 'request'
 		
-		// for now: do a hard response with our local network zero hops away...
-//		byte[] responseContent = {
-//			// operation = response
-//			0x00, 0x02,
-//			// (local) network 
-//			(byte)((localEndpoint.network >> 24) & 0xFF),
-//			(byte)((localEndpoint.network >> 16) & 0xFF),
-//			(byte)((localEndpoint.network >> 8) & 0xFF),
-//			(byte)(localEndpoint.network & 0xFF),
-//			// hop count
-//			0x00, 0x00
-//		};
-//		IDP response = new IDP(responseContent, 0, responseContent.length).asReplyTo(idp);
-//		response.wrBytes(0, responseContent.length, responseContent, 0, responseContent.length);
-		IDP response = new IDP().asReplyTo(idp);
-		response.wrCardinal(0, 2);
-		response.wrCardinal(2, (int)((localEndpoint.network >> 16) & 0xFFFF));
-		response.wrCardinal(4, (int)(localEndpoint.network & 0xFFFF));
-		response.wrCardinal(6, 0);
-		response.wrCardinal(8, 0xFFFF);
-		response.wrCardinal(10, 0xFFFF);
-		response.wrCardinal(12, 16);
-		response.setPayloadLength(14);
-		response.setPacketType(IDP.PacketType.RIP);
-
-		response.setDstHost(IDP.BROADCAST_ADDR);
-		response.setDstNetwork(IDP.LOCAL_NETWORK);
-		this.sender.send(response);
+		// send routing information
+		this.sendBroadcast(true);
 	}
 
 	@Override
 	public void acceptError(Error err) {
-		// this is a broadcast responder, so ignore errors (none really expected)
+		// this is a broadcast sender/responder, so ignore errors (none really expected)
 	}
 
 	@Override
-	public void stopped() {
+	public synchronized void stopped() {
 		this.sender = null;
+		if (this.broadcaster != null) {
+			this.broadcaster.interrupt();
+			try { this.broadcaster.join(); } catch (InterruptedException e) { }
+			this.broadcaster = null;
+		}
 	}
 
+	@Override
+	public void run() {
+		try {
+			while(true) {
+				Thread.sleep(CHECK_INTERVAL);
+				this.sendBroadcast(false);
+			}
+		} catch (InterruptedException e) {
+			// simply terminate broadcasting
+		}
+	}
+
+	public synchronized void requestBroadcast(long requestingMachineId) {
+		long now = System.currentTimeMillis();
+		if (this.machineInhibits.containsKey(requestingMachineId)) {
+			long notBeforeTs = this.machineInhibits.get(requestingMachineId);
+			if (now < notBeforeTs) {
+				return;
+			}
+		}
+		this.machineInhibits.put(requestingMachineId, now + INHIBIT_INTERVAL);
+		this.nextBroadcastTS = System.currentTimeMillis() + 1;
+	}
+	
+	private synchronized void sendBroadcast(boolean forceSend) {
+		long now = (forceSend) ? this.nextBroadcastTS : System.currentTimeMillis();
+		if (this.sender != null && now >= this.nextBroadcastTS) {
+			this.sender.send(this.broadcastIdp);
+			this.nextBroadcastTS = now + BROADCAST_INTERVAL;
+		}
+	}
+	
 }

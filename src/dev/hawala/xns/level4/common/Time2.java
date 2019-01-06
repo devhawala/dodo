@@ -56,6 +56,16 @@ public class Time2 extends CrProgram {
 	public static class Time extends LONG_CARDINAL {
 		private Time() {}
 		public static Time make() { return new Time(); }
+		
+		public Time fromUnixMillisecs(long ms) {
+			this.set(getMesaTime(ms));
+			return this;
+		}
+		
+		public Time now() {
+			this.set(getMesaTime());
+			return this;
+		}
 	}
 	
 	/*
@@ -149,15 +159,40 @@ public class Time2 extends CrProgram {
 	 * *********************** non-Courier public methods 
 	 */
 	
+	private static int mesaSecondsAdjust = 0;
+	
+	/**
+	 * Set the time warp as number of days to move the mesa date
+	 * reference to the <i>past</i>.
+	 * 
+	 * @param moveDateBackDays number of days to subtract from the current
+	 * 		date to get the final mesa timestamp, with 0 not changing the date.
+	 */
+	public static void setTimeWarp(int moveDateBackDays) {
+		mesaSecondsAdjust = -86400 * moveDateBackDays;
+	}
+	
 	/**
 	 * Compute the current time in Mesa resp. Pilot representation.
 	 * 
 	 * @return number of seconds since 12:00:00 AM, 1 Jan. 1901, GMT
+	 *   as LONG CARDINAL (adjusted for time warp).
 	 */
 	public static long getMesaTime() {
-		long unixTimeMillis = System.currentTimeMillis();
+		return getMesaTime(System.currentTimeMillis());
+		
+	}
+	
+	/**
+	 * Compute the given unix-time in Mesa resp. Pilot representation.
+	 * 
+	 * @param unixTimeMillis timestamp in unix time representation
+	 * @return number of seconds since 12:00:00 AM, 1 Jan. 1901, GMT
+	 *   as LONG CARDINAL (adjusted for time warp).
+	 */
+	public static long getMesaTime(long unixTimeMillis) {
 		long unixTimeSecs = unixTimeMillis / 1000;
 		long mesaSecs = (unixTimeSecs + (731 * 86400) + earliestTime) & 0x00000000FFFFFFFFL;
-		return mesaSecs;
+		return mesaSecs + mesaSecondsAdjust;
 	}
 }

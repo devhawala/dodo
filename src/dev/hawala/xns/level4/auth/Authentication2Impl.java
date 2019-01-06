@@ -27,7 +27,6 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns.level4.auth;
 
 import dev.hawala.xns.Log;
-import dev.hawala.xns.level1.IDP;
 import dev.hawala.xns.level3.courier.CourierRegistry;
 import dev.hawala.xns.level3.courier.RECORD;
 import dev.hawala.xns.level3.courier.SEQUENCE;
@@ -48,8 +47,8 @@ import dev.hawala.xns.level4.common.StrongAuthUtils;
 import dev.hawala.xns.level4.common.Time2;
 
 /**
- * Implementation of the (so far supported) functionality
- * of the Courier Authentication program (PROGRAM 14 VERSION 2).
+ * Implementation of the functionality of the Courier
+ * Authentication program (PROGRAM 14 VERSION 2).
  * 
  * @author Dr. Hans-Walter Latz / Berlin (2018)
  */
@@ -83,26 +82,44 @@ public class Authentication2Impl {
 	 */
 	
 	/**
-	 * register Courier-Program Clearinghouse3 with this implementation to Courier dispatcher
+	 * register Courier-Program Authentication2 with this implementation to Courier dispatcher
 	 */
 	public static void register() {
+		// instantiate the courier program
 		Authentication2 prog = new Authentication2();
 		
+		// Bfs procedure (undocumented)
 		prog.RetrieveAddresses.use(Authentication2Impl::retrieveAddresses);
+		
+		// supported procedures for login
 		prog.GetStrongCredentials.use(Authentication2Impl::getStrongCredentials);
 		prog.CheckSimpleCredentials.use(Authentication2Impl::checkSimpleCredentials);
-		// TODO: define remaining procedures in the courier program 
 		
+		// procedures unsupported due to read-only clearinghouse database
+		// => these raise an accessRightsInsufficient-CallError
+		prog.CreateStrongKey.use(Authentication2Impl::createStrongKey);
+		prog.ChangeStrongKey.use(Authentication2Impl::changeStrongKey);
+		prog.DeleteStrongKey.use(Authentication2Impl::deleteStrongKey);
+		prog.CreateSimpleKey.use(Authentication2Impl::createSimpleKey);
+		prog.ChangeSimpleKey.use(Authentication2Impl::changeSimpleKey);
+		prog.DeleteSimpleKey.use(Authentication2Impl::deleteSimpleKey);
+		
+		// register to courier dispatcher
 		CourierRegistry.register(prog);
 	}
 	
 	/**
-	 * unregister Clearinghouse3 implementation from Courier dispatcher
+	 * unregister Authentication2 implementation from Courier dispatcher
 	 */
 	public static void unregister() {
 		CourierRegistry.unregister(Authentication2.PROGRAM, Authentication2.VERSION);
 	}
 	
+	/**
+	 * Create a program implementation for BfS, implementing
+	 * only the {@code RetrieveAddresses} procedure.
+	 * @return BfS implementation for Authentication2
+	 */
 	public static Authentication2 getBfsImplementation() {
 		Authentication2 prog = new Authentication2();
 		prog.RetrieveAddresses.use(Authentication2Impl::retrieveAddresses);
@@ -118,15 +135,14 @@ public class Authentication2Impl {
 	 * RETURNS [address: NetworkAddressList]
 	 * REPORTS [CallError] = 0;
 	 */
-
-	public static void retrieveAddresses(
-						RECORD params,
-						AuthChsCommon.RetrieveAddressesResult results) {
+	private static void retrieveAddresses(
+							RECORD params,
+							AuthChsCommon.RetrieveAddressesResult results) {
 		// add the only known server to the address list
 		NetworkAddress addr = results.address.add();
 		addr.network.set((int)(networkId & 0xFFFFFFFFL));
 		addr.host.set(machineId);
-		addr.socket.set(IDP.KnownSocket.COURIER.getSocket()); // unclear what local socket is meant...
+		addr.socket.set(0);
 	}
 	
 	/*
@@ -136,10 +152,9 @@ public class Authentication2Impl {
 	 *	RETURNS [ credentialsPackage: SEQUENCE OF UNSPECIFIED ]
 	 * 	REPORTS [ CallError ] = 1;
 	 */
-	
-	public static void getStrongCredentials(
-						Authentication2.GetStrongCredentialsParams params,
-						Authentication2.GetStrongCredentialsResults results) {
+	private static void getStrongCredentials(
+							Authentication2.GetStrongCredentialsParams params,
+							Authentication2.GetStrongCredentialsResults results) {
 		StringBuilder sb = new StringBuilder();
 		String paramsString = params.append(sb, "", "params").toString();
 		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials(), %s \n", paramsString);
@@ -192,14 +207,6 @@ public class Authentication2Impl {
 	}
 	
 	private static byte[] getStrongPw(Name forName, Which which) {
-//		// begin temp: pretend there is no strong key to force simple authentication
-//		Authentication2.CallErrorRecord err = new Authentication2.CallErrorRecord(
-//				CallProblem.strongKeyDoesNotExist,
-//				which);
-//		Log.C.printf("Auth2", "Authentication2Impl.getStrongPw() -> CallError[strongKeyDoesNotExist,%s]\n", which);
-//		err.raise();
-//		// end temp
-		
 		try {
 			byte[] pw = chsDatabase.getStrongPassword(forName);
 			if (pw != null) {
@@ -242,9 +249,9 @@ public class Authentication2Impl {
 	 *  RETURNS[ok: BOOLEAN]
 	 *  REPORTS[AuthenticationError, CallError] = 2;
 	 */
-	public static void checkSimpleCredentials(
-						Authentication2.CheckSimpleCredentialsParams params,
-						Authentication2.CheckSimpleCredentialsResults results) {
+	private static void checkSimpleCredentials(
+							Authentication2.CheckSimpleCredentialsParams params,
+							Authentication2.CheckSimpleCredentialsResults results) {
 		try {
 			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() -- invoking AuthChsCommon.simpleCheckPasswordForSimpleCredentials()\n");
 			results.ok.set(AuthChsCommon.simpleCheckPasswordForSimpleCredentials(chsDatabase, params.credentials, params.verifier));
@@ -256,5 +263,91 @@ public class Authentication2Impl {
 			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() -> CallError[badName,%s]\n", Which.initiator);
 			new Authentication2.CallErrorRecord(CallProblem.badName, Which.initiator).raise();
 		}
+	}
+	
+	
+	/*
+	 * CreateStrongKey: PROCEDURE [
+	 * 	      credentials: Credentials, verifier: Verifier,
+	 * 	      name: Clearinghouse_Name, key: Key ]
+	 * 	  REPORTS [ AuthenticationError, CallError ] = 3;
+	 */
+	private static void createStrongKey(
+							Authentication2.CreateStrongKeyParams params,
+							RECORD results) {
+		abortDueToReadOnlyCHS("createStrongKey");
+	}
+	
+	
+	/*
+	 * ChangeStrongKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     newKey: Block ]
+	 *  REPORTS [ AuthenticationError, CallError ] = 4;
+	 */
+	private static void changeStrongKey(
+							Authentication2.ChangeStrongKeyParams params,
+							RECORD results) {
+		abortDueToReadOnlyCHS("changeStrongKey");
+	}
+	
+	
+	/*
+	 * DeleteStrongKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     name: Clearinghouse_Name ]
+	 *  REPORTS [ AuthenticationError, CallError ] = 5;
+	 */
+	private static void deleteStrongKey(
+							Authentication2.DeleteStrongKeyParams params,
+							RECORD results) {
+		abortDueToReadOnlyCHS("deleteStrongKey");
+	}
+	
+	
+	/*
+	 * CreateSimpleKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     name: Clearinghouse_Name, key: HashedPassword ]
+	 *  REPORTS[AuthenticationError, CallError] = 6;
+	 */
+	private static void createSimpleKey(
+							Authentication2.CreateSimpleKeyParams params,
+							RECORD results) {
+		abortDueToReadOnlyCHS("createSimpleKey");
+	}
+	
+	
+	/*
+	 * ChangeSimpleKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     newKey: HashedPassword ]
+	 *  REPORTS[AuthenticationError, CallError] = 7;
+	 */
+	private static void changeSimpleKey(
+							Authentication2.ChangeSimpleKeyParams params,
+							RECORD results) {
+		abortDueToReadOnlyCHS("changeSimpleKey");
+	}
+	
+	
+	/*
+	 * DeleteSimpleKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     name: Clearinghouse_Name ]
+	 *  REPORTS[AuthenticationError, CallError] = 8;
+	 */
+	private static void deleteSimpleKey(
+							Authentication2.DeleteSimpleKeyParams params,
+							RECORD results) {
+		abortDueToReadOnlyCHS("deleteSimpleKey");
+	}
+	
+	
+	/* internal items */
+	
+	private static void abortDueToReadOnlyCHS(String procName) {
+		Log.C.printf("Auth2", "** Authentication2Impl.%s() -> CallError[accessRightsInsufficient,initiator]\n", procName);
+		new Authentication2.CallErrorRecord(CallProblem.accessRightsInsufficient, Which.initiator).raise();
 	}
 }

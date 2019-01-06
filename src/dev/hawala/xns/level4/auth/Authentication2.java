@@ -27,6 +27,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns.level4.auth;
 
 import dev.hawala.xns.level3.courier.BOOLEAN;
+import dev.hawala.xns.level3.courier.CARDINAL;
 import dev.hawala.xns.level3.courier.ENUM;
 import dev.hawala.xns.level3.courier.ErrorRECORD;
 import dev.hawala.xns.level3.courier.LONG_CARDINAL;
@@ -36,8 +37,8 @@ import dev.hawala.xns.level3.courier.UNSPECIFIED;
 import dev.hawala.xns.level4.common.AuthChsCommon;
 
 /**
- * Definition of the (so far supported) functionality
- * of the Courier Authentication program (PROGRAM 14 VERSION 2).
+ * Definition of the functionality of the Courier
+ * Authentication program (PROGRAM 14 VERSION 2).
  * 
  * @author Dr. Hans-Walter Latz / Berlin (2018)
  */
@@ -176,7 +177,7 @@ public class Authentication2 extends AuthChsCommon {
 	 */
 	
 	/*
-	 * in analogy to Clearinghouse...
+	 * undocumented, so define it in analogy to Clearinghouse...
 	 */
 	public final PROC<RECORD,RetrieveAddressesResult> RetrieveAddresses = mkPROC(
 							0,
@@ -237,5 +238,139 @@ public class Authentication2 extends AuthChsCommon {
 							CheckSimpleCredentialsResults::make,
 							AuthenticationError,
 							CallError); 
+	
+	/*
+	 * CreateStrongKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 * 	   name: Clearinghouse_Name, key: Key ]
+	 * 	REPORTS [ AuthenticationError, CallError ] = 3;
+	 */
+	public static class CreateStrongKeyParams extends RECORD {
+		public final Credentials credentials = mkMember(Credentials::make);
+		public final Verifier verifier = mkMember(Verifier::make);
+		public final Name name = mkMember(Name::make);
+		public final Key key = mkMember(Key::make);
+		
+		private CreateStrongKeyParams() {}
+		public static CreateStrongKeyParams make() { return new CreateStrongKeyParams(); }
+	}
+	public final PROC<CreateStrongKeyParams,RECORD> CreateStrongKey = mkPROC(
+							3,
+							CreateStrongKeyParams::make,
+							RECORD::empty,
+							AuthenticationError,
+							CallError);
+	
+	
+	/*
+	 * ChangeStrongKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     newKey: Block ]
+	 *  REPORTS [ AuthenticationError, CallError ] = 4;
+	 */
+	public static class ChangeStrongKeyParams extends RECORD {
+		public final Credentials credentials = mkMember(Credentials::make);
+		public final Verifier verifier = mkMember(Verifier::make);
+		public final Key newKey = mkMember(Key::make);
+		
+		private ChangeStrongKeyParams() {}
+		public static ChangeStrongKeyParams make() { return new ChangeStrongKeyParams(); }
+	}
+	public final PROC<ChangeStrongKeyParams,RECORD> ChangeStrongKey = mkPROC(
+							4,
+							ChangeStrongKeyParams::make,
+							RECORD::empty,
+							AuthenticationError,
+							CallError);
+	
+	
+	/*
+	 * DeleteStrongKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     name: Clearinghouse_Name ]
+	 *  REPORTS [ AuthenticationError, CallError ] = 5;
+	 */
+	public static class DeleteStrongKeyParams extends RECORD {
+		public final Credentials credentials = mkMember(Credentials::make);
+		public final Verifier verifier = mkMember(Verifier::make);
+		public final Name name = mkMember(Name::make);
+		
+		private DeleteStrongKeyParams() {}
+		public static DeleteStrongKeyParams make() { return new DeleteStrongKeyParams(); }
+	}
+	public final PROC<DeleteStrongKeyParams,RECORD> DeleteStrongKey = mkPROC(
+							5,
+							DeleteStrongKeyParams::make,
+							RECORD::empty,
+							AuthenticationError,
+							CallError);
+	
+	
+	/*
+	 * CreateSimpleKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     name: Clearinghouse_Name, key: HashedPassword ]
+	 *  REPORTS[AuthenticationError, CallError] = 6;
+	 */
+	public static class CreateSimpleKeyParams extends RECORD {
+		public final Credentials credentials = mkMember(Credentials::make);
+		public final Verifier verifier = mkMember(Verifier::make);
+		public final Name name = mkMember(Name::make);
+		public final CARDINAL key = mkCARDINAL();
+		
+		private CreateSimpleKeyParams() {}
+		public static CreateSimpleKeyParams make() { return new CreateSimpleKeyParams(); }
+	}
+	public final PROC<CreateSimpleKeyParams,RECORD> CreateSimpleKey = mkPROC(
+							6,
+							CreateSimpleKeyParams::make,
+							RECORD::empty,
+							AuthenticationError,
+							CallError);
+	
+	
+	/*
+	 * ChangeSimpleKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     newKey: HashedPassword ]
+	 *  REPORTS[AuthenticationError, CallError] = 7;
+	 */
+	public static class ChangeSimpleKeyParams extends RECORD {
+		public final Credentials credentials = mkMember(Credentials::make);
+		public final Verifier verifier = mkMember(Verifier::make);
+		public final CARDINAL newKey = mkCARDINAL();
+		
+		private ChangeSimpleKeyParams() {}
+		public static ChangeSimpleKeyParams make() { return new ChangeSimpleKeyParams(); }
+	}
+	public final PROC<ChangeSimpleKeyParams,RECORD> ChangeSimpleKey = mkPROC(
+							7,
+							ChangeSimpleKeyParams::make,
+							RECORD::empty,
+							AuthenticationError,
+							CallError);
+	
+	
+	/*
+	 * DeleteSimpleKey: PROCEDURE [
+	 *     credentials: Credentials, verifier: Verifier,
+	 *     name: Clearinghouse_Name ]
+	 *  REPORTS[AuthenticationError, CallError] = 8;
+	 */
+	public static class DeleteSimpleKeyParams extends RECORD {
+		public final Credentials credentials = mkMember(Credentials::make);
+		public final Verifier verifier = mkMember(Verifier::make);
+		public final Name name = mkMember(Name::make);
+		
+		private DeleteSimpleKeyParams() {}
+		public static DeleteSimpleKeyParams make() { return new DeleteSimpleKeyParams(); }
+	}
+	public final PROC<DeleteSimpleKeyParams,RECORD> DeleteSimpleKey = mkPROC(
+							8,
+							DeleteSimpleKeyParams::make,
+							RECORD::empty,
+							AuthenticationError,
+							CallError);
+	
 	
 }

@@ -31,6 +31,7 @@ import dev.hawala.xns.level3.courier.WirePEXRequestResponse;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 import dev.hawala.xns.level4.common.AbstractBfsResponder;
+import dev.hawala.xns.level4.rip.RoutingInformer;
 
 /**
  * Implementation of the responder for the "Broadcast for Servers" (Bfs)
@@ -41,7 +42,17 @@ import dev.hawala.xns.level4.common.AbstractBfsResponder;
  */
 public class BfsClearinghouseResponder extends AbstractBfsResponder {
 	
-	private Clearinghouse3 bfsImpl = Clearinghouse3Impl.getBfsImplementationVersion3();
+	private final RoutingInformer routingInformer;
+	private final Clearinghouse3 bfsImpl = Clearinghouse3Impl.getBfsImplementationVersion3();
+	
+	public BfsClearinghouseResponder() {
+		this(null);
+	}
+	
+	public BfsClearinghouseResponder(RoutingInformer informer) {
+		super();
+		this.routingInformer = informer;
+	}
 
 	@Override
 	protected boolean isProgramNoOk(int programNo) {
@@ -59,9 +70,12 @@ public class BfsClearinghouseResponder extends AbstractBfsResponder {
 	}
 
 	@Override
-	protected void processRequest(int programNo, int versionNo, int procNo, int transaction, WirePEXRequestResponse wire) throws NoMoreWriteSpaceException, EndOfMessageException {
+	protected void processRequest(long fromMachineId, int programNo, int versionNo, int procNo, int transaction, WirePEXRequestResponse wire) throws NoMoreWriteSpaceException, EndOfMessageException {
 		if ((procNo == this.bfsImpl.RetrieveAddresses.getProcNumber())) {
 			this.bfsImpl.RetrieveAddresses.process(transaction, wire);
+			if (this.routingInformer != null) {
+				this.routingInformer.requestBroadcast(fromMachineId);
+			}
 		} else {
 			Log.C.printf("BfsChs", "processRequest() -> rejecting with CallError[useCourier]\n");
 			Clearinghouse3.CallErrorRecord err = new Clearinghouse3.CallErrorRecord(Clearinghouse3.CallProblem.useCourier);

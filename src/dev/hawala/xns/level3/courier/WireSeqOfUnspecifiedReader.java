@@ -44,6 +44,13 @@ public class WireSeqOfUnspecifiedReader implements iWireStream {
 		this.data = data;
 	}
 	
+	public WireSeqOfUnspecifiedReader(int[] data) {
+		this.data = new SEQUENCE<UNSPECIFIED>(UNSPECIFIED::make);
+		for (int i = 0; i < data.length; i++) {
+			this.data.add().set(data[i]);
+		}
+	}
+	
 	private int get() throws EndOfMessageException {
 		if (rdPos >= this.data.size()) {
 			throw new EndOfMessageException();

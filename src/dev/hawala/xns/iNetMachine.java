@@ -28,6 +28,7 @@ package dev.hawala.xns;
 
 import dev.hawala.xns.level0.Payload;
 import dev.hawala.xns.network.iIDPReceiver;
+import dev.hawala.xns.network.iIDPSender;
 
 /**
  * Network functionality provided by the local XNS machine.
@@ -47,6 +48,8 @@ public interface iNetMachine {
 	int clientBindToFreeSocket(iIDPReceiver listener);
 	
 	boolean stopListening(int sockNo);
+	
+	iIDPSender getIdpSender();
 
 	/**
 	 * Open a local listener socket waiting for incoming remote

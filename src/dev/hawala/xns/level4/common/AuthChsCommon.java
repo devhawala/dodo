@@ -38,6 +38,10 @@ import dev.hawala.xns.level3.courier.UNSPECIFIED;
 import dev.hawala.xns.level3.courier.UNSPECIFIED2;
 import dev.hawala.xns.level3.courier.UNSPECIFIED3;
 import dev.hawala.xns.level3.courier.WireSeqOfUnspecifiedReader;
+import dev.hawala.xns.level3.courier.WireWriter;
+import dev.hawala.xns.level3.courier.iWireData;
+import dev.hawala.xns.level3.courier.iWireDynamic;
+import dev.hawala.xns.level3.courier.iWireStream;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level4.common.Time2.Time;
 
@@ -102,6 +106,29 @@ public abstract class AuthChsCommon extends CrProgram {
 		
 		private ThreePartName() {}
 		public static ThreePartName make() { return new ThreePartName(); }
+		
+		public ThreePartName from(String objName, String domName, String orgName) {
+			this.organization.set(orgName);
+			this.domain.set(domName);
+			this.object.set(objName);
+			return this;
+		}
+		
+		public ThreePartName from(String fqn) {
+			String[] parts = fqn.split(":");
+			if (parts.length != 3) {
+				throw new IllegalArgumentException("Full qualified (distinguished) name does not contain 3 components");
+			}
+			return this.from(parts[0], parts[1], parts[2]);
+		}
+		
+		public ThreePartName from(ThreePartName name) {
+			return this.from(name.object.get(), name.domain.get(), name.organization.get());
+		}
+		
+		public String getLcFqn() {
+			return this.object.get().toLowerCase() + ":" + this.domain.get().toLowerCase() + ":" + this.organization.get().toLowerCase(); 
+		}
 	}
 	
 	/*
@@ -280,7 +307,7 @@ public abstract class AuthChsCommon extends CrProgram {
 	 * @param chsDatabase the clearinghouse database to check against
 	 * @param credentials the simple credentials (3-part username)
 	 * @param verifier the verifier (hashed password)
-	 * @return {@code false} if {@code credentials} is not 'simple, if the
+	 * @return {@code false} if {@code credentials} is not 'simple', if the
 	 * 		{@code verifier} is not a hashed password (i.e. length != 1)
 	 * 		or the hashed object-name part in {@code credentials} is not
 	 * 		the hash value in {@code verifier}, else {@code true}.
@@ -311,6 +338,105 @@ public abstract class AuthChsCommon extends CrProgram {
 				verifierHash, usernameHash);
 		
 		return (verifierHash == usernameHash);
+	}
+	
+	/**
+	 * Check that the strong credentials and the strong verifier are
+	 * both valid for the recipient on the given machine.
+	 * 
+	 * @param chsDatabase the clearinghouse database to check against
+	 * @param credentials the credentials to verify
+	 * @param verifier the verifier going with the credentials
+	 * @param recipient the recipient for which the the strong credentials are encoded
+	 * @param recipientMachineId the target machine for which the verifier is encoded
+	 * @return {@code false} if the credentials is not of strong type or the
+	 *   initiator encoded in the credentials is invalid or if the expiration time
+	 *   of the credentials are expired or the verifier timestamp is invalid;
+	 *   else {@code true} if the credentials passed the tests.
+	 * @throws EndOfMessageException if decoding the credentials or verifier after
+	 *    decryption fails
+	 * @throws IllegalArgumentException if the recipient is invalid or has no
+	 *    strong password for decryption
+	 * @throws Exception if any decryption fails
+	 */
+	public static boolean checkStrongCredentials(
+							ChsDatabase chsDatabase,
+							Credentials credentials,
+							Verifier verifier,
+							ThreePartName recipient,
+							long recipientMachineId) throws Exception {
+		// get the recipient decryption password
+		if (credentials.type.get() != CredentialsType.strong) {
+			return false;
+		}
+		byte[] recipientStrongPw = chsDatabase.getStrongPassword(recipient);
+		if (recipientStrongPw == null) {
+			throw new IllegalArgumentException("Invalid recipient (strong password not found)");
+		}
+		int[] recipientDecryptPw = StrongAuthUtils.toWords(recipientStrongPw);
+		
+		// decode the credentials with the recipient's strong password
+		StrongCredentials creds = StrongCredentials.make();
+		decryptFrom(recipientDecryptPw, credentials.value, creds);
+		
+		// decrypt the verifier
+		int[] conversationKey = new int[4];
+		conversationKey[0] = creds.conversationKey.get(0).get();
+		conversationKey[1] = creds.conversationKey.get(1).get();
+		conversationKey[2] = creds.conversationKey.get(2).get();
+		conversationKey[3] = creds.conversationKey.get(3).get();
+		StrongVerifier verfr = StrongVerifier.make();
+		decryptFrom(conversationKey, verifier, verfr);
+		long rcptMachineId32Bits = (recipientMachineId >> 16) & 0xFFFFFFFFL;
+		long verifierTimestamp = verfr.timeStamp.get() ^ rcptMachineId32Bits;
+		
+		// (temp) log the relevant data
+		Time now = Time.make().now();
+		System.out.printf(
+				"creds.initiator: %s:%s:%s\n",
+				creds.initiator.object.get(),
+				creds.initiator.domain.get(),
+				creds.initiator.organization.get());
+		System.out.printf(
+				"creds.expiration: %d (now: %d)\n",
+				creds.expirationTime.get(),
+				now.get());
+		System.out.printf(
+				"verifier.timeStamp: 0x%08X = %d -> xor-ed(machineId): 0x%08X = %s (now: 0x%08X =  %d)\n",
+				verfr.timeStamp.get(), verfr.timeStamp.get(),
+				verifierTimestamp, verifierTimestamp,
+				now.get(), now.get());
+		
+		// check the credentials / verifier
+		if (!chsDatabase.isValidName(creds.initiator)) {
+			System.out.println("** checkStrongCredentials() => ERR: creds.initiator is not a valid name");
+			return false;
+		}
+		if (now.get() > creds.expirationTime.get()) {
+			System.out.println("** checkStrongCredentials() => ERR: now > creds.expirationTime");
+			return false;
+		}
+		if (now.get() < verifierTimestamp) {
+			System.out.println("** checkStrongCredentials() => ERR: now < verifierTimestamp");
+			return false;
+		}
+		if (now.get() > (verifierTimestamp + 60)) {
+			System.out.println("** checkStrongCredentials() => ERR: now > verifierTimestamp+60secs");
+			return false;
+		}
+		
+		System.out.println("** checkStrongCredentials() => strong credentials OK");
+		return true;
+	}
+	
+	private static void decryptFrom(int[] strongPw, SEQUENCE<UNSPECIFIED> data, iWireData target) throws Exception {
+		int[] rawData = new int[data.size()];
+		for (int i = 0; i < rawData.length; i++) {
+			rawData[i] = data.get(i).get();
+		}
+		int[] decryptedData = StrongAuthUtils.xnsDesDecrypt(strongPw, rawData);
+		iWireStream dataStream = new WireSeqOfUnspecifiedReader(decryptedData);
+		target.deserialize(dataStream);
 	}
 
 }

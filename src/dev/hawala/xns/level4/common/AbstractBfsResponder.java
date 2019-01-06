@@ -46,6 +46,7 @@ public abstract class AbstractBfsResponder implements iPexResponder {
 	protected abstract boolean isProcNoOk(int procNo);
 	
 	protected abstract void processRequest(
+								long fromMachineId,
 								int programNo,
 								int versionNo,
 								int procNo,
@@ -54,7 +55,7 @@ public abstract class AbstractBfsResponder implements iPexResponder {
 							throws NoMoreWriteSpaceException, EndOfMessageException;
 
 	@Override
-	public void handlePacket(int clientType, byte[] payload, ResponseSender responseSender, ErrorSender errorSender) {
+	public void handlePacket(long fromMachineId, int clientType, byte[] payload, ResponseSender responseSender, ErrorSender errorSender) {
 		WirePEXRequestResponse wire = new WirePEXRequestResponse(payload);
 		int othersLow = -1;
 		int othersHigh = -1;
@@ -93,7 +94,7 @@ public abstract class AbstractBfsResponder implements iPexResponder {
 			wire.writeI16(othersHigh);
 			
 			// execute the procedure
-			this.processRequest(programNo, programVersion, procNo, transaction, wire);
+			this.processRequest(fromMachineId, programNo, programVersion, procNo, transaction, wire);
 			
 			// send back response
 			wire.sendAsResponse(responseSender);

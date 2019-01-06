@@ -200,6 +200,25 @@ public class StrongAuthUtils {
 		return bdata;
 	}
 	
+	/**
+	 * Get the 4 words for 8 bytes.
+	 * @param data 8 bytes to convert
+	 * @return 4 (16 bit) words for {@code data}
+	 */
+	public static int[] toWords(byte[] data) {
+		if (data == null || data.length != 8) {
+			throw new IllegalArgumentException("Argument 'data' must be 4 words (64 bits)");
+		}
+		int[] wData = new int[4];
+		int b = 0;
+		for (int i = 0; i < 4; i++) {
+			int hi = (data[b++] & 0xFF) << 8;
+			int lo = data[b++] & 0xFF;
+			wData[i] = hi | lo;
+		}
+		return wData;
+	}
+	
 	private static long seed = System.currentTimeMillis();
 	
 	/**
@@ -419,20 +438,6 @@ public class StrongAuthUtils {
 		if ((b & 0x02) != 0) { ones++; }
 		if ((b & 0x01) != 0) { ones++; }
 		return ones;
-	}
-	
-	private static int[] toWords(byte[] data) {
-		if (data == null || data.length != 8) {
-			throw new IllegalArgumentException("Argument 'data' must be 4 words (64 bits)");
-		}
-		int[] wData = new int[4];
-		int b = 0;
-		for (int i = 0; i < 4; i++) {
-			int hi = (data[b++] & 0xFF) << 8;
-			int lo = data[b++] & 0xFF;
-			wData[i] = hi | lo;
-		}
-		return wData;
 	}
 	
 }

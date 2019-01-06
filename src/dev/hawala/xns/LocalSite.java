@@ -54,6 +54,9 @@ import dev.hawala.xns.network.NetMachine;
  */
 public class LocalSite {
 	
+	// 60 bytes seems the minimum length accepted by Pilot (Ethernet requirement?)
+	private static final int MIN_PACKET_LEN = 60;
+	
 	private static final Object lock = new Object();
 	
 	// configuration with defaults
@@ -138,6 +141,14 @@ public class LocalSite {
 				// transfer the IDP packet into the ethernet payload area (starts at offset 14 bytes, plus 2 bytes for length)
 				NetPacket p = idp.packet;
 				int packetLength = p.rdBytes(0, p.getPayloadLength(), sendBuffer, 16, sendBuffer.length - 16);
+				
+				// add trailing bytes to pad the content up to minimal length 
+				if (packetLength < MIN_PACKET_LEN) {
+					for (int i = packetLength; i < MIN_PACKET_LEN; i++) {
+						sendBuffer[i + 16] = 0;
+					}
+					packetLength = MIN_PACKET_LEN;
+				}
 				
 				// set ethernet destination mac address
 				sendBuffer[2] = p.rdByte(10);
@@ -327,6 +338,8 @@ public class LocalSite {
 								// ensured here after the last content changes above)
 								if (enforceChecksums) {
 									idp.updateChecksum();
+								} else {
+									idp.resetChecksum();
 								}
 								
 								// transfer the packet to local if target is this site and to to hub
@@ -335,6 +348,9 @@ public class LocalSite {
 										&& (idp.getDstNetwork() == networkId || idp.getDstNetwork() == IDP.LOCAL_NETWORK)) {
 									Log.L0.printf(idp, "local2remotePipeline(hub) -> feeding back to local (into remote2localPipeline)\n");
 									remote2localPipeline.send(idp);
+									if (idp.getDstHost() == machineId) {
+										return; // no need to forward to others if explicitly directed to this machine
+									}
 								}
 								sendIdp(idp);
 							} catch (InterruptedException e) {
@@ -412,7 +428,8 @@ public class LocalSite {
 		remote2localPipeline.abort();
 	}
 	
-	public long getNetworkId() { return networkId; }
+	public static long getNetworkId() { return networkId; }
 	
 	public static long getMachineId() { return machineId; }
+	
 }

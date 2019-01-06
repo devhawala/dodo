@@ -53,7 +53,7 @@ public class WireWriter extends WireBaseStream {
 	 */
 	public int[] getWords() {
 		this.done = true;
-		int[] result = new int[(this.currPos + 1 / 2)];
+		int[] result = new int[(this.currPos + 1) / 2];
 		int b = 0;
 		for (int i = 0; i < result.length; i++) {
 			int hi = (this.bytes[b++] & 0xFF) << 8;

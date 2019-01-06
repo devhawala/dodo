@@ -52,13 +52,73 @@ import dev.hawala.xns.network.iSocketUnbinder;
  * <p>
  * This class implements both connections initiated here (by sending the first packet) and
  * connections initiated remotely (by handling the first packet sent by the other end).
- * After initating the connection, there is no difference regarding the work done
+ * After initiating the connection, there is no difference regarding the work done
  * in this class.
  * 
- * @author Dr. Hans-Walter Latz, Berlin (Germany), 2016-2018
+ * @author Dr. Hans-Walter Latz, Berlin (Germany), 2016-2019
  *
  */
 public class SppConnection {
+	
+	/*
+	 * items for automatic re-sending unacknowledged packets
+	 */
+	
+	private static final int AUTORESEND_CHECK_INTERVAL = 25; // ms
+	
+	private static List<SppConnection> activeConnections = null;
+	
+	private static synchronized List<SppConnection> getActiveConnections() {
+		return activeConnections;
+	}
+	
+	private static synchronized void addActiveConnection(SppConnection c) {
+		if (activeConnections.contains(c)) { return; }
+		List<SppConnection> conns = new ArrayList<>(activeConnections);
+		conns.add(c);
+		activeConnections = conns;
+	}
+	
+	private static synchronized void removeActiveConnection(SppConnection c) {
+		if (!activeConnections.contains(c)) { return; }
+		List<SppConnection> conns = new ArrayList<>(activeConnections);
+		conns.remove(c);
+		activeConnections = conns;
+	}
+	
+	private static void packetResender() {
+		boolean requestAcks = true;
+		try {
+			while(true) {
+				Thread.sleep(AUTORESEND_CHECK_INTERVAL);
+				List<SppConnection> currConns = getActiveConnections();
+				for (SppConnection conn : currConns) {
+					if (requestAcks) {
+						conn.checkForRequestAcknowledgment();
+					} else {
+						conn.checkForResendUnacknowledgedPackets("packetResender");
+					}
+				}
+				requestAcks = !requestAcks;
+			}
+		} catch (InterruptedException e) {
+			// end auto resending
+		}
+	}
+	
+	private static synchronized void runPacketResender() {
+		if (activeConnections != null) { return; }
+		activeConnections = new ArrayList<>();
+		
+		Thread thr = new Thread(SppConnection::packetResender);
+		thr.setDaemon(true);
+		thr.setName("SPP packet resend watcher");
+		thr.start();
+	}
+	
+	/*
+	 * SPP connection id management
+	 */
 	
 	public static final int DEFAULT_WINDOWLENGTH = 8;
 
@@ -69,6 +129,10 @@ public class SppConnection {
 		lastConnectionId = connectionId;
 		return connectionId;
 	}
+	
+	/*
+	 * SPP constants
+	 */
 	
 	private final static int FIRST_SEQNO = 0;
 	
@@ -94,6 +158,10 @@ public class SppConnection {
 	public static final int SST_CLOSE_REQUEST = 254;
 	public static final int SST_CLOSE_CONFIRM = 255;
 	
+	/*
+	 * connection specific SPP items
+	 */
+	
 	private final EndpointAddress myEndpoint;
 	private EndpointAddress othersEndpoint;
 	
@@ -113,7 +181,15 @@ public class SppConnection {
 	
 	private final List<Byte> pendingAttentions = new ArrayList<>();
 	
-	// connection initated here
+	// resend unacknowledged packets management
+	private static final long RESEND_INTERVAL = 5; // ms
+	private long noResendBefore = System.currentTimeMillis();
+	
+	// transmission throttling for *this* connection
+	private static long sendingTimeGap = 3;               // ms to wait for next packet
+	private long nextSendTS = System.currentTimeMillis(); // timestamp when next spp packet "may" be transmitted
+	
+	// connection initiated here
 	public SppConnection(
 			EndpointAddress myEndpoint,
 			EndpointAddress othersEndpoint,
@@ -134,11 +210,14 @@ public class SppConnection {
 		
 		this.inMaxAllowedSeqNo = windowLength + FIRST_SEQNO - 1;
 		
+		runPacketResender();
+		addActiveConnection(this);
+		
 		// send connection start packet
 		synchronized(this) {
 			SPP startPacket = this.fillSppConnectionData(new SPP()).asSystemPacket();
 			this.state = State.CONNECTING;
-			this.idpSender.send(startPacket.idp);
+			this.transmitPacket(startPacket.idp);
 		}
 	}
 	
@@ -177,14 +256,17 @@ public class SppConnection {
 		
 		if (this.outNextExpectedSeqNo > this.outMaxAllowedSeqNo) {
 			// no room in the send window for a first packet => error on client side
-			this.idpSender.send(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, connectingPacket.idp).idp);
+			this.transmitPacket(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, connectingPacket.idp).idp);
 			throw new IllegalArgumentException("No room in client receive window at startup: acknowledgeNo > allocationNo");
 		}
 		
+		runPacketResender();
+		addActiveConnection(this);
+		
 		// send connection accepted packet
 		synchronized(this) {
-			SPP startPacket = this.fillSppConnectionData(new SPP()).asSystemPacket();
-			this.idpSender.send(startPacket.idp);
+			SPP startPacket = this.fillSppConnectionData(new SPP()).asSystemPacket().asSendAcknowledge();
+			this.transmitPacket(startPacket.idp);
 		}
 	}
 	
@@ -233,7 +315,8 @@ public class SppConnection {
 				return; // well that's clear!
 			}
 			
-			this.lastOthersActivity = System.currentTimeMillis();
+			long now = System.currentTimeMillis();
+			this.lastOthersActivity = now;
 			
 			try {
 				int sst = spp.getDatastreamType() & 0xFF;
@@ -242,7 +325,7 @@ public class SppConnection {
 				if (this.state != State.CONNECTING) {
 					if (this.myConnectionId != spp.getDstConnectionId() || this.othersConnectionId != spp.getSrcConnectionId()) {
 						// invalid packet for this local socket...?
-						this.idpSender.send(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
+						this.transmitPacket(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
 						return;
 					}
 				}
@@ -252,10 +335,11 @@ public class SppConnection {
 					if (sst == SST_CLOSE_CONFIRM) {
 						Log.L3.printf(this.intro, "** handleIngonePacket(): received close-ack, connection now closed\n");
 						this.state = State.CLOSED;
+						removeActiveConnection(this);
 						if (!this.otherRequestedClose) {
 							SPP closeAck = this.fillSppConnectionData(new SPP());
 							closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-//							this.idpSender.send(closeAck.idp);
+//							this.transmitPacket(closeAck.idp);
 							this.sendSequencedOOB(closeAck);
 							Log.L3.printf(this.intro, "** handleIngonePacket(): sent final close-ack (as close-initiator)\n");
 						}
@@ -268,7 +352,7 @@ public class SppConnection {
 						// we send our confirmation and wait for others confirmation 
 						SPP closeAck = this.fillSppConnectionData(new SPP());
 						closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-//						this.idpSender.send(closeAck.idp);
+//						this.transmitPacket(closeAck.idp);
 						this.sendSequencedOOB(closeAck);
 						this.otherRequestedClose = true;
 						Log.L3.printf(this.intro, "** handleIngonePacket(): received close-request while waiting for close-ack, sent close-ack\n");
@@ -280,7 +364,7 @@ public class SppConnection {
 						SPP ack = this.fillSppConnectionData(new SPP())
 								.asSystemPacket()
 								.setAcknowledgeNumber(spp.getSequenceNumber() + 1); // we allow us to lie to the other end, as the connection is going down 
-						this.idpSender.send(ack.idp);
+						this.transmitPacket(ack.idp);
 					}
 					return;
 				}
@@ -289,8 +373,9 @@ public class SppConnection {
 				if (this.state == State.CONNECTING && !spp.isSystemPacket()) {
 					if (sst == SST_CLOSE_REQUEST || sst == SST_CLOSE_CONFIRM) {
 						this.state = State.CLOSED;
+						removeActiveConnection(this);
 					}
-					this.idpSender.send(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
+					this.transmitPacket(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
 					return;
 				}
 				
@@ -308,7 +393,7 @@ public class SppConnection {
 					if (!this.myEndpoint.equals(idp.getDstEndpoint())
 						|| this.myConnectionId != spp.getDstConnectionId()) {
 						Log.L3.printf(idp, "!!! SppConnection.handleIngonePacket(...): protocol violation for packet: %s\n", idp.toString());
-						this.idpSender.send(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
+						this.transmitPacket(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
 						return;
 					}
 					this.othersEndpoint = spp.idp.getSrcEndpoint();
@@ -329,13 +414,13 @@ public class SppConnection {
 //				if (sst == SST_CLOSE_REQUEST) {
 //					if (spp.isSendAcknowledge()) { // BSD-4.3 sends SST=0xFE with a SendAck flag... 
 //						SPP ack = this.fillSppConnectionData(new SPP()).asSystemPacket();
-//						this.idpSender.send(ack.idp);
+//						this.transmitPacket(ack.idp);
 //					}
 //					this.state = State.CLOSING;
 //					this.otherRequestedClose = true;
 //					SPP closeAck = this.fillSppConnectionData(new SPP());
 //					closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-//					this.idpSender.send(closeAck.idp);
+//					this.transmitPacket(closeAck.idp);
 //					Log.L3.printf(this.intro, "** closeConnection(): received close-request, sent close-ack\n");
 //					return; // as we are closing, anything ingoing is ignored from now
 //				}
@@ -350,6 +435,9 @@ public class SppConnection {
 //					return;
 				}
 				if (spp.isSystemPacket()) {
+					// check if the other side may have lost some packet, and if so resend starting with next seqNo expected by the other side...
+					this.checkForResendUnacknowledgedPackets("other's systemPacket");
+					
 					return; // system packets are not part of the sequence!
 				}
 				
@@ -369,7 +457,7 @@ public class SppConnection {
 					} else {
 						Log.L3.printf(idp, " SppConnection.handleIngonePacket(): seqNo > this.inMaxAllowedSeqNo for packet: %s\n", idp.toString());
 						Log.X.printf(idp, "%% ERROR: SppConnection.handleIngonePacket(): seqNo(%d) > this.inMaxAllowedSeqNo(%d) for packet: %s\n", seqNo, this.inMaxAllowedSeqNo, spp.toString());
-						this.idpSender.send(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
+						this.transmitPacket(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
 						return;
 					}
 				}
@@ -402,7 +490,7 @@ public class SppConnection {
 			} finally {
 				if (doSendAcknowledge) {
 					SPP ack = this.fillSppConnectionData(new SPP()).asSystemPacket();
-					this.idpSender.send(ack.idp);
+					this.transmitPacket(ack.idp);
 				}
 				if (doNotify) { this.notifyAll(); }
 			}
@@ -459,7 +547,7 @@ public class SppConnection {
 				// inform the other about new space if necessary
 				if (sendWindowUpdate) {
 					SPP ack = this.fillSppConnectionData(new SPP()).asSystemPacket();
-					this.idpSender.send(ack.idp);
+					this.transmitPacket(ack.idp);
 				}
 				
 				// handle closing the connection
@@ -550,7 +638,7 @@ public class SppConnection {
 		oob.setSequenceNumber(this.myNextSeqNo++);
 		this.sentAttentions.add(oob);
 		this.cleanupOutgoingQueue();
-		this.idpSender.send(oob.idp);
+		this.transmitPacket(oob.idp);
 	}
 	
 	public void sendAttention(byte attnByte) {
@@ -612,15 +700,14 @@ public class SppConnection {
 							}
 							if (reSpp.getSequenceNumber() >= this.outNextExpectedSeqNo) {
 								this.fillSppConnectionData(reSpp); // refresh the in-window info from our side
-								this.idpSender.send(reSpp.idp);
+								this.transmitPacket(reSpp.idp);
 //								Log.L3.printf("SppConnection - resent packet/data - seqNo = %d\n", reSpp.getSequenceNumber());
 							}
 						}
 //						Log.L3.println("** done resending data packets");
 					} else {
 						// no update => request (again) current window state..
-						SPP sendAck = this.fillSppConnectionData(new SPP()).asSystemPacket().asSendAcknowledge();
-						this.idpSender.send(sendAck.idp);
+						this.requestAcknowledge();
 //						Log.L3.printf("SppConnection - sent packet/system+sendAck - retries = %d\n", retries+1);
 					}
 					// TODO: decide when a connection is dead and disallow any other activity with it...
@@ -641,7 +728,7 @@ public class SppConnection {
 //				if (lastUpdate == this.lastOthersActivity && retries < 3) {
 //					// no update => request current window state..
 //					SPP sendAck = this.fillSppConnectionData(new SPP()).asSystemPacket().asSendAcknowledge();
-//					this.idpSender.send(sendAck.idp);
+//					this.transmitPacket(sendAck.idp);
 //					retries++;
 //					Log.L3.printf("SppConnection - sent packet/system+sendAck - retries = %d\n", retries);
 //				} else if (retries < 3) {
@@ -651,7 +738,7 @@ public class SppConnection {
 //						if (reSpp == null) { break; }
 //						if (reSpp.getSequenceNumber() >= this.outNextExpectedSeqNo) {
 //							this.fillSppConnectionData(reSpp); // refresh the in-window info from our side
-//							this.idpSender.send(reSpp.idp);
+//							this.transmitPacket(reSpp.idp);
 //							Log.L3.printf("SppConnection - resent packet/data - seqNo = %d\n", reSpp.getSequenceNumber());
 //						}
 //					}
@@ -673,8 +760,9 @@ public class SppConnection {
 			if (isEndOfMessage) { spp.asEndOfMessage(); }
 			spp.setSequenceNumber(seqNo);
 			this.outgoingPackets[this.outCount++] = spp;
-			this.fillSppConnectionData(spp);
-			this.idpSender.send(spp.idp);
+			this.fillSppConnectionData(spp).asSendAcknowledge();
+			this.transmitPacket(spp.idp);
+			this.noResendBefore = System.currentTimeMillis() + RESEND_INTERVAL;
 			Log.L3.printf(this.intro, "enqueueOutgoingPacket(): ---------------- sent data packet - seqNo = %d\n", spp.getSequenceNumber());
 			String s = "enqueueOutgoingPacket(): outQueue = [ ";
 			for (int i = 0; i < this.outgoingPackets.length; i++) {
@@ -700,10 +788,11 @@ public class SppConnection {
 					return;
 				}
 				try {
-					this.wait();
+					this.wait(500);
 				} catch (InterruptedException e) {
 					return;
 				}
+				this.requestAcknowledge();
 			}
 		}
 	}
@@ -770,8 +859,26 @@ public class SppConnection {
 	 */
 	
 	public void handleErrorPacket(Error err) {
-		System.err.printf("SppConnection -> got error packet, offending packet: ", err.getOffendingIdpPaket().toString());
-		// TODO: implement some meaningful error handling regarding this SPP connection
+		System.err.printf(
+				"SppConnection -> got error packet, errorCode = %s , offending packet:\n%s\n",
+				err.getErrorCode(),
+				err.getOffendingIdpPaket().toString());
+		
+		// ?? any more differenciated & meaningful error handling regarding this SPP connection ??
+		// let's abandon this connection
+		synchronized(this) {
+			this.state = State.CLOSED;
+			
+			removeActiveConnection(this);
+			this.socketUnbinder.unbind();
+			
+			this.outCount = 0;
+			for (int i = 0; i < this.outgoingPackets.length; i++) { this.outgoingPackets[i] = null; }
+			this.sentAttentions.clear();
+			
+			for (int i = 0; i < this.ingonePackets.length; i++) { this.ingonePackets[i] = null; }
+			this.spillOver.clear();
+		}
 	}
 	
 	/*
@@ -789,4 +896,46 @@ public class SppConnection {
 			.withSource(this.myEndpoint);
 		return sppPacket;
 	}
+	
+	private void transmitPacket(IDP idp) {
+		long now = System.currentTimeMillis();
+		if (now < this.nextSendTS) {
+			try { Thread.sleep(this.nextSendTS - now); } catch (InterruptedException e) { }
+			now = System.currentTimeMillis();
+		}
+		this.idpSender.send(idp);
+		this.nextSendTS = now + sendingTimeGap;
+	}
+	
+	public void requestAcknowledge() {
+		SPP ackReq = this.fillSppConnectionData(new SPP()).asSystemPacket().asSendAcknowledge();
+		this.transmitPacket(ackReq.idp);
+	}
+	
+	private void checkForResendUnacknowledgedPackets(String actor) {
+		long now = System.currentTimeMillis();
+		int othersAckNo = this.outNextExpectedSeqNo;
+		if (othersAckNo < this.myNextSeqNo && this.noResendBefore <= now) {
+			System.out.printf("!!!!!!!!!!! begin resending un-acknowledged packets starting with seqNo %d (actor: %s)\n", othersAckNo, actor);
+			for (int i = 0; i < this.outgoingPackets.length; i++) {
+				SPP resendSpp = this.outgoingPackets[i];
+				if (resendSpp == null || resendSpp.getSequenceNumber() < othersAckNo) { continue; }
+				this.fillSppConnectionData(resendSpp);
+				this.transmitPacket(resendSpp.idp);
+				System.out.printf("!!!!!! resent packet with seqNo %d\n", resendSpp.getSequenceNumber());
+			}
+			System.out.printf("!!!!!!!!!!! done resending un-acknowledged packets starting with seqNo %d\n", othersAckNo);
+			
+			this.noResendBefore = now + RESEND_INTERVAL;
+		}
+	}
+	
+	private void checkForRequestAcknowledgment() {
+		long now = System.currentTimeMillis();
+		int othersAckNo = this.outNextExpectedSeqNo;
+		if (othersAckNo < this.myNextSeqNo && this.noResendBefore <= now) {
+			this.requestAcknowledge();
+		}
+	}
+	
 }
