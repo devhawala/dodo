@@ -26,6 +26,9 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.xns.level4.auth;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import dev.hawala.xns.Log;
 import dev.hawala.xns.level3.courier.CourierRegistry;
 import dev.hawala.xns.level3.courier.RECORD;
@@ -65,16 +68,47 @@ public class Authentication2Impl {
 	private static long networkId = 0x0001_0120;
 	private static long machineId = 0x0000_1000_FF12_3401L;
 	
+	// the list of hosts to respond in Bfs calls
+	private static final List<NetworkAddress> bfsHosts = new ArrayList<>();
+	
 	/**
-	 * Set values to use for responses
+	 * Set values to use for responses, BfS requests will use the single host
+	 * {@code network}/{@code machine} as response.
 	 * 
-	 * @param network networkId for 'retrieveAddresses'
-	 * @param machine hostId for 'retrieveAddresses'
+	 * @param network networkId for the local network, also used for for 'retrieveAddresses'
+	 * @param machine hostId of the local machine, also used for for 'retrieveAddresses'
+	 * @param chsDb clearinghouse database to use for courier requests
 	 */
 	public static void init(long network, long machine, ChsDatabase chsDb) {
+		init(network, machine, chsDb, null);
+	}
+	
+	/**
+	 * Set values to use for responses.
+	 * 
+	 * @param network networkId for the local network
+	 * @param machine hostId of the local machine
+	 * @param chsDb clearinghouse database to use for courier requests
+	 * @param hostIds explicit list of network addresses to respond BfS requests with
+	 * 		(if the local machine is to be part of the BfS responses, the host
+	 * 		{@code network}/{@code machine} must be explicitely added to {@code hostIds})
+	 */
+	public static void init(long network, long machine, ChsDatabase chsDb, List<NetworkAddress> hostIds) {
 		networkId = network;
 		machineId = machine;
 		chsDatabase = chsDb;
+		
+		bfsHosts.clear();
+		if (hostIds == null || hostIds.isEmpty()) {
+			// add the only known server to the address list: ourself
+			NetworkAddress addr = NetworkAddress.make();
+			addr.network.set((int)networkId);
+			addr.host.set(machineId);
+			addr.socket.set(0);
+			bfsHosts.add(addr);
+		} else {
+			bfsHosts.addAll(hostIds);
+		}
 	}
 	
 	/*
@@ -138,11 +172,12 @@ public class Authentication2Impl {
 	private static void retrieveAddresses(
 							RECORD params,
 							AuthChsCommon.RetrieveAddressesResult results) {
-		// add the only known server to the address list
-		NetworkAddress addr = results.address.add();
-		addr.network.set((int)(networkId & 0xFFFFFFFFL));
-		addr.host.set(machineId);
-		addr.socket.set(0);
+		int count = 0;
+		for (NetworkAddress a : bfsHosts) {
+			results.address.add(a);
+			count++;
+			if (count >= 40) { return; }
+		}
 	}
 	
 	/*

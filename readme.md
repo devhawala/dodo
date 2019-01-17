@@ -118,6 +118,8 @@ content to `stdout`; in addition to the raw packet content, it issues the recogn
 packet type specific structural data at the different layers (ethernet, IDP, PEX,
 SPP etc. headers, type specific payload). 
 
+Additional unsupported examples programs show the usage of the Dodo XNS-API for client
+and server applications, see [example-programs](./example-programs.md).
 
 ### Invocation and usage
 
@@ -375,6 +377,9 @@ still missing, like Mail protocols)
     - [Services_8.0_Programmers_Guide_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Programmers_Guide_Nov84.pdf)
 
 ### Development history
+
+- 2019-01-17    
+added 2 example programs demonstrating the usage of the XNS-API (see [example-programs](./example-programs.md))
 
 - 2019-01-06    
 routing information protocol: extended to broadcast routing data on a regular as well as
