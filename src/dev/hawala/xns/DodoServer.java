@@ -37,6 +37,7 @@ import dev.hawala.xns.level4.chs.Clearinghouse3Impl;
 import dev.hawala.xns.level4.common.ChsDatabase;
 import dev.hawala.xns.level4.common.Time2;
 import dev.hawala.xns.level4.echo.EchoResponder;
+import dev.hawala.xns.level4.printing.Printing3Impl;
 import dev.hawala.xns.level4.rip.RipResponder;
 import dev.hawala.xns.level4.time.TimeServiceResponder;
 
@@ -79,6 +80,12 @@ public class DodoServer {
 	private static boolean strongKeysAsSpecified = true;
 	private static String chsDatabaseRoot = null;
 	
+	// startPrintService = printServiceName != null && printServiceOutputDirectory != null 
+	private static String printServiceName = null;
+	private static String printServiceOutputDirectory = null;
+	private static String printServicePaperSizes = null;
+	private static boolean printServiceDisassembleIp = false;
+	
 
 	private static boolean initializeConfiguration(String filename) {
 		// load the properties file
@@ -110,6 +117,11 @@ public class DodoServer {
 		organizationName = props.getString("organizationName", organizationName);
 		domainName = props.getString("domainName", domainName);
 		chsDatabaseRoot = props.getString("chsDatabaseRoot", chsDatabaseRoot);
+		
+		printServiceName = props.getString("printService.name", printServiceName);
+		printServiceOutputDirectory = props.getString("printService.outputDirectory", printServiceOutputDirectory);
+		printServicePaperSizes = props.getString("printService.paperSizes", printServicePaperSizes);
+		printServiceDisassembleIp = props.getBoolean("printService.disassembleIp", printServiceDisassembleIp);
 		
 		// do verifications
 		boolean outcome = true;
@@ -230,6 +242,15 @@ public class DodoServer {
 			// register clearinghouse and authentication courier programs in registry
 			Clearinghouse3Impl.register();
 			Authentication2Impl.register();
+		}
+		
+		if (printServiceName != null && printServiceOutputDirectory != null) {
+			try {
+				Printing3Impl.init(printServiceName, printServiceOutputDirectory, printServiceDisassembleIp, printServicePaperSizes);
+				Printing3Impl.register();
+			} catch(Exception e) {
+				System.out.printf("Error starting printservice '%s': %s\n", printServiceName, e.getMessage());
+			}
 		}
 		
 		// run courier server with dispatcher

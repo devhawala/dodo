@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2018, Dr. Hans-Walter Latz
+Copyright (c) 2019, Dr. Hans-Walter Latz
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,7 @@ import dev.hawala.xns.level4.common.Time2;
  * <li>Broadcast for Services (BfS) protocol for Clearinghouse and Authentication servers</li>
  * </ul>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
+ * @author Dr. Hans-Walter Latz / Berlin 2019
  */
 public class XnsResponder {
 	

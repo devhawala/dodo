@@ -163,6 +163,15 @@ public class BulkData1 extends CrProgram {
 	
 	public static class Source extends Descriptor {
 		
+		/**
+		 * Receive and deserialize a Courier object by bulk data transfer.
+		 * 
+		 * @param target the Courier object to deserialize
+		 * @return {@code true} if deserializing attempted to read more data
+		 * 		than the bulk data transfer provided (the target object was
+		 * 		however deserialized)
+		 * @throws EndOfMessageException
+		 */
 		public boolean receive(iWireData target) throws EndOfMessageException {
 			boolean prematureEnd = false;
 			this.checkTransferMode();
@@ -185,6 +194,73 @@ public class BulkData1 extends CrProgram {
 			}
 			
 			return prematureEnd;
+		}
+		
+		/**
+		 * Callback method for receiving raw data through bulk data transfer. 
+		 */
+		@FunctionalInterface
+		public interface RawReceiver {
+			/**
+			 * Handle one buffer filled from bulk transfer.
+			 * @param buffer the buffer that was filled
+			 * @param count the number of bytes transferred into the buffer
+			 * @param isLast {@code true} if this is the last received buffer
+			 */
+			public void receive(byte[] buffer, int count, boolean isLast) throws Exception;
+		}
+		
+		/**
+		 * Directly read the bulk data stream.
+		 * <p>(not the fastest way to transfer data with BDT!)</p>
+		 * 
+		 * @param buffer the buffer to use for transfer
+		 * @param receiver the callback to use for each buffer received
+		 */
+		public void transferRaw(byte[] buffer, RawReceiver receiver) {
+			this.checkTransferMode();
+
+			int transferred = 0;
+			try {
+				if (this.wireStream.getStreamType() != Constants.SPPSST_BDT) {
+					this.wireStream.dropToEOM(Constants.SPPSST_BDT);
+				}
+				
+				int bufLen = (buffer != null) ? buffer.length : 0; 
+				if (bufLen > 0 && receiver != null) {
+					while(true) {
+						buffer[transferred++] = (byte)this.wireStream.readI8();
+						if (transferred >= bufLen) {
+							receiver.receive(buffer, transferred, false);
+							transferred = 0;
+						}
+					}
+				} else if (receiver != null) {
+					this.wireStream.dropToEOM(Constants.SPPSST_END);
+					receiver.receive(buffer, 0, true);
+ 				} else {
+					this.wireStream.dropToEOM(Constants.SPPSST_END);
+				}
+				
+			} catch (EndOfMessageException e) {
+				// inform about the last block
+				if (receiver != null) {
+					try {
+						receiver.receive(buffer, transferred, true);
+					} catch (Exception e1) {
+						// ignored!
+					}
+				}
+			} catch(Exception e) {
+				if (!this.wireStream.isAtEnd()) {
+					try {
+						this.wireStream.dropToEOM(Constants.SPPSST_END);
+					} catch (EndOfMessageException e1) {
+						// ignored
+						// TODO: is ignoring a good idea?
+					}
+				}
+			}
 		}
 		
 		private Source() { }

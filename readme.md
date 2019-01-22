@@ -5,8 +5,12 @@ currently much more work in progress than useful to provide services to existing
 (or real) Xerox client environments like XDE or GlobalView. The work is focused up to now
 on building up the necessary infrastructure to provide XNS services (see section
 **Functionality**).    
-Currently the following XNS services are provided by Dodo: Time, Routing Information,
-Clearinghouse and Authentication.
+Currently the following XNS services are provided by Dodo:
+- Time
+- Routing Information
+- Clearinghouse
+- Authentication
+- Printing (minimal)
 
 In fact, it is not a single Java program, but a set of programs creating a
 simple virtual network infrastructure, a kind of XNS-over-TCP/IP. This virtual
@@ -14,7 +18,7 @@ network allows different programs to inter-connect, among them the Dodo server p
 a gateway to a (real) network device and of course the Xerox client machines wanting
 to access the server component (see section **Topology**).
 
-As for the maybe exotic name: although Dodo is not based on the Mesa-architecgure but
+As for the maybe exotic name: although Dodo is not based on the Mesa-architecture but
 an almost pure Java implementation, the name had to start with the letter *D* to be in
 line with the Xerox tradition; on the other hand, it seemed appropriate to be something
 that no longer exists or is not noticeably present in the world; so the extinct species
@@ -79,6 +83,15 @@ information
 	all protocol procedures are implemented for a *read-only* clearinghouse
 	database, allowing to log in to XDE and GVWin; however changes to the
 	database are rejected
+	- Printing
+	(Courier program 4, version 3)    
+	all protocol procedures are implemented, allowing to print from XDE and GVWin,
+	to query a print job status, the printer properties and the printer status.    
+	However interpress files are only received and collected in the output directory,
+	but no real printing occurs (the best that can be done is producing a readable
+	version of the binary IP file).    
+	In summary the print service gives XDE and GVWin the illusion of having
+	printed.
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -265,11 +278,40 @@ if `true` encode each 4 char-block with the password to produce the next passwor
 else (if `false`) swap the encryption parameters, i.e. use each 4 char-block to
 encrypt the password of the last iteration to produce the new password (this
 contradicts the specification, but creates the data in the example...)    
-_optional_, _default_: `true`
-
-If `startChsAndAuthServices` is `true`, then specifying the optional command
+_optional_, _default_: `true`    
+Remark: If `startChsAndAuthServices` is `true`, then specifying the optional command
 line parameter `-dumpchs` will dump the content of the Clearinghouse database loaded
 from the configuration files.
+
+- `printService.name`    
+the full qualified clearinghouse name of the print service that this Dodo
+machine should provide. A Dodo machine can only provice at most one
+print service.    
+If this and the `printService.outputDirectory` parameter are given, the
+print service is started. The `machineId` of this Dodo machine must then match
+the `machineId` field of the chs definition file for the print service  (and
+similar for `networkNo`).    
+_optional_ (no default)
+
+- `printService.outputDirectory`    
+the directory where the print service will save the ip master files delivered
+by the printing client. The interpress master files are saved with extension `.ip`
+and named with the request id.    
+_optional_ (no default)
+
+- `printService.paperSizes`    
+the comma-separated list of known paper sizes (defined by the Printing courier program) that
+this printing service should report in "get printer properties" request, valid paper values
+are (others are ignored): usLetter, usLegal, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10,
+isoB0, isoB1, isoB2, isoB3, isoB4, isoB5, isoB6, isoB7, isoB8, isoB9, isoB10, jisB0, jisB1,
+jisB2, jisB3, jisB4, jisB5, jisB6, jisB7, jisB8, jisB9, jisB10    
+_optional_, _default_: `a4, usLetter, usLegal`
+
+- `printService.disassembleIp`    
+this boolean parameter controls if the print service will produce a human readable version
+in `printService.outputDirectory` with the extension `.interpress`    
+_optional_, _default_: `false`
+ 
 
 #### NetHubGateway
 
@@ -377,6 +419,9 @@ still missing, like Mail protocols)
     - [Services_8.0_Programmers_Guide_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Programmers_Guide_Nov84.pdf)
 
 ### Development history
+
+- 2019-01-22    
+added minimal xns print service
 
 - 2019-01-17    
 added 2 example programs demonstrating the usage of the XNS-API (see [example-programs](./example-programs.md))
