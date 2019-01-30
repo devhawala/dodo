@@ -1,5 +1,51 @@
 ## Clearinghouse configuration
 
+The following properties define the characteristics of a combined Clearinghouse
+and Authentication service in the Dodo configuration file:
+
+- `startChsAndAuthServices`    
+do start Dodo's Clearinghouse service and Authentication service? (both can only
+be started (or not) together, as they serve the same domain jointly)    
+_optional_, _default_: `true`
+
+- `organization`    
+the name of the organization to be handled (served) by the clearinghouse and
+authentication services    
+_optional_, _default_: `hawala`
+
+- `domain`    
+the name of the domain to be handled (served) by the clearinghouse and
+authentication services    
+_optional_, _default_: `dev`
+
+- `chsDatabaseRoot`    
+the name of the directory where the property files defining the objects known
+in the clearinghouse database for `domain:organization` are located;
+the format of the property files for the different object types is defined
+in the next section **_Clearinghouse database_** in this document;    
+if no value is specified (or it is invalid), then no users or services are
+defined, but all user names are accepted, with the password being the user name
+(case-insensitive) given for login    
+_optional_ (no default)
+
+- `strongKeysAsSpecified`    
+how to handle the contradiction in the specification _Authentication Protocol_
+(XSIS 098404, April 1984), where the data used in the example does not match the
+specification for the strong key generation (section 5.3):    
+if `true` encode each 4 char-block with the password to produce the next password
+(as specified, but this does match <i>not</i> the data in the example),    
+else (if `false`) swap the encryption parameters, i.e. use each 4 char-block to
+encrypt the password of the last iteration to produce the new password (this
+contradicts the specification, but creates the data in the example...)    
+_optional_, _default_: `true`
+
+Remark: If `startChsAndAuthServices` is `true`, then specifying the optional command
+line parameter `-dumpchs` will dump the content of the Clearinghouse database loaded
+from the configuration files.
+
+
+## Clearinghouse database
+
 Dodo provides a simple read-only database used for resolving distinguished names
 in the Clearinghouse service and handling passwords in the Authentication service.
 

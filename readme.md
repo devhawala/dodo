@@ -10,7 +10,7 @@ Currently the following XNS services are provided by Dodo:
 - Routing Information
 - Clearinghouse
 - Authentication
-- Printing (minimal)
+- Printing (usable)
 
 In fact, it is not a single Java program, but a set of programs creating a
 simple virtual network infrastructure, a kind of XNS-over-TCP/IP. This virtual
@@ -87,11 +87,12 @@ information
 	(Courier program 4, version 3)    
 	all protocol procedures are implemented, allowing to print from XDE and GVWin,
 	to query a print job status, the printer properties and the printer status.    
-	However interpress files are only received and collected in the output directory,
-	but no real printing occurs (the best that can be done is producing a readable
-	version of the binary IP file).    
-	In summary the print service gives XDE and GVWin the illusion of having
-	printed.
+	The interpress files are received and collected in the output directory,
+	a PostScript file can optionally be generated for the interpress master.
+	and possibly post-processed.    
+	The PostScript generation provides a basic support for western-european
+	character sets as well as simple graphics (vector and uncompressed bitmaps),
+	giving usable but far from perfect results.
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -250,67 +251,22 @@ in the time service
 _optional_, _default_: `0` (i.e. no date change)
 
 - `organization`    
-the name of the organization to be handled (served) by the clearinghouse and
-authentication services    
-_optional_, _default_: `hawala`
-
-- `domain`    
-the name of the domain to be handled (served) by the clearinghouse and
-authentication services    
-_optional_, _default_: `dev`
-
-- `chsDatabaseRoot`    
-the name of the directory where the property files defining the objects known
-in the clearinghouse database for `domain:organization` are located;
-the format of the property files for the different object types is defined
-in [clearinghouse configuration](./chs-config-files.md);    
-if no value is specified (or it is invalid), then no users or services are
-defined, but all user names are accepted, with the password being the user name
-(case-insensitive) given for login    
-_optional_ (no default)
-
-- `strongKeysAsSpecified`    
-how to handle the contradiction in the specification _Authentication Protocol_
-(XSIS 098404, April 1984), where the data used in the example does not match the
-specification for the strong key generation (section 5.3):    
-if `true` encode each 4 char-block with the password to produce the next password
-(as specified, but this does match <i>not</i> the data in the example),    
-else (if `false`) swap the encryption parameters, i.e. use each 4 char-block to
-encrypt the password of the last iteration to produce the new password (this
-contradicts the specification, but creates the data in the example...)    
-_optional_, _default_: `true`    
-Remark: If `startChsAndAuthServices` is `true`, then specifying the optional command
-line parameter `-dumpchs` will dump the content of the Clearinghouse database loaded
-from the configuration files.
+`domain`    
+`chsDatabaseRoot`    
+`strongKeysAsSpecified`    
+these 4 properties define the Clearinghouse service provided by this
+Dodo instance;    
+see [Clearinghouse configuration](./chs-config-files.md) for details
 
 - `printService.name`    
-the full qualified clearinghouse name of the print service that this Dodo
-machine should provide. A Dodo machine can only provice at most one
-print service.    
-If this and the `printService.outputDirectory` parameter are given, the
-print service is started. The `machineId` of this Dodo machine must then match
-the `machineId` field of the chs definition file for the print service  (and
-similar for `networkNo`).    
-_optional_ (no default)
-
-- `printService.outputDirectory`    
-the directory where the print service will save the ip master files delivered
-by the printing client. The interpress master files are saved with extension `.ip`
-and named with the request id.    
-_optional_ (no default)
-
-- `printService.paperSizes`    
-the comma-separated list of known paper sizes (defined by the Printing courier program) that
-this printing service should report in "get printer properties" request, valid paper values
-are (others are ignored): usLetter, usLegal, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10,
-isoB0, isoB1, isoB2, isoB3, isoB4, isoB5, isoB6, isoB7, isoB8, isoB9, isoB10, jisB0, jisB1,
-jisB2, jisB3, jisB4, jisB5, jisB6, jisB7, jisB8, jisB9, jisB10    
-_optional_, _default_: `a4, usLetter, usLegal`
-
-- `printService.disassembleIp`    
-this boolean parameter controls if the print service will produce a human readable version
-in `printService.outputDirectory` with the extension `.interpress`    
-_optional_, _default_: `false`
+`printService.outputDirectory`    
+`printService.paperSizes`    
+`printService.disassembleIp`    
+`printService.ip2PsProcFilename`    
+`printService.psPostprocessor`    
+these 6 properties define the Printing service provided by this
+Dodo instance;    
+see [Print service configuration](./printsvc-configuration.md) for details
  
 
 #### NetHubGateway
@@ -419,6 +375,11 @@ still missing, like Mail protocols)
     - [Services_8.0_Programmers_Guide_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Programmers_Guide_Nov84.pdf)
 
 ### Development history
+
+- 2019-01-30    
+added optional PostScript generation and post-processing to the xns print service    
+added new documentation page for printing service configuration    
+moved parts of the Dodo clearinghouse configuration to the already existing documentation page
 
 - 2019-01-22    
 added minimal xns print service

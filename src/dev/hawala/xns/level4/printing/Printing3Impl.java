@@ -27,15 +27,19 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns.level4.printing;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import dev.hawala.xns.level3.courier.BOOLEAN;
 import dev.hawala.xns.level3.courier.CARDINAL;
@@ -90,11 +94,15 @@ import dev.hawala.xns.level4.printing.Printing3.ValueRecord;
  */
 public class Printing3Impl {
 	
+	// initialization data
 	private static String printServiceName = "?:?:?";
 	private static int[] printSvcId = new int[2];
 	private static String outputDirectoryName;
 	private static boolean disassembleIpFiles;
+	private static byte[] ip2psProc;
+	private static String psPostprocessor;
 	
+	// print job id generation
 	private static long lastPrintJobId = System.currentTimeMillis() & 0x0000_FFFF_FFFF_FFFFL;
 	
 	private static synchronized long getNextPrintJobId() {
@@ -102,11 +110,24 @@ public class Printing3Impl {
 		return lastPrintJobId;
 	}
 	
-	public static void init(String serviceName, String outputDirectory, boolean disassembleIp) {
-		init(serviceName, outputDirectory, disassembleIp, null);
+	// handling for print request status
+	private static Map<String,StatusEnum> printRequestStatus = new HashMap<>();
+	
+	private static synchronized void writePrintRequestStatus(String jobName, StatusEnum status) {
+		printRequestStatus.put(jobName, status);
 	}
 	
-	public static void init(String serviceName, String outputDirectory, boolean disassembleIp, String paperSizeCandidates) {
+	private static synchronized StatusEnum readPrintRequestStatus(String jobName) {
+		return printRequestStatus.get(jobName);
+	}
+	
+	public static void init(
+			String serviceName,
+			String outputDirectory,
+			boolean disassembleIp,
+			String paperSizeCandidates,
+			String ip2psProcFilename,
+			String printServicePsPostprocessor) {
 		int printSvcNameHash = serviceName.hashCode();
 		printServiceName = serviceName;
 		printSvcId[0] = (printSvcNameHash >>> 16);
@@ -136,6 +157,37 @@ public class Printing3Impl {
 			sep = ", ";
 		}
 		System.out.printf("####### Printing3, supported paperSizes: %s\n", sb.toString());
+
+		ip2psProc = null;
+		if (ip2psProcFilename != null) {
+			File ip2psProcFile = new File(ip2psProcFilename);
+			if (!ip2psProcFile.exists() || !ip2psProcFile.canRead()) {
+				System.out.printf("##\n##### Printing3, ip-to-ps proc '%s' not found or not readable\n##\n", ip2psProcFilename);
+				return;
+			}
+			try (FileInputStream fis = new FileInputStream(ip2psProcFilename)) {
+				int remaining = (int)(int)ip2psProcFile.length();
+				ip2psProc = new byte[remaining];
+				while(remaining > 0) {
+					remaining -= fis.read(ip2psProc, ip2psProc.length - remaining, ip2psProc.length);
+				}
+				System.out.printf("####### Printing3, using ip-to-ps proc: %s\n", ip2psProcFilename);
+			} catch(IOException e) {
+				System.out.printf("##\n##### Printing3, unable to read ip-to-ps proc: %s\n##\n", ip2psProcFilename);
+				return;
+			}
+		}
+		
+		psPostprocessor = null;
+		if (printServicePsPostprocessor != null) {
+			File postProcessor = new File(printServicePsPostprocessor);
+			if (postProcessor.exists() && postProcessor.canExecute()) {
+				psPostprocessor = printServicePsPostprocessor;
+				System.out.printf("####### Printing3, using ps post-processor: %s\n", psPostprocessor);
+			} else {
+				System.out.printf("##\n##### Printing3, specified ps post-processor not found or not executable: %s\n##\n", psPostprocessor);
+			}
+		}
 	}
 	
 	// paper sizes supported by this print service (here defaulted, possibly overridden at service startup)
@@ -358,8 +410,8 @@ public class Printing3Impl {
 			System.out.printf("##\n### master.descriptor != immediate => TransferError(TransferProblem.formatIncorrect)\n##\n");
 			new TransferErrorRecord(TransferProblem.formatIncorrect).raise();
 		}
-		String filenameBase = String.format("%s/job_%04X_%04X_%04X",
-				outputDirectoryName, requestId.get(2).get(), requestId.get(3).get(), requestId.get(4).get());
+		String jobName = String.format("%04X_%04X_%04X", requestId.get(2).get(), requestId.get(3).get(), requestId.get(4).get());
+		String filenameBase = String.format("%s/job_%s", outputDirectoryName, jobName);
 		String ipFilename = filenameBase + ".ip";
 		try (FileOutputStream fos = new FileOutputStream(ipFilename)) {
 			byte[] buffer = new byte[512];
@@ -379,30 +431,12 @@ public class Printing3Impl {
 		}
 		System.out.println("... done receiving ip master");
 		
+		writePrintRequestStatus(jobName, StatusEnum.pending);
+		
 		// TODO: check if we "can" process the master (e.g. do we support the requested page size, ...)
 		
-		// optionally produce a readable version of the interpress master
-		if (disassembleIpFiles) {
-			System.out.println("... begin disassembling ip master");
-			String ipTextFilename = filenameBase + ".interpress";
-			try(InputStream bis = new BufferedInputStream(new FileInputStream(ipFilename));
-				PrintStream ps = new PrintStream(new FileOutputStream(ipTextFilename))) {
-				new InterpressUtils().readableFromBinary(bis, ps);
-			} catch (IOException e) {
-				System.out.printf("##\n### IOException(%s) => InsufficientSpoolSpaceRecord()\n##\n", e.getMessage());
-				e.printStackTrace();
-				new InsufficientSpoolSpaceRecord().raise();
-			} catch (InterpressException e) {
-				// ignored...
-				System.out.printf("## InterpressException(%s) ... ignored\n", e.getMessage());
-			} catch (Exception e) {
-				System.out.printf("##\n### Exception(%s) => Courier.error(invalidArguments)\n##\n", e.getMessage());
-				e.printStackTrace();
-				throw e;
-			}
-			System.out.println("... done disassembling ip master");
-		}
-		System.out.printf("####### done printjob with requestId[ %04X %04X %04X %04X %04X ]\n",
+		new JobProcessor(jobName, ipFilename, filenameBase, printObjectName, senderName, paperKnownSize);
+		System.out.printf("####### done printjob with requestId[ %04X %04X %04X %04X %04X ], background processing started\n",
 				requestId.get(0).get(),
 				requestId.get(1).get(),
 				requestId.get(2).get(),
@@ -447,7 +481,7 @@ public class Printing3Impl {
 				params.printRequestID.get(3).get(),
 				params.printRequestID.get(4).get());
 		
-		StatusEnum statusValue = StatusEnum.unknown;
+		StatusEnum statusValue;
 		
 		boolean isUnitTest 
 				  = params.printRequestID.get(0).get() == 0xFFFF &&
@@ -459,15 +493,18 @@ public class Printing3Impl {
 		if (isUnitTest) {
 			statusValue = StatusEnum.rejected; // only unittests will have this status
 		} else {
-			String ipFilename = String.format("%s/job_%04X_%04X_%04X.ip",
-						outputDirectoryName,
-						params.printRequestID.get(2).get(),
-						params.printRequestID.get(3).get(),
-						params.printRequestID.get(4).get());
-			File ipFile = new File(ipFilename);
-			statusValue = (ipFile.exists())
-					? StatusEnum.completed
-					: StatusEnum.unknown;
+			RequestID reqId = params.printRequestID;
+			String jobName = String.format("%04X_%04X_%04X", reqId.get(2).get(), reqId.get(3).get(), reqId.get(4).get());
+			
+			statusValue = readPrintRequestStatus(jobName);
+			
+			if (statusValue == null) {
+				String ipFilename = String.format("%s/job_%s.ip", outputDirectoryName, jobName);
+				File ipFile = new File(ipFilename);
+				statusValue = (ipFile.exists())
+						? StatusEnum.completed
+						: StatusEnum.unknown;
+			}
 		}
 		
 		StatusRecord status = (StatusRecord)results.status.add().setChoice(RequestStatusChoice.status);
@@ -506,5 +543,120 @@ public class Printing3Impl {
 			KnownSizeRecord knownSizeRecord = (KnownSizeRecord)paperRecord.value.setChoice(PaperChoice.knownSize);
 			knownSizeRecord.paperKnownSize.set(paperSize);
 		}
+	}
+	
+	private static class JobProcessor implements Runnable {
+		private final String jobName;
+		private final String ipFilename;
+		private final String filenameBase;
+		private final String printObjectName;
+		private final String senderName;
+		private final PaperKnownSize paperSize;
+		
+		private final Thread thread;
+		
+		private JobProcessor(
+					String jobName,
+					String ipFilename,
+					String filenameBase,
+					String printObjectName,
+					String senderName,
+					PaperKnownSize paperSize) {
+			this.jobName = jobName;
+			this.ipFilename = ipFilename;
+			this.filenameBase = filenameBase;
+			this.printObjectName = (printObjectName != null) ? printObjectName : "(no print object name)";
+			this.senderName = (senderName != null) ? senderName : "(no sender name)";
+			this.paperSize = (paperSize != null) ? paperSize : supportedPaperSizes.get(0);
+						
+			this.thread = new Thread(this);
+			this.thread.setDaemon(true);
+			this.thread.setName("PrintJob " + this.jobName);
+			this.thread.start();
+		}
+
+		@Override
+		public void run() {			
+			try {
+				InterpressUtils ipUtils = new InterpressUtils();
+				
+				// we start working...
+				writePrintRequestStatus(jobName, StatusEnum.inProgress);
+				System.out.printf("Job %s ... begin processing\n", this.jobName);
+				
+				// optionally produce a readable version of the interpress master
+				if (disassembleIpFiles) {
+					System.out.printf("Job %s   ... begin disassembling ip master\n", this.jobName);
+					String ipTextFilename = filenameBase + ".interpress";
+					try(InputStream bis = new BufferedInputStream(new FileInputStream(ipFilename));
+						PrintStream ps = new PrintStream(new FileOutputStream(ipTextFilename))) {
+						ipUtils.readableFromBinary(bis, ps);
+					}
+					System.out.printf("Job %s   ... done disassembling ip master\n", this.jobName);
+				}
+				
+				// optionally process ip to postscript
+				if (ip2psProc != null) {
+					System.out.printf("Job %s   ... begin producing postscript for ip master\n", this.jobName);
+					String psTextFilename = filenameBase + ".ps";
+					try(InputStream bis = new BufferedInputStream(new FileInputStream(ipFilename));
+						PrintStream ps = new PrintStream(new FileOutputStream(psTextFilename))) {
+						ipUtils.generatePostscript(
+								bis,
+								ps,
+								ip2psProc,
+								this.jobName,
+								this.printObjectName,
+								this.senderName);
+					}
+					System.out.printf("Job %s   ... done producing postscript for ip master\n", this.jobName);
+					
+					// optionally invoke postprocessor for postscript file
+					if (psPostprocessor != null) {
+						System.out.printf("Job %s   ... begin post-processing generated postscript\n", this.jobName);
+						ProcessBuilder pb = new ProcessBuilder(
+								psPostprocessor,
+								psTextFilename,
+								this.paperSize.toString(),
+								this.jobName,
+								this.printObjectName,
+								this.senderName)
+							.redirectErrorStream(true);
+						Process p = pb.start();
+						String psTextFilenameProcessLog = filenameBase + ".ps.log";
+						try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+							 PrintStream log = new PrintStream(new FileOutputStream(psTextFilenameProcessLog))) {
+							String stdoutLine;
+							while((stdoutLine = br.readLine()) != null) {
+								log.println(stdoutLine);
+							}
+						}
+						p.waitFor();
+						int rc = p.exitValue();
+						System.out.printf("Job %s   ... done post-processing generated postscript, rc = %d\n", this.jobName, rc);
+					}
+				}
+				
+				// done "without" problems
+				writePrintRequestStatus(jobName, StatusEnum.completed);
+				System.out.printf("Job %s ... done processing\n", this.jobName);
+				return;
+				
+			} catch (IOException ioe) {
+				System.out.printf("##\n### Job %s : IOException(%s) => \n##\n", this.jobName, ioe.getMessage());
+				ioe.printStackTrace();
+			} catch (InterpressException e) {
+				// ignored...
+				System.out.printf("## Job %s : InterpressException(%s) ... ignored\n", this.jobName, e.getMessage());
+			} catch (Exception e) {
+				System.out.printf("##\n### Job %s : Exception(%s) => \n##\n", this.jobName, e.getMessage());
+				e.printStackTrace();
+			}
+			
+			// as we had problems
+			writePrintRequestStatus(jobName, StatusEnum.aborted);
+			System.out.printf("Job %s ... processing aborted\n", this.jobName);
+		}
+		
 	}
 }

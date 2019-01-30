@@ -85,6 +85,8 @@ public class DodoServer {
 	private static String printServiceOutputDirectory = null;
 	private static String printServicePaperSizes = null;
 	private static boolean printServiceDisassembleIp = false;
+	private static String printServiceIp2PsProcFilename = null;
+	private static String printServicePsPostprocessor = null;
 	
 
 	private static boolean initializeConfiguration(String filename) {
@@ -122,6 +124,8 @@ public class DodoServer {
 		printServiceOutputDirectory = props.getString("printService.outputDirectory", printServiceOutputDirectory);
 		printServicePaperSizes = props.getString("printService.paperSizes", printServicePaperSizes);
 		printServiceDisassembleIp = props.getBoolean("printService.disassembleIp", printServiceDisassembleIp);
+		printServiceIp2PsProcFilename = props.getString("printService.ip2PsProcFilename", printServiceIp2PsProcFilename);
+		printServicePsPostprocessor = props.getString("printService.psPostprocessor", printServicePsPostprocessor);
 		
 		// do verifications
 		boolean outcome = true;
@@ -246,7 +250,13 @@ public class DodoServer {
 		
 		if (printServiceName != null && printServiceOutputDirectory != null) {
 			try {
-				Printing3Impl.init(printServiceName, printServiceOutputDirectory, printServiceDisassembleIp, printServicePaperSizes);
+				Printing3Impl.init(
+						printServiceName,
+						printServiceOutputDirectory,
+						printServiceDisassembleIp,
+						printServicePaperSizes,
+						printServiceIp2PsProcFilename,
+						printServicePsPostprocessor);
 				Printing3Impl.register();
 			} catch(Exception e) {
 				System.out.printf("Error starting printservice '%s': %s\n", printServiceName, e.getMessage());
