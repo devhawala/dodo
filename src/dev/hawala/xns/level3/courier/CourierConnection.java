@@ -60,7 +60,7 @@ public class CourierConnection {
 			this.wireStream.dropToEOM(Constants.SPPSST_RPC);
 		}
 		
-		Log.C.printf(null, "CourierConnection.processSingleCall() - begin\n");
+		Log.C.printf(null, "CourierConnection.processSingleCall() - waiting for ingoing call\n");
 		
 		// check for version handshake
 		if (this.needVersions) {
@@ -92,6 +92,7 @@ public class CourierConnection {
 		
 		// get message type and assert for 'call' (as we are a *server* on this side!)
 		int messageType = this.wireStream.readI16();
+		Log.C.printf(null, "CourierConnection.processSingleCall() - begin\n");
 		if (messageType != 0) {
 			// not a call...
 			int transaction = this.wireStream.readI16();
@@ -108,7 +109,7 @@ public class CourierConnection {
 		int transaction = this.wireStream.readI16();
 		Log.C.printf(this.connId, "CourierConnection - dispatching call with transaction %d\n", transaction);
 		CourierRegistry.dispatch(this.courierVersion, transaction, this.wireStream);
-		Log.C.printf(this.connId, "CourierConnection - done call with transaction %d\n", transaction);
+		Log.C.printf(this.connId, "CourierConnection - done call with transaction %d\n\n", transaction);
 	}
 
 }

@@ -1,6 +1,4 @@
-package dev.hawala.xns.level3.courier;
-
-public /*
+/*
 Copyright (c) 2018, Dr. Hans-Walter Latz
 All rights reserved.
 
@@ -25,13 +23,14 @@ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+package dev.hawala.xns.level3.courier;
 
 /**
  * Definition of source and sink objects for Courier (de)serializations.
  * 
  * @author Dr. Hans-Walter Latz / Berlin (2018)
  */
-interface iWireStream {
+public interface iWireStream {
 	
 	/*
 	 * possible exceptions
@@ -39,6 +38,10 @@ interface iWireStream {
 	class EndOfMessageException extends Exception {
 		private static final long serialVersionUID = 5305442387833815969L;
 	};
+	
+	class AbortTransmissionException extends RuntimeException {
+		private static final long serialVersionUID = -621513879061435486L;
+	}
 	
 	class NoMoreWriteSpaceException extends Exception {
 		private static final long serialVersionUID = -3671310520944364701L;
@@ -115,6 +118,15 @@ interface iWireStream {
 	 */
 	void beginStreamType(byte datastreamType) throws NoMoreWriteSpaceException;
 	
+	/**
+	 * Reset the half-word synchronization mechanism for writing
+	 * single bytes (@code writeI8()} resp. {@code writeS8()}). This
+	 * method is intended for clients writing bulk-data directly
+	 * at byte level for ensuring that next courier operations
+	 * will not be misleaded if an odd-count of bytes were transmitted.
+	 */
+	void resetWritingToWordBoundary();
+	
 	
 	/*
 	 * input methods for deserializing
@@ -183,4 +195,34 @@ interface iWireStream {
 	 * @return
 	 */
 	byte getStreamType();
+	
+	/**
+	 * Transmit an abort request to the sending side as reading
+	 * the current message resulted in an error so receiving more
+	 * data makes no sense any more. 
+	 */
+	void sendAbort();
+	
+	/**
+	 * Reset the half-word synchronization mechanism for reading
+	 * single bytes (@code readI8()} resp. {@code readS8()}). This
+	 * method is intended for clients reading bulk-data directly
+	 * at byte level for ensuring that next courier operations
+	 * will not be misleaded if an odd-count of bytes were transmitted.
+	 */
+	void resetReadingToWordBoundary();
+	
+	/*
+	 * misc. functionality
+	 */
+	
+	/**
+	 * Return the host machine id of the communication partner on the
+	 * other end of the wire.
+	 *  
+	 * @return the host id of the communication partner or {@code null}
+	 * 		if this is not a network based wire connection or the remote
+	 *      host-id is not known. 
+	 */
+	Long getPeerHostId();
 }

@@ -59,12 +59,22 @@ public abstract class WireBaseStream implements iWireStream {
 		}
 	}
 	
+	@Override
+	public void resetWritingToWordBoundary() {
+		this.wrPadByte = false;
+	}
+	
 	private boolean rdPadByte = false;
 	protected void readPad() throws EndOfMessageException {
 		if (this.rdPadByte) {
 			this.getByte();
 			this.rdPadByte = false;
 		}
+	}
+	
+	@Override
+	public void resetReadingToWordBoundary() {
+		this.rdPadByte = false;
 	}
 	
 	/*
@@ -177,6 +187,16 @@ public abstract class WireBaseStream implements iWireStream {
 		while(!this.isAtEnd()) {
 			this.getByte();
 		}
+	}
+	
+	@Override
+	public Long getPeerHostId() {
+		return null;
+	}
+	
+	@Override
+	public void sendAbort() {
+		// ignored....
 	}
 	
 }

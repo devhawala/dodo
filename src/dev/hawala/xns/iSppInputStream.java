@@ -52,4 +52,10 @@ public interface iSppInputStream {
 	
 	iSppReadResult read(byte[] buffer, int offset, int length) throws XnsException, SppAttention, InterruptedException;
 	
+	Long getRemoteNetwork();
+	
+	Long getRemoteHost();
+	
+	Integer getRemoteSocket();
+	
 }

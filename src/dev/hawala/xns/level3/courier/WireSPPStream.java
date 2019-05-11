@@ -52,6 +52,7 @@ public class WireSPPStream extends WireBaseStream {
 	private boolean inEomPending = false;
 	
 	private final byte[] outBuf = new byte[SPP.SPP_MAX_PAYLOAD_LENGTH];
+	// TODO Auto-generated me
 	private int outIdx = 0;
 	private int outMax = SPP.SPP_MAX_PAYLOAD_LENGTH;
 	private byte outSst = 0;
@@ -132,7 +133,7 @@ public class WireSPPStream extends WireBaseStream {
 			try {
 				this.readNextPacket();
 			} catch (EndOfMessageException e) {
-				// ignore for now
+				this.inEomPending = true;
 			}
 		}
 		return this.inSst;
@@ -166,14 +167,16 @@ public class WireSPPStream extends WireBaseStream {
 				throw new EndOfMessageException(); // handle interrupt as EOM for now
 			}
 			
+			this.inSst = res.getDatastreamType();
+			
 			if (res.getLength() == 0 && res.isEndOfMessage()) {
 				// attempt to read beyond the Courier message => (de-)serialization error !!
+				this.inMax = 0;
+				this.inIdx = 0;
 				throw new EndOfMessageException();
 			}
-			
-			this.inSst = res.getDatastreamType();
+
 			this.inEomPending = res.isEndOfMessage();
-			
 			if (res.getLength() > 0) {
 				this.inMax = res.getLength();
 				this.inIdx = 0;
@@ -184,6 +187,22 @@ public class WireSPPStream extends WireBaseStream {
 					e.getMessage(),
 					e.getStackTrace().toString());
 			throw new EndOfMessageException();
+		}
+	}
+	
+	@Override
+	public Long getPeerHostId() {
+		return this.sppIn.getRemoteHost();
+	}
+
+	@Override
+	public void sendAbort() {
+		try {
+			this.sppOut.sendAttention((byte)1);
+		} catch (XnsException | InterruptedException e) {
+			Log.L4.printf(null, "** error %s in WireSPPStream.sendAttention(1): %s\n", 
+					e.getClass().getName(),
+					e.getMessage());
 		}
 	}
 

@@ -865,14 +865,15 @@ public class Clearinghouse3Impl {
 				credentialsOk = AuthChsCommon.simpleCheckPasswordForSimpleCredentials(
 									chsDatabase,
 									agent.credentials,
-									agent.verifier);
+									agent.verifier) != null;
 			} else {
 				credentialsOk = AuthChsCommon.checkStrongCredentials(
 									chsDatabase,
 									agent.credentials,
 									agent.verifier,
 									chsDatabase.getChsQueryName(),
-									machineId);
+									machineId,
+									null, null) != null;
 			}
 		} catch (IllegalArgumentException iac) {
 			AuthenticationErrorRecord err = new AuthenticationErrorRecord(Problem.credentialsInvalid);
@@ -897,9 +898,9 @@ public class Clearinghouse3Impl {
 	private static void sendBulkData(String procName, BulkData1.Sink sink, iWireData streamData) {
 		Log.C.printf("CHS3", "Clearinghouse3.%s() :: sending data via bulk data transfer\n", procName);
 		try {
-			sink.send(streamData);
-		} catch (NoMoreWriteSpaceException e) {
-			Log.C.printf("CHS3", "Clearinghouse3.%s() :: NoMoreWriteSpaceException during BDT.send()\n", procName);
+			sink.send(streamData, true);
+		} catch (NoMoreWriteSpaceException e) { 
+			Log.C.printf("CHS3", "Clearinghouse3.%s() :: NoMoreWriteSpaceException (i.e. abort) during BDT.send()\n", procName);
 			CallErrorRecord err = new CallErrorRecord(CallProblem.other);
 			err.raise();
 		}

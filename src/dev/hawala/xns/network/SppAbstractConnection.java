@@ -174,15 +174,21 @@ public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver 
 		public SppIStream(SppConnection connection) {
 			this.connection = connection;
 		}
-		
-//		public synchronized void setClosed() {
-//			this.closed = true;
-//		}
-//		
-//		@Override
-//		public synchronized boolean isClosed() {
-//			return this.closed;
-//		}
+
+		@Override
+		public Long getRemoteNetwork() {
+			return this.connection.getRemoteNetwork();
+		}
+
+		@Override
+		public Long getRemoteHost() {
+			return this.connection.getRemoteHost();
+		}
+
+		@Override
+		public Integer getRemoteSocket() {
+			return this.connection.getRemoteSocket();
+		}
 		
 		@Override
 		public boolean isClosed() {
@@ -202,7 +208,7 @@ public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver 
 		public synchronized iSppReadResult read(byte[] buffer, int offset, int length) throws SppAttention, InterruptedException, XnsException {
 			if (this.closed) { throw new XnsException(ExceptionType.ConnectionClosed); }
 			
-			if (attnPending) {
+			if (this.attnPending) {
 				this.attnPending = false;
 				throw new SppAttention(this.attnByte);
 			}
@@ -223,7 +229,7 @@ public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver 
 			
 			boolean isEndOfMessage = false;
 			
-			datastreamType = this.currSpp.getDatastreamType();
+			this.datastreamType = this.currSpp.getDatastreamType();
 			
 			int count = this.currSpp.rdBytes(
 								this.consumedBytes,
@@ -235,7 +241,7 @@ public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver 
 				this.currSpp = null;
 			}
 			
-			return new SppIDataResult(count, isEndOfMessage, datastreamType);
+			return new SppIDataResult(count, isEndOfMessage, this.datastreamType);
 		}
 		
 	}
@@ -259,16 +265,6 @@ public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver 
 		public SppOStream(SppConnection connection) {
 			this.connection = connection;
 		}
-		
-//		public synchronized void setClosed() {
-//			this.closed = true;
-//		}
-//		
-//		@Override
-//		public synchronized boolean isClosed() {
-//			this.closed |= this.connection.isClosed();
-//			return this.closed;
-//		}
 		
 		@Override
 		public synchronized boolean isClosed() {

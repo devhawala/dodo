@@ -39,7 +39,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
  * Representation of the Courier RECORD datatype
  * as base class for real RECORDs.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
  */
 public abstract class RECORD implements iWireData {
 	
@@ -59,6 +59,12 @@ public abstract class RECORD implements iWireData {
 	
 	public UNSPECIFIED mkUNSPECIFIED() {
 		UNSPECIFIED val = new UNSPECIFIED();
+		this.wire(val);
+		return val;
+	}
+	
+	public UNSPECIFIED2 mkUNSPECIFIED2() {
+		UNSPECIFIED2 val = new UNSPECIFIED2();
 		this.wire(val);
 		return val;
 	}

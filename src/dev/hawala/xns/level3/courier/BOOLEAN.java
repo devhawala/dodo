@@ -49,13 +49,13 @@ public class BOOLEAN implements iWireData {
 
 	@Override
 	public void serialize(iWireStream ws) throws NoMoreWriteSpaceException {
-		ws.writeS16(this.value ? (short)0xFFFF : 0);
+		ws.writeS16(this.value ? (short)1 : 0);
 	}
 
 	@Override
 	public void deserialize(iWireStream ws) throws EndOfMessageException {
 		short wireData = ws.readS16();
-		this.value = (wireData != 0);
+		this.value = ((wireData & 1) != 0); // (wireData != 0);
 	}
 	
 	@Override

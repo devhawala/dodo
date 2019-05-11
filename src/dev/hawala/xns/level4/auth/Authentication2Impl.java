@@ -289,7 +289,7 @@ public class Authentication2Impl {
 							Authentication2.CheckSimpleCredentialsResults results) {
 		try {
 			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() -- invoking AuthChsCommon.simpleCheckPasswordForSimpleCredentials()\n");
-			results.ok.set(AuthChsCommon.simpleCheckPasswordForSimpleCredentials(chsDatabase, params.credentials, params.verifier));
+			results.ok.set(AuthChsCommon.simpleCheckPasswordForSimpleCredentials(chsDatabase, params.credentials, params.verifier) != null);
 			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() -- result.ok = %s\n", Boolean.toString(results.ok.get()));
 		} catch (EndOfMessageException e) {
 			Log.C.printf("Auth2", "Authentication2Impl.checkSimpleCredentials() EndOfMessageException when deserializing credsObject -> returning 'false'\n");

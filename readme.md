@@ -11,6 +11,7 @@ Currently the following XNS services are provided by Dodo:
 - Clearinghouse
 - Authentication
 - Printing (usable)
+- Filing (incomplete but usable)
 
 In fact, it is not a single Java program, but a set of programs creating a
 simple virtual network infrastructure, a kind of XNS-over-TCP/IP. This virtual
@@ -28,8 +29,7 @@ of a flight incapable bird came in mind: the [Dodo](https://en.wikipedia.org/wik
 ### Functionality
 
 The Dodo system implements parts of the Xerox Network Services protocol stack in Java,
-providing the functionality to build things like XNS file or print services, at least
-some day in future.
+providing the functionality to build things like XNS file or print services.
 
 In the XNS levels terminology, the Dodo system supports resp. implements the
 following protocols:
@@ -93,6 +93,13 @@ information
 	The PostScript generation provides a basic support for western-european
 	character sets as well as simple graphics (vector and uncompressed bitmaps),
 	giving usable but far from perfect results.
+	- Filing
+	(Courier program 10, versions 4,5,6)    
+	a large subset of the protocol procedures is implemented, allowing
+	to access file drawers, folders and files on Dodo XNS File services from XDE
+	and GVWin. Although substantial functionality is missing (like copy/move
+	operations, access control), Dodo file services are already usable in a
+	single user environment.
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -115,8 +122,7 @@ emulators.
 NetHub listens on port 3333 for client connections (currently hard-coded).
 
 - Dodo server    
-this is the program providing the XNS services, currently only a few and some
-future day hopefully more services.
+this is the program providing the XNS services.
 
 2 additional program components of Dodo services can be used if required:
 - NetHubGateway    
@@ -254,7 +260,8 @@ _optional_, _default_: `0` (i.e. no date change)
 `domain`    
 `chsDatabaseRoot`    
 `strongKeysAsSpecified`    
-these 4 properties define the Clearinghouse service provided by this
+`authSkipTimestampChecks`    
+these 5 properties define the Clearinghouse service provided by this
 Dodo instance;    
 see [Clearinghouse configuration](./chs-config-files.md) for details
 
@@ -267,6 +274,12 @@ see [Clearinghouse configuration](./chs-config-files.md) for details
 these 6 properties define the Printing service provided by this
 Dodo instance;    
 see [Print service configuration](./printsvc-configuration.md) for details
+
+-  `fileService.NN.name`    
+`fileService.NN.volumePath`    
+a set of these parameter pairs (with the numerical *NN* parts being a sequence starting with 0)
+define the file services provided by this Dodo instance;    
+see [File service configuration](./filesvc-configuration.md) for details
  
 
 #### NetHubGateway
@@ -373,8 +386,14 @@ still missing, like Mail protocols)
     - [Authentication_Protocol_Apr1984.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/XSIS_098404_Authentication_Protocol_Apr1984.pdf)
     - [Clearinghouse_Entry_Formats_Apr1984.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/XSIS_168404_Clearinghouse_Entry_Formats_Apr1984.pdf)
     - [Services_8.0_Programmers_Guide_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Programmers_Guide_Nov84.pdf)
+    - [Filing_Protocol_May1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/SNSS_108605_Filing_Protocol_May1986.pdf)
+    - [Services_8.0_Filing_Programmers_Manual_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Filing_Programmers_Manual_Nov84.pdf)
 
 ### Development history
+
+- 2019-05-11    
+added first limited but working version of xns filing services    
+added configuration parameter 'authSkipTimestampChecks' for authentication with strong credentials
 
 - 2019-01-30    
 added optional PostScript generation and post-processing to the xns print service    

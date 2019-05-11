@@ -39,6 +39,15 @@ encrypt the password of the last iteration to produce the new password (this
 contradicts the specification, but creates the data in the example...)    
 _optional_, _default_: `true`
 
+- `authSkipTimestampChecks`    
+setting this parameter to `true` will suppress the timestamp verification steps
+when verifying strong keys for authentication, allowing to logon to services
+even if clocks are not synchronized for all machines on the network.    
+(this parameter is intended to be used with DarkStar, which has network support
+since version 1.0.0.1, but possibly has deviating time settings depending on the
+timezone resp. settings for the hosting OS)    
+_optional_, _default_: `false`
+
 Remark: If `startChsAndAuthServices` is `true`, then specifying the optional command
 line parameter `-dumpchs` will dump the content of the Clearinghouse database loaded
 from the configuration files.

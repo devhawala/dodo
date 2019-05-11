@@ -121,6 +121,11 @@ public class WireSeqOfUnspecifiedReader implements iWireStream {
 	public byte getStreamType() {
 		return (byte)0;
 	}
+
+	@Override
+	public void resetReadingToWordBoundary() {
+		this.rdPadByte = false;
+	}
 	
 	/*
 	 * write methods not allowed on a SEQUENCE<UNSPECIFIED> reader
@@ -164,5 +169,21 @@ public class WireSeqOfUnspecifiedReader implements iWireStream {
 	@Override
 	public void beginStreamType(byte datastreamType) throws NoMoreWriteSpaceException {
 		throw new NoMoreWriteSpaceException();
+	}
+
+	@Override
+	public void resetWritingToWordBoundary() {
+		// irrelevant
+	}
+
+	@Override
+	public Long getPeerHostId() {
+		// no remote host connected...
+		return null;
+	}
+	
+	@Override
+	public void sendAbort() {
+		// ignored....
 	}
 }

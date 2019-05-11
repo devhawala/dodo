@@ -35,6 +35,22 @@ import dev.hawala.xns.level3.courier.iWireStream;
  */
 public class MockWireStream implements iWireStream {
 	
+	public void dumpWritten() {
+		System.out.println("MockWireStream content:");
+		int i = 0;
+		while (i < this.wrPos) {
+			int w = this.content[i++];
+			if (w == EOM) {
+				System.out.println("  EOM");
+			} else if (w == NEW_SST) {
+				int sst = this.content[i++];
+				System.out.printf("  new SST(%d)\n", sst);
+			} else {
+				System.out.printf("  0x %02X %02X\n", (w >> 8) & 0xFF, w & 0xFF);
+			}
+		}
+	}
+	
 	private static final int EOM = 0xFFFFFFFF;
 	private static final int NEW_SST = 0xFEFEFEFE; // next entry has the SST byte 
 	
@@ -64,6 +80,11 @@ public class MockWireStream implements iWireStream {
 		}
 		this.content[this.wrPos++] = i;
 	}
+
+	@Override
+	public void resetWritingToWordBoundary() {
+		this.wrPadByte = false;
+	}
 	
 	private int get() throws EndOfMessageException {
 		if (this.rdPos > this.wrPos) { throw new EndOfMessageException(); }
@@ -73,6 +94,11 @@ public class MockWireStream implements iWireStream {
 		if (next != NEW_SST) { return next & 0x0000FFFF; }
 		this.rdSst = this.get() & 0x00FF;
 		return this.get();
+	}
+
+	@Override
+	public void resetReadingToWordBoundary() {
+		this.rdPadByte = false;
 	}
 
 	@Override
@@ -208,6 +234,17 @@ public class MockWireStream implements iWireStream {
 			}
 		}
 		return (byte)(this.rdSst & 0x00FF);
+	}
+
+	@Override
+	public Long getPeerHostId() {
+		// no remote connection...
+		return null;
+	}
+	
+	@Override
+	public void sendAbort() {
+		// ignored....
 	}
 
 }

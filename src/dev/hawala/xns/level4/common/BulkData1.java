@@ -35,6 +35,7 @@ import dev.hawala.xns.level3.courier.UNSPECIFIED2;
 import dev.hawala.xns.level3.courier.UNSPECIFIED3;
 import dev.hawala.xns.level3.courier.iWireData;
 import dev.hawala.xns.level3.courier.iWireStream;
+import dev.hawala.xns.level3.courier.iWireStream.AbortTransmissionException;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 
@@ -122,16 +123,36 @@ public class BulkData1 extends CrProgram {
 	
 	public static class Sink extends Descriptor {
 		
+		private boolean locked = false;
+		
+		public iWireStream lockWirestream() throws NoMoreWriteSpaceException {
+			this.checkTransferMode();
+			this.locked = true;
+			this.wireStream.beginStreamType(Constants.SPPSST_BDT);
+			return this.wireStream;
+		}
+		
+		public void unlockWireStream() throws NoMoreWriteSpaceException {
+			if (!this.locked) {
+				throw new IllegalStateException("wirestream of sink not locked");
+			}
+			this.wireStream.beginStreamType(Constants.SPPSST_RPC);
+			this.wireStream.resetWritingToWordBoundary();
+			this.locked = false;
+		}
+		
 		/**
 		 * Send {@code content} as intra-call bulk data transfer, if the receiver
 		 * expects an 'immediate' transfer.
 		 * 
 		 * @param content the Courier serializable data
+		 * @param raiseErrorOnAbort should the exception {@code NoMoreWriteSpaceException}
+		 * 		be raised instead of returning {@code true}?
 		 * @return {@code true} if the receiver requested an abort during transfer
 		 * 		by sending an interrupt.
 		 * @throws NoMoreWriteSpaceException in case of a transmission problem 
 		 */
-		public boolean send(iWireData content) throws NoMoreWriteSpaceException {
+		public boolean send(iWireData content, boolean raiseErrorOnAbort) throws NoMoreWriteSpaceException {
 			boolean aborted = false;
 			this.checkTransferMode();
 			
@@ -154,6 +175,10 @@ public class BulkData1 extends CrProgram {
 				this.wireStream.beginStreamType(Constants.SPPSST_RPC);
 			}
 			
+			if (aborted && raiseErrorOnAbort) {
+				throw new NoMoreWriteSpaceException();
+			}
+			
 			return aborted;
 		}
 		
@@ -163,8 +188,37 @@ public class BulkData1 extends CrProgram {
 	
 	public static class Source extends Descriptor {
 		
+		private boolean locked = false;
+		
+		public iWireStream lockWirestream() throws EndOfMessageException {
+			this.checkTransferMode();
+			this.locked = true;
+			if (this.wireStream.getStreamType() != Constants.SPPSST_BDT) {
+				this.wireStream.dropToEOM(Constants.SPPSST_BDT);
+			}
+			return this.wireStream;
+		}
+		
+		public void unlockWireStream(boolean afterEndOfMessage) throws NoMoreWriteSpaceException, EndOfMessageException {
+			if (!this.locked) {
+				throw new IllegalStateException("wirestream of sink not locked");
+			}
+			if (!afterEndOfMessage) {
+				while(!this.wireStream.isAtEnd()) {
+					this.wireStream.readI8();
+				}
+			}
+			this.wireStream.resetReadingToWordBoundary();
+			this.locked = false;
+		}
+		
 		/**
-		 * Receive and deserialize a Courier object by bulk data transfer.
+		 * Receive and deserialize a Courier object by bulk data transfer.#
+		 * 
+		 * <p>
+		 * Abort transmission while deserializing can be requested by raising
+		 * the exception {@code AbortTransmissionException}. 
+		 * </p>
 		 * 
 		 * @param target the Courier object to deserialize
 		 * @return {@code true} if deserializing attempted to read more data
@@ -183,6 +237,10 @@ public class BulkData1 extends CrProgram {
 			if (target != null) {
 				try {
 					target.deserialize(this.wireStream);
+				} catch (AbortTransmissionException e) {
+					prematureEnd = true;
+					Log.L4.printf(null, "** BulkData1.Source.receive() :: abort requested for bulk transfer\n");
+					this.wireStream.sendAbort();
 				} catch (EndOfMessageException e) {
 					prematureEnd = true;
 					Log.L4.printf(null, "** BulkData1.Source.receive() :: bulk transfer prematurely end while receiving data\n");
@@ -236,14 +294,17 @@ public class BulkData1 extends CrProgram {
 						}
 					}
 				} else if (receiver != null) {
-					this.wireStream.dropToEOM(Constants.SPPSST_END);
+					this.wireStream.dropToEOM(Constants.SPPSST_RPC);
 					receiver.receive(buffer, 0, true);
  				} else {
-					this.wireStream.dropToEOM(Constants.SPPSST_END);
+					this.wireStream.dropToEOM(Constants.SPPSST_RPC);
 				}
+				
+				this.wireStream.resetReadingToWordBoundary();
 				
 			} catch (EndOfMessageException e) {
 				// inform about the last block
+				this.wireStream.resetReadingToWordBoundary();
 				if (receiver != null) {
 					try {
 						receiver.receive(buffer, transferred, true);
@@ -260,6 +321,7 @@ public class BulkData1 extends CrProgram {
 						// TODO: is ignoring a good idea?
 					}
 				}
+				this.wireStream.resetReadingToWordBoundary();
 			}
 		}
 		

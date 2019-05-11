@@ -337,6 +337,32 @@ public abstract class CrProgram {
 	 * procedures of a Courier program
 	 */
 	
+	private boolean logParamsAndResults = false;
+	
+	@SuppressWarnings("unchecked")
+	public <T extends CrProgram> T setLogParamsAndResults(boolean doLog) {
+		this.logParamsAndResults = doLog;
+		return (T)this;
+	}
+	
+	private void log(String procName, String msg, String argType, RECORD arg) {
+		if (!msg.endsWith("\n")) {
+		msg += "\n";
+		}
+		Log.C.printf("proc " + procName, msg);
+		if (this.logParamsAndResults && argType != null) {
+			StringBuilder sb = new StringBuilder();
+			arg.append(sb, "  ", argType);
+			sb.append("\n");
+			Log.C.printf("proc " + procName, sb.toString());
+		}
+	}
+	
+	private void log(String procName, String msg) {
+		this.log(procName, msg, null, null);
+	}
+	
+	
 	private final Map<Integer,PROC<?,?>> procImplementations = new HashMap<>();
 	
 	public void dispatch(
@@ -353,10 +379,10 @@ public abstract class CrProgram {
 			return;
 		}
 		
-		Log.C.printf(null, "%s.dispatch() -- invoking proc # %d\n", this.getPgmIntro(), procNo);
 		PROC<?,?> proc = this.procImplementations.get(procNo);
+		Log.C.printf(null, "%s.dispatch() -- invoking proc %s\n", this.getPgmIntro(), proc.getName());
 		proc.process(transaction, connection);
-		Log.C.printf(null, "%s.dispatch() -- finished proc # %d\n", this.getPgmIntro(), procNo);
+		Log.C.printf(null, "%s.dispatch() -- finished proc %s\n", this.getPgmIntro(), proc.getName());
 	}
 	
 	@FunctionalInterface
@@ -365,6 +391,8 @@ public abstract class CrProgram {
 	}
 	
 	public class PROC<P extends RECORD, R extends RECORD> {
+		
+		private final String procName;
 		
 		private final int procNumber;
 		
@@ -377,14 +405,20 @@ public abstract class CrProgram {
 		private CourierProcedureImplementation<P,R> implementation = null;
 		
 		private PROC(
+					String procName,
 					int procNumber,
 					iWireDynamic<P> callParameters,
 					iWireDynamic<R> returnParameters,
 					List<ERROR<?>> declaredErrors) {
+			this.procName = (procName != null && !procName.isEmpty()) ? procName + "[ #" + procNumber + " ]" : "#" + procNumber;
 			this.procNumber = procNumber;
 			this.callParameters = callParameters;
 			this.returnParameters = returnParameters;
 			this.declaredErrors = declaredErrors;
+		}
+		
+		public String getName() {
+			return this.procName;
 		}
 		
 		public void use(CourierProcedureImplementation<P,R> implementation) {
@@ -405,6 +439,7 @@ public abstract class CrProgram {
 		public void process(
 				int transaction,
 				iWireStream connection) throws NoMoreWriteSpaceException, EndOfMessageException {
+			
 			// sanity check (dispatch should not have happened!)
 			if (this.implementation == null) {
 				connection.dropToEOM(Constants.SPPSST_RPC); 
@@ -428,6 +463,7 @@ public abstract class CrProgram {
 				this.encodeInvalidArgumentsReject(transaction, connection);
 				return;
 			}
+			CrProgram.this.log(procName, "call", "params", inParams);
 			
 			try {
 				
@@ -445,10 +481,16 @@ public abstract class CrProgram {
 				}
 				
 				// this error type is not declared for the method, so use fallback
+				System.out.printf("\n###\n### rejecting because of undeclared checked error raised: %s : %s\n", ce.getClass().getName(), ce.getMessage());
+				ce.printStackTrace(System.out);
+				System.out.printf("\n###\n\n");
 				this.encodeInvalidArgumentsReject(transaction, connection);
 				return;
 			} catch (Throwable thr) {
-				// do a fallback handling for any other error 
+				// do a fallback handling for any other error
+				System.out.printf("\n###\n### rejecting because of unexpected unchecked exception raised: %s : %s\n", thr.getClass().getName(), thr.getMessage());
+				thr.printStackTrace(System.out);
+				System.out.printf("\n###\n\n");
 				this.encodeInvalidArgumentsReject(transaction, connection);
 				return;
 			}
@@ -458,6 +500,7 @@ public abstract class CrProgram {
 		}
 		
 		private void encodeReject(int transaction, int reason, iWireStream connection) throws NoMoreWriteSpaceException {
+			CrProgram.this.log(procName, "encode reject with code: " + reason);
 			connection.writeI16(1); // MessageType.reject(1)
 			connection.writeI16(transaction);
 			connection.writeI16(reason);
@@ -469,6 +512,7 @@ public abstract class CrProgram {
 		}
 		
 		private void encodeAbort(int transaction, iWireStream connection, ErrorRECORD abortData) throws NoMoreWriteSpaceException {
+			CrProgram.this.log(procName, "encodeAbort", "abortData", abortData);
 			connection.writeI16(3); // MessageType.abort(3)
 			connection.writeI16(transaction);
 			connection.writeI16(abortData.getErrorCode());
@@ -477,6 +521,7 @@ public abstract class CrProgram {
 		}
 		
 		private void encodeReturn(int transaction, iWireStream connection, RECORD resultData) throws NoMoreWriteSpaceException {
+			CrProgram.this.log(procName, "encodeReturn", "resultData", resultData);
 			connection.writeI16(2); // MessageType.return(2)
 			connection.writeI16(transaction);
 			resultData.serialize(connection);
@@ -491,8 +536,19 @@ public abstract class CrProgram {
 					iWireDynamic<R> returnParameters,
 					ERROR<?>... declaredErrors
 				) {
+		return mkPROC(null, functionCode, callParameters, returnParameters, declaredErrors);
+	}
+
+		
+	protected <P extends RECORD, R extends RECORD> PROC<P,R> mkPROC(
+					String name,
+					int functionCode,
+					iWireDynamic<P> callParameters,
+					iWireDynamic<R> returnParameters,
+					ERROR<?>... declaredErrors
+				) {
 		List<ERROR<?>> errList = Arrays.asList(declaredErrors);
-		return new PROC<P,R>(functionCode, callParameters, returnParameters, errList);
+		return new PROC<P,R>(name, functionCode, callParameters, returnParameters, errList);
 	}
 	
 }

@@ -99,6 +99,11 @@ public class WirePEXRequestResponse implements iWireStream {
 	}
 
 	@Override
+	public void resetWritingToWordBoundary() {
+		this.wrPex.resetWritingToWordBoundary();
+	}
+
+	@Override
 	public long readI48() throws EndOfMessageException {
 		return this.rdPex.readI48();
 	}
@@ -141,6 +146,22 @@ public class WirePEXRequestResponse implements iWireStream {
 	@Override
 	public byte getStreamType() {
 		return this.rdPex.getStreamType();
+	}
+
+	@Override
+	public void resetReadingToWordBoundary() {
+		this.rdPex.resetReadingToWordBoundary();
+	}
+
+	@Override
+	public Long getPeerHostId() {
+		// remote host-id not known (for now)
+		return null;
+	}
+	
+	@Override
+	public void sendAbort() {
+		// ignored....
 	}
 
 }

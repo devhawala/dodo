@@ -42,6 +42,11 @@ public class UNSPECIFIED2 implements iWireData {
 		this.value = val;
 		return this;
 	}
+
+	public UNSPECIFIED2 set(long val) {
+		this.value = (int)(val & 0xFFFF_FFFFL);
+		return this;
+	}
 	
 	public int get() {
 		return this.value;

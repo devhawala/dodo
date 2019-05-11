@@ -27,6 +27,9 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import dev.hawala.xns.level1.IDP;
 import dev.hawala.xns.level3.courier.CourierServer;
@@ -34,9 +37,12 @@ import dev.hawala.xns.level4.auth.Authentication2Impl;
 import dev.hawala.xns.level4.auth.BfsAuthenticationResponder;
 import dev.hawala.xns.level4.chs.BfsClearinghouseResponder;
 import dev.hawala.xns.level4.chs.Clearinghouse3Impl;
+import dev.hawala.xns.level4.common.AuthChsCommon;
+import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
 import dev.hawala.xns.level4.common.ChsDatabase;
 import dev.hawala.xns.level4.common.Time2;
 import dev.hawala.xns.level4.echo.EchoResponder;
+import dev.hawala.xns.level4.filing.FilingImpl;
 import dev.hawala.xns.level4.printing.Printing3Impl;
 import dev.hawala.xns.level4.rip.RipResponder;
 import dev.hawala.xns.level4.time.TimeServiceResponder;
@@ -78,15 +84,19 @@ public class DodoServer {
 	private static String organizationName = "hawala";
 	private static String domainName = "dev";
 	private static boolean strongKeysAsSpecified = true;
+	private static boolean authSkipTimestampChecks = false;
 	private static String chsDatabaseRoot = null;
 	
-	// startPrintService = printServiceName != null && printServiceOutputDirectory != null 
+	// startPrintServer = printServiceName != null && printServiceOutputDirectory != null 
 	private static String printServiceName = null;
 	private static String printServiceOutputDirectory = null;
 	private static String printServicePaperSizes = null;
 	private static boolean printServiceDisassembleIp = false;
 	private static String printServiceIp2PsProcFilename = null;
 	private static String printServicePsPostprocessor = null;
+	
+	// startFileServer = fileServiceSpecs.size() > 0
+	private static Map<String,String> fileServiceSpecs = new HashMap<>();
 	
 
 	private static boolean initializeConfiguration(String filename) {
@@ -116,6 +126,7 @@ public class DodoServer {
 		startRipService = props.getBoolean("startRipService", startRipService);
 		
 		strongKeysAsSpecified = props.getBoolean("strongKeysAsSpecified", strongKeysAsSpecified);
+		authSkipTimestampChecks = props.getBoolean("authSkipTimestampChecks", authSkipTimestampChecks);
 		organizationName = props.getString("organizationName", organizationName);
 		domainName = props.getString("domainName", domainName);
 		chsDatabaseRoot = props.getString("chsDatabaseRoot", chsDatabaseRoot);
@@ -126,6 +137,17 @@ public class DodoServer {
 		printServiceDisassembleIp = props.getBoolean("printService.disassembleIp", printServiceDisassembleIp);
 		printServiceIp2PsProcFilename = props.getString("printService.ip2PsProcFilename", printServiceIp2PsProcFilename);
 		printServicePsPostprocessor = props.getString("printService.psPostprocessor", printServicePsPostprocessor);
+		
+		int fileSvcIdx = 0;
+		String serviceName;
+		String serviceVolumePath;
+		while ((serviceName = props.getString("fileService." + fileSvcIdx + ".name", null)) != null
+			&& (serviceVolumePath = props.getString("fileService." + fileSvcIdx + ".volumePath", null)) != null) {
+			String[] nameParts = serviceName.split(":");
+			String serviceThreepartName = nameParts[0] + ":" + domainName + ":" + organizationName;
+			fileServiceSpecs.put(serviceThreepartName, serviceVolumePath);
+			fileSvcIdx++;
+		}
 		
 		// do verifications
 		boolean outcome = true;
@@ -150,7 +172,7 @@ public class DodoServer {
 			}
 		}
 		
-		if (startChsAndAuth) {
+		if (startChsAndAuth || fileServiceSpecs.size() > 0) {
 			if (isEmpty(organizationName)) {
 				System.err.printf("Error: organizationName may not be empty\n");
 				outcome = false;
@@ -218,14 +240,22 @@ public class DodoServer {
 			localSite.clientBindToSocket(IDP.KnownSocket.ROUTING.getSocket(), ripResponder);
 		}
 		
-		// clearinghouse and authentication services
-		if (startChsAndAuth) {
+		// open CHS database if there are services requiring it
+		ChsDatabase chsDatabase = null;
+		if (startChsAndAuth || !fileServiceSpecs.isEmpty()) {
 			// create the clearinghouse database
-			ChsDatabase chsDatabase = new ChsDatabase(localSite.getNetworkId(), organizationName, domainName, chsDatabaseRoot, strongKeysAsSpecified);
+			chsDatabase = new ChsDatabase(localSite.getNetworkId(), organizationName, domainName, chsDatabaseRoot, strongKeysAsSpecified);
 			
 			if (dumpChs) {
 				chsDatabase.dump();
 			}
+		}
+		if (authSkipTimestampChecks) {
+			AuthChsCommon.skipTimestampChecks();
+		}
+		
+		// clearinghouse and authentication services
+		if (startChsAndAuth) {
 			
 			// broadcast for clearinghouse service
 			// one common implementation for versions 2 and 3, as both versions have the same RetrieveAddresses method
@@ -248,6 +278,7 @@ public class DodoServer {
 			Authentication2Impl.register();
 		}
 		
+		// print service
 		if (printServiceName != null && printServiceOutputDirectory != null) {
 			try {
 				Printing3Impl.init(
@@ -260,6 +291,29 @@ public class DodoServer {
 				Printing3Impl.register();
 			} catch(Exception e) {
 				System.out.printf("Error starting printservice '%s': %s\n", printServiceName, e.getMessage());
+			}
+		}
+		
+		// file service(s)
+		if (fileServiceSpecs.size() > 0) {
+			// initalize
+			FilingImpl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase); 
+			
+			// open volume(s)
+			int openVolumes = 0;
+			for (Entry<String, String> spec : fileServiceSpecs.entrySet()) {
+				ThreePartName serviceName = ThreePartName.make().from(spec.getKey());
+				String volumeBasedirName = spec.getValue();
+				if (FilingImpl.addVolume(serviceName, volumeBasedirName)) {
+					openVolumes++;
+				}
+			}
+			
+			// register Courier implementation if volume(s) were successfully opened
+			if (openVolumes > 0) {
+				FilingImpl.register();
+			} else {
+				System.out.printf("No volumes opened successfully, not registering Filing to Courier");
 			}
 		}
 		
