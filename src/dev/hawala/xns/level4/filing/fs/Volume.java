@@ -246,6 +246,9 @@ public class Volume {
 		
 		// ensure the requested root folders are present
 		vol.checkRootFolders();
+		for (FileEntry fe : vol.fileEntries.values()) {
+			vol.checkForOwnerProperty(fe);
+		}
 		
 		// scan file contents directories
 		File[] dataDirectories = vol.baseDir.listFiles(new FilenameFilter() {
@@ -276,9 +279,6 @@ public class Volume {
 		
 		// check in-memory file system
 		vol.checkConsistency();
-		
-		// (temp) dump the structure
-		// vol.dumpHierarchy(System.out);
 		
 		// done
 		System.out.printf("Volume '%s' opened\n", vol.volumeName);
@@ -1059,6 +1059,34 @@ public class Volume {
 			System.out.printf("checkRootFolders, error while reading root folders file: %s\n", e.getMessage());
 		}
 		this.rootFolders.reorder();
+	}
+	
+	// ensure that there is the Owner-property 4351 expected by Star/ViewPoint/GlobalView on file drawers
+	private void checkForOwnerProperty(FileEntry fe) {
+		UninterpretedAttribute attr = fe.getUninterpretedAttribute(FsConstants.attrStarOwner);
+		if (attr == null) {
+			String owner = fe.getCreatedBy();
+			if (owner == null) { return; }
+			int len = owner.length();
+			short[] words = new short[(len+1)/2];
+			int w = 0;
+			for (int i = 0; i < len; i++) {
+				int c = owner.charAt(i) & 0xFF;
+				if ((i & 1) == 1) {
+					words[w] |= c;
+					w++;
+				} else {
+					words[w] = (short)(c << 8);
+				}
+			}
+			
+			attr = new UninterpretedAttribute(FsConstants.attrStarOwner);
+			attr.add(len);
+			for (int i = 0; i < words.length; i++) {
+				attr.add(words[i]);
+			}
+			fe.getUninterpretedAttributes().add(attr);
+		}
 	}
 	
 	private void checkParentRelation(FileEntry fe) {

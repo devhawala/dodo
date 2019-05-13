@@ -90,4 +90,10 @@ public final class FsConstants {
 	 * size
 	 */
 	public static final int pageSizeBytes = 512;
+	
+	/*
+	 * Known uninterpreted attributes
+	 */
+	
+	public static final long attrStarOwner = 4351;
 }

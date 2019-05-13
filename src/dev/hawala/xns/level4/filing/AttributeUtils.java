@@ -77,13 +77,18 @@ public class AttributeUtils {
 			FilingCommon.AccessEntry fa = acl.entries.add();
 			fa.key.from(a.key);
 			if (a.access == FsConstants.fullAccess) {
-				fa.access.add().set(AccessType.fullAccess);
+				//fa.access.add().set(AccessType.fullAccess);
+				fa.access.add().set(AccessType.readAccess);
+				fa.access.add().set(AccessType.writeAccess);
+				fa.access.add().set(AccessType.ownerAccess);
+				fa.access.add().set(AccessType.addAccess);
+				fa.access.add().set(AccessType.removeAccess);
 			} else {
-				if ((a.access & FsConstants.addAccess) != 0) { fa.access.add().set(AccessType.addAccess); }
-				if ((a.access & FsConstants.writeAccess) != 0) { fa.access.add().set(AccessType.writeAccess); }
 				if ((a.access & FsConstants.readAccess) != 0) { fa.access.add().set(AccessType.readAccess); }
+				if ((a.access & FsConstants.writeAccess) != 0) { fa.access.add().set(AccessType.writeAccess); }
+				if ((a.access & FsConstants.ownerAccess) != 0) { fa.access.add().set(AccessType.ownerAccess); }
+				if ((a.access & FsConstants.addAccess) != 0) { fa.access.add().set(AccessType.addAccess); } 
 				if ((a.access & FsConstants.removeAccess) != 0) { fa.access.add().set(AccessType.removeAccess); }
-				if ((a.access & FsConstants.ownerAccess) != 0) { fa.access.add().set(AccessType.ownerAccess); } 
 			}
 		}
 		Attribute attr = s.value.add();

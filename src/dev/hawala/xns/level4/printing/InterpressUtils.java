@@ -528,7 +528,11 @@ public class InterpressUtils {
 						break;
 					case SEQ_IDENTIFIER: {
 							if (forPsConv) {
-								dest.printf("%s/%s\n", indent, new String(seqData));
+								String identifier = new String(seqData);
+								if ("XC82-0-0".equals(identifier)) {
+									identifier = "XC1-1-1"; // map XDE's preferred charset to one known by the IP-to-PS processor
+								}
+								dest.printf("%s/%s\n", indent, identifier);
 								sep = indent;
 							} else {
 								sep = this.dumpString("Identifier", sep, indent, seqData, dest);

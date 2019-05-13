@@ -114,10 +114,14 @@ public abstract class AuthChsCommon extends CrProgram {
 		
 		public ThreePartName from(String fqn) {
 			String[] parts = fqn.split(":");
-			if (parts.length != 3) {
-				throw new IllegalArgumentException("Full qualified (distinguished) name does not contain 3 components");
+			if (parts.length > 3) {
+				throw new IllegalArgumentException("Full qualified (distinguished) name has more than 3 components");
 			}
-			return this.from(parts[0], parts[1], parts[2]);
+			return this.from(
+						(parts.length > 0) ? parts[0] : "",
+						(parts.length > 1) ? parts[1] : "", 
+						(parts.length > 2) ? parts[2] : ""
+						);
 		}
 		
 		public ThreePartName from(ThreePartName name) {

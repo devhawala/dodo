@@ -158,8 +158,7 @@ and work as expected for single files and sets of files:
 
 Copying and moving files and folders between a file service and the local
 desktop works as expected, as well as opening the properties window
-for items on the file service, as long as these items are inside a
-*file drawer* (see below: Known problems).
+for items on the file service.
 
 Logging off with "move desktop to file service" and later logging on again
 with the restored desktop also works.
@@ -200,5 +199,4 @@ if the pattern or the file name contain non-ascii characters
 
 #### Known problems
 
-- GVWin: trying to open the properties window for a *File drawer* (root folder in the file service)
-will (always) fail ("Courier error: parameterInconsistency", "NSFile handle problem: obsolete")
+(currently none so far)
