@@ -336,9 +336,7 @@ public class Clearinghouse3Impl {
 	private static void lookupObject(
 							Clearinghouse3.LookupObjectParams params,
 							Clearinghouse3.DistinguishedObjectResults results) {
-		StringBuilder sb = new StringBuilder();
-		String paramsString = params.append(sb, "", "params").toString();
-		Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject(), %s \n", paramsString);
+		Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject() for name: %s \n", params.name.getString());
 		
 		// authentication
 		checkCredentials("lookupObject", params.agent);
@@ -352,9 +350,7 @@ public class Clearinghouse3Impl {
 			err.raise();
 		}
 		
-		sb.setLength(0);
-		String resultsString = results.append(sb, "", "results").toString();
-		Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject(), %s \n", resultsString);
+		Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject(), results.distinguishedObject: %s \n", results.distinguishedObject.getString());
 	}
 	
 	

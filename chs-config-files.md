@@ -45,7 +45,7 @@ when verifying strong keys for authentication, allowing to logon to services
 even if clocks are not synchronized for all machines on the network.    
 (this parameter is intended to be used with DarkStar, which has network support
 since version 1.0.0.1, but possibly has deviating time settings depending on the
-timezone resp. settings for the hosting OS)    
+timezone resp. settings for the hosting OS, e.g. due to Y2K compatibility restrictions)    
 _optional_, _default_: `false`
 
 Remark: If `startChsAndAuthServices` is `true`, then specifying the optional command

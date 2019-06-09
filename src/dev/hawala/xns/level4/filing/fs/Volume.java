@@ -787,10 +787,12 @@ public class Volume {
 			byte[] buffer = new byte[512];
 			int bytesTransferred;
 			while((bytesTransferred = bis.read(buffer)) > 0) {
-				contentSink.write(buffer, bytesTransferred);
+				if (contentSink.write(buffer, bytesTransferred) < bytesTransferred) {
+					throw new IOException("BulkTransfer aborted by other end (NoMoreWriteSpaceException)");
+				}
 			}
 		} finally {
-			contentSink.write(null,  0); // signal EOF
+			contentSink.write(null,  0); // signal EOF and cleanup
 		}
 	}
 	

@@ -42,7 +42,7 @@ import dev.hawala.xns.level3.courier.LONG_INTEGER;
 import dev.hawala.xns.level3.courier.RECORD;
 import dev.hawala.xns.level3.courier.SEQUENCE;
 import dev.hawala.xns.level3.courier.STRING;
-import dev.hawala.xns.level3.courier.StreamOf;
+import dev.hawala.xns.level3.courier.StreamOfUnspecified;
 import dev.hawala.xns.level3.courier.UNSPECIFIED;
 import dev.hawala.xns.level3.courier.UNSPECIFIED2;
 import dev.hawala.xns.level3.courier.WireSeqOfUnspecifiedReader;
@@ -864,7 +864,7 @@ public abstract class FilingCommon extends CrProgram {
 	 *   children: SEQUENCE OF SerializedTree ];
 	 */
 	public static class Content extends RECORD {
-		public final StreamOf<UNSPECIFIED> data = mkStreamOf(256, UNSPECIFIED::make);
+		public final StreamOfUnspecified data = mkMember(StreamOfUnspecified::make);
 		public final BOOLEAN lastByteSignificant = mkBOOLEAN();
 		
 		private Content() {}

@@ -559,7 +559,7 @@ public class DodoTest {
 	private static void testTimeService() throws XnsException {
 		localSite.pexListen(
 				IDP.KnownSocket.TIME.getSocket(), 
-				new TimeServiceResponder(0));
+				new TimeServiceResponder(0, 0));
 		
 		byte[] requestData = { 0x00, 0x02, 0x00, 0x01 };
 		Payload response = localSite.pexRequest(

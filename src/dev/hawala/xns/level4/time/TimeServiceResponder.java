@@ -44,6 +44,9 @@ public class TimeServiceResponder implements iPexResponder {
 	private final short offsetHours;
 	private final short offsetMinutes;
 	
+	// milliseconds to wait before sending the response
+	private final int sendingTimeGap;
+	
 	/**
 	 * Initialize the internal time service with the time zone information
 	 * (without DST, meaning if DST is active, the {@code gmtOffsetMinutes}
@@ -53,8 +56,9 @@ public class TimeServiceResponder implements iPexResponder {
 	 * 		minutes, with positive values being to the east and negative
 	 * 		to the west (e.g. Germany is +60 without DST and +120 with DST
 	 * 		whereas Alaska is -560 without DST resp -480 with DST).
+	 * @param sendingTimeGap milliseconds to wait before sending the response 
 	 */
-	public TimeServiceResponder(int gmtOffsetMinutes) {
+	public TimeServiceResponder(int gmtOffsetMinutes, int sendingTimeGap) {
 		if (gmtOffsetMinutes >= 0) {
 			this.direction = 1;
 		} else {
@@ -64,6 +68,7 @@ public class TimeServiceResponder implements iPexResponder {
 		gmtOffsetMinutes = gmtOffsetMinutes % 720;
 		this.offsetHours = (short)(gmtOffsetMinutes / 60);
 		this.offsetMinutes = (short)(gmtOffsetMinutes % 60);
+		this.sendingTimeGap = sendingTimeGap;
 	}
 
 	@Override
@@ -84,6 +89,11 @@ public class TimeServiceResponder implements iPexResponder {
 			Log.L2.printf(null, "TimeServiceResponder.handlePacket(): not a time request, sending back error\n");
 			errorSender.sendError(ErrorCode.INVALID_PACKET_TYPE, 0);
 			return;
+		}
+		
+		// delay response if requested
+		if (this.sendingTimeGap > 0) {
+			try { Thread.sleep(this.sendingTimeGap); } catch (InterruptedException ie) {}
 		}
 		
 		// time data

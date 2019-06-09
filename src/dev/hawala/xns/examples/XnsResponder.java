@@ -252,7 +252,7 @@ public class XnsResponder {
 		if (doTimeSvc) {
 			localSite.pexListen(
 					IDP.KnownSocket.TIME.getSocket(), 
-					new TimeServiceResponder(localTimeOffsetMinutes));
+					new TimeServiceResponder(localTimeOffsetMinutes, 0));
 		}
 		
 		// routing protocol responder

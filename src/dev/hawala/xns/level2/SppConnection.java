@@ -61,13 +61,105 @@ import dev.hawala.xns.network.iSocketUnbinder;
 public class SppConnection {
 	
 	/*
-	 * items for automatic re-sending unacknowledged packets
+	 * transmission throttling parameter
+	 */
+	private static long SENDING_TIMEGAP = 5;
+	
+	/**
+	 * Milliseconds to wait for transmitting next packet after having sent
+	 * a packet.
+	 * <br/>Default is 5 msecs.
+	 * 
+	 * @param gapMs milliseconds between 2 packets sent
+	 */
+	public static void setSendingTimeGap(long gapMs) {
+		SENDING_TIMEGAP = gapMs;
+	}
+	
+	/*
+	 * parameters for automatic re-sending unacknowledged packets mechanism
+	 * (externally customizable for all SPP connections)
 	 */
 	
-	private static final int HANDSHAKE_CHECK_INTERVAL = 10; // ms, wake up interval to check for acknowledgments and resends
-	private static final int HANDSHAKE_SENDACK_COUNTDOWN = 3; // check intervals, giving 20..30 ms processing delay before sending ack packet
-	private static final int HANDSHAKE_RESEND_COUNTDOWN = 8; // check intervals, giving the other side 10..20 ms before we resend unacknowledged packets
-	private static final int HANDSHAKE_MAX_RESENDS = 5; // max. resend cycles before the connection is considered dead and hard-closed from this side
+	private static int HANDSHAKE_CHECK_INTERVAL = 10;
+	private static int HANDSHAKE_SENDACK_COUNTDOWN = 4;
+	private static long RESEND_DELAY = 20;
+	private static int HANDSHAKE_RESEND_COUNTDOWN = 50;
+	private static int HANDSHAKE_MAX_RESENDS = 5;
+	private static int RESEND_PACKET_COUNT = 2; 
+	
+	/**
+	 * milliseconds, wake up interval of the common thread for checks
+	 * for acknowledgments (requested by other end) and packet resends
+	 * (missing acknowledgments from the other rend). Default is 10 msecs,
+	 * changing this value may make it necessary to adjust other configurable values.
+	 *  
+	 * @param intervalMs check interval in msecs 
+	 */
+	public static void setHandshakeCheckInterval(int intervalMs) {
+		HANDSHAKE_CHECK_INTERVAL = intervalMs;
+	}
+
+	/**
+	 * Number of check intervals after receiving the others send-ack before sending our ack packet.
+	 * <br/>Default is 4, giving the local service 30..40 ms processing time to react on the ingone
+	 * data and sending result data packets before the ack-packet from our side is sent.
+	 * 
+	 * @param count check interval count from ack-request to ack-send
+	 */
+	public static void setHandshakeSendackCountdown(int count) {
+		HANDSHAKE_SENDACK_COUNTDOWN = count;
+	}
+	
+	/**
+	 * Milliseconds after a packet send before sending the acknowledge-request on missing acknowledge,
+	 * initiating our resend standard procedure.
+	 * <br/>Default is 20 msecs.
+	 * 
+	 * @param delayMs milliseconds after a packet sent before requesting the acknowledge if none arrived.
+	 */
+	public static void setResendDelay(long delayMs) {
+		RESEND_DELAY = delayMs;
+	}
+	
+	/**
+	 * Number of check intervals after sending our request for acknowledgment before
+	 * starting resending our packets if no acknowledge arrives in the meantime.
+	 * <br/> Default is 50, giving the other side about 500 ms before we resend some
+	 * of the unacknowledged packets.
+	 * 
+	 * @param count check interval counts after our ack-request before starting the resend
+	 */
+	public static void setHandshakeResendCountdown(int count) {
+		HANDSHAKE_RESEND_COUNTDOWN = count;
+	}
+	
+	/**
+	 * Max. number of resend cycles without acknowledge from the other side before the
+	 * connection is considered dead and hard-closed from this side.
+	 * <br/>Default is 5.
+	 * 
+	 * @param count number of vain resend cycles before considering a connection dead.
+	 */
+	public static void setHandshakeMaxResends(int count) {
+		HANDSHAKE_MAX_RESENDS = count;
+	}
+	
+	/**
+	 * Max. number of packets (starting with the oldest i.e. lowest sequence number) in
+	 * one resend cycle.
+	 * <br/>Default is 2.
+	 * 
+	 * @param count
+	 */
+	public static void setResendPacketCount(int count) {
+		RESEND_PACKET_COUNT = count;
+	}
+	
+	/*
+	 * items for automatic re-sending unacknowledged packets
+	 * (thread supervising all SPP connections)
+	 */
 	
 	private static List<SppConnection> activeConnections = null;
 	
@@ -179,15 +271,13 @@ public class SppConnection {
 	
 	private final List<Byte> pendingAttentions = new ArrayList<>();
 	
-	// resend unacknowledged packets management
-	private static final long RESEND_INTERVAL = 25; // ms
-	private long noResendBefore = System.currentTimeMillis();
+	// resend unacknowledged packets management for *this* connection
+	private long noResendBefore = System.currentTimeMillis(); // gets currentTimeMillis() + RESEND_INTERVAL after each packet sent 
 	private int ackCountdown = 0; // when > 0: sent ack packet when counted down to 0
 	private int resendCountdown = 0x7FFFFFFF;
 	private int resendRetries = 0;
 	
 	// transmission throttling for *this* connection
-	private static long sendingTimeGap = 3;               // ms to wait for next packet
 	private long nextSendTS = System.currentTimeMillis(); // timestamp when next spp packet "may" be transmitted
 	
 	// connection initiated here
@@ -340,7 +430,6 @@ public class SppConnection {
 						if (!this.otherRequestedClose) {
 							SPP closeAck = this.fillSppConnectionData(new SPP());
 							closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-//							this.transmitPacket(closeAck.idp);
 							this.sendSequencedOOB(closeAck);
 							Log.L3.printf(this.intro, "** handleIngonePacket(): sent final close-ack (as close-initiator)\n");
 						}
@@ -353,7 +442,6 @@ public class SppConnection {
 						// we send our confirmation and wait for others confirmation 
 						SPP closeAck = this.fillSppConnectionData(new SPP());
 						closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-//						this.transmitPacket(closeAck.idp);
 						this.sendSequencedOOB(closeAck);
 						this.otherRequestedClose = true;
 						Log.L3.printf(this.intro, "** handleIngonePacket(): received close-request while waiting for close-ack, sent close-ack\n");
@@ -410,22 +498,7 @@ public class SppConnection {
 				if (sst == SST_CLOSE_REQUEST) {
 					Log.L3.printf(this.intro, "** handleIngonePacket(): seen close-request\n");
 				}
-				
-//				// handle closing the connection
-//				if (sst == SST_CLOSE_REQUEST) {
-//					if (spp.isSendAcknowledge()) { // BSD-4.3 sends SST=0xFE with a SendAck flag... 
-//						SPP ack = this.fillSppConnectionData(new SPP()).asSystemPacket();
-//						this.transmitPacket(ack.idp);
-//					}
-//					this.state = State.CLOSING;
-//					this.otherRequestedClose = true;
-//					SPP closeAck = this.fillSppConnectionData(new SPP());
-//					closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-//					this.transmitPacket(closeAck.idp);
-//					Log.L3.printf(this.intro, "** closeConnection(): received close-request, sent close-ack\n");
-//					return; // as we are closing, anything ingoing is ignored from now
-//				}
-				
+								
 				// interpret connection control flags
 				if (spp.isSendAcknowledge() && this.ackCountdown == 0) {
 					// enlist sending acknowledgment if not already pending
@@ -433,15 +506,13 @@ public class SppConnection {
 					doNotify = true;
 				}
 				if (spp.isAttention()) {
-//					this.signalAttention = true;      
 					if (spp.getPayloadLength() > 0) {
 						this.pendingAttentions.add(spp.rdByte(0));
 					}
-//					return;
 				}
 				if (spp.isSystemPacket()) {
 					// check if the other side may have lost some packet, and if so resend starting with next seqNo expected by the other side...
-					this.checkForResends("other's systemPacket");
+					this.checkForResends("other's systemPacket", 999);
 					
 					return; // system packets are not part of the sequence!
 				}
@@ -675,9 +746,7 @@ public class SppConnection {
 			// check that there is space in the out queue,
 			// possibly waiting and requesting window updates from the other
 			// and resending possibly lost packets
-			int retries = 0;
 			int maxSendWindowLength = Math.min(this.windowLength, 1 + this.outMaxAllowedSeqNo - this.outFirstSeqNo);
-			long lastUpdate = this.lastOthersActivity;
 //			Log.L3.printf("enqueueOutgoingPacket(): this.windowLength       = %d\n", this.windowLength);
 //			Log.L3.printf("enqueueOutgoingPacket(): this.outMaxAllowedSeqNo = %d\n", this.outMaxAllowedSeqNo);
 //			Log.L3.printf("enqueueOutgoingPacket(): this.outFirstSeqNo      = %d\n", this.outFirstSeqNo);
@@ -692,69 +761,13 @@ public class SppConnection {
 				maxSendWindowLength = Math.min(this.windowLength, 1 + this.outMaxAllowedSeqNo - this.outFirstSeqNo);
 			}
 			while(this.outCount >= maxSendWindowLength) {
-				if (lastUpdate == this.lastOthersActivity) {
-					// no response from the other side
-					if (retries == 3) {
-						// after ~ 150ms:
-						// resend all data packets not yet acknowledged in the hope that "only" a lost packet prevents transmission progress...
-//						Log.L3.println("** begin resending data packets");
-						for (int i = 0; i < this.outgoingPackets.length; i++) {
-							SPP reSpp = this.outgoingPackets[i];
-							if (reSpp == null) {
-//								Log.L3.printf("this.outgoingPackets[%d] == null -> done resending\n", i);
-								break;
-							}
-							if (reSpp.getSequenceNumber() >= this.outNextExpectedSeqNo) {
-								this.updateOthersWindowNumbers(reSpp); // refresh the in-window info from our side
-								this.transmitPacket(reSpp.idp);
-//								Log.L3.printf("SppConnection - resent packet/data - seqNo = %d\n", reSpp.getSequenceNumber());
-							}
-						}
-//						Log.L3.println("** done resending data packets");
-					} else {
-						// no update => request (again) current window state..
-						this.requestAcknowledge();
-//						Log.L3.printf("SppConnection - sent packet/system+sendAck - retries = %d\n", retries+1);
-					}
-					// TODO: decide when a connection is dead and disallow any other activity with it...
-					retries++;
-				} else {
-					// the other side responded, but still no room there
-					// => restart polling
-					retries = 0;
-					lastUpdate = this.lastOthersActivity;
-				}
 				this.wait(50); // wait for notification but max. more 50ms
 				if (this.state == State.CLOSED || this.state == State.CLOSING) {
 					return -1;
 				}
 				this.cleanupOutgoingQueue();
-				maxSendWindowLength = Math.min(this.windowLength, 1 + this.outMaxAllowedSeqNo - this.outFirstSeqNo);
-				
-//				if (lastUpdate == this.lastOthersActivity && retries < 3) {
-//					// no update => request current window state..
-//					SPP sendAck = this.fillSppConnectionData(new SPP()).asSystemPacket().asSendAcknowledge();
-//					this.transmitPacket(sendAck.idp);
-//					retries++;
-//					Log.L3.printf("SppConnection - sent packet/system+sendAck - retries = %d\n", retries);
-//				} else if (retries < 3) {
-//					// window state was updated but still no room at others side => re-send possibly lost packets
-//					for (int i = 0; i < this.outgoingPackets.length; i++) {
-//						SPP reSpp = this.outgoingPackets[i];
-//						if (reSpp == null) { break; }
-//						if (reSpp.getSequenceNumber() >= this.outNextExpectedSeqNo) {
-//							this.fillSppConnectionData(reSpp); // refresh the in-window info from our side
-//							this.transmitPacket(reSpp.idp);
-//							Log.L3.printf("SppConnection - resent packet/data - seqNo = %d\n", reSpp.getSequenceNumber());
-//						}
-//					}
-//					retries = 0;
-//				}
-//				
-//				lastUpdate = this.lastOthersActivity;
-//				this.wait(50); // wait for notification but max. more 50ms
+				maxSendWindowLength = Math.min(this.windowLength, 1 + this.outMaxAllowedSeqNo - this.outFirstSeqNo);				
 			}
-//			Log.L3.printf("enqueueOutgoingPacket(): NOW:: this.outCount(%d) < maxSendWindowLength(%d)\n", this.outCount, maxSendWindowLength);
 			
 			// prepare outgoing packet, put the new packet in the out queue and send it
 			int seqNo = this.myNextSeqNo++;
@@ -769,7 +782,7 @@ public class SppConnection {
 			if (isEndOfMessage) { spp.asEndOfMessage(); }
 			this.outgoingPackets[this.outCount++] = spp;
 			this.transmitPacket(spp.idp);
-			this.noResendBefore = System.currentTimeMillis() + RESEND_INTERVAL;
+			this.noResendBefore = System.currentTimeMillis() + RESEND_DELAY;
 			Log.L3.printf(this.intro, "enqueueOutgoingPacket(): ---------------- sent data packet - seqNo = %d\n", spp.getSequenceNumber());
 			String s = "enqueueOutgoingPacket(): outQueue = [ ";
 			for (int i = 0; i < this.outgoingPackets.length; i++) {
@@ -947,7 +960,7 @@ public class SppConnection {
 			now = System.currentTimeMillis();
 		}
 		this.idpSender.send(idp);
-		this.nextSendTS = now + sendingTimeGap;
+		this.nextSendTS = now + SENDING_TIMEGAP;
 	}
 	
 	public void requestAcknowledge() {
@@ -955,7 +968,7 @@ public class SppConnection {
 		this.transmitPacket(ackReq.idp);
 	}
 	
-	private void checkForResendUnacknowledgedPackets(String actor) {
+	private void checkForResendUnacknowledgedPackets(String actor, int maxResentPackets) {
 		if (this.resendCountdown <= 0) {
 			// no send pending resp. no ack requested
 			return;
@@ -971,16 +984,22 @@ public class SppConnection {
 		long now = System.currentTimeMillis();
 		int othersAckNo = this.outNextExpectedSeqNo;
 		System.out.printf("!!!!!!!!!!! begin resending un-acknowledged packets starting with seqNo %d (actor: %s)\n", othersAckNo, actor);
+		int packetsResent = 0;
 		for (int i = 0; i < this.outgoingPackets.length; i++) {
 			SPP resendSpp = this.outgoingPackets[i];
 			if (resendSpp == null || resendSpp.getSequenceNumber() < othersAckNo) { continue; }
 			this.updateOthersWindowNumbers(resendSpp);
+			resendSpp.asSendAcknowledge();
 			this.transmitPacket(resendSpp.idp);
 			System.out.printf("!!!!!! resent packet with seqNo %d\n", resendSpp.getSequenceNumber());
+			packetsResent++;
+			if (packetsResent >= maxResentPackets) {
+				break; // max. number of packets in a resend chunk reached
+			}
 		}
 		System.out.printf("!!!!!!!!!!! done resending un-acknowledged packets starting with seqNo %d\n", othersAckNo);
 		
-		this.noResendBefore = now + RESEND_INTERVAL;
+		this.noResendBefore = now + RESEND_DELAY;
 		this.resendRetries++;
 	}
 	
@@ -991,7 +1010,7 @@ public class SppConnection {
 		if (othersAckNo >= this.myNextSeqNo) {
 			// all is acknowledged, so cancel any resend activity
 			this.resendCountdown = 0;
-			this.noResendBefore = now + RESEND_INTERVAL;
+			this.noResendBefore = now + RESEND_DELAY;
 			return;
 		}
 		
@@ -1014,9 +1033,10 @@ public class SppConnection {
 		}
 	}
 	
-	private void checkForResends(String actor) {
+	// must be call synchronized
+	private void checkForResends(String actor, int maxResentPackets) {
 		this.checkForRequestAcknowledgment();
-		this.checkForResendUnacknowledgedPackets(actor);
+		this.checkForResendUnacknowledgedPackets(actor, maxResentPackets);
 	}
 	
 	private synchronized void handleHandshakes() {
@@ -1035,7 +1055,7 @@ public class SppConnection {
 		}
 		
 		// request acks (other -> here) & packet resends
-		this.checkForResends("handshake thread");
+		this.checkForResends("handshake thread", RESEND_PACKET_COUNT);
 	}
 	
 }

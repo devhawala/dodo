@@ -191,7 +191,7 @@ public class Authentication2Impl {
 							Authentication2.GetStrongCredentialsParams params,
 							Authentication2.GetStrongCredentialsResults results) {
 		StringBuilder sb = new StringBuilder();
-		String paramsString = params.append(sb, "", "params").toString();
+		String paramsString = sb.append("(omitted)").toString(); // params.append(sb, "", "params").toString();
 		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials(), %s \n", paramsString);
 		
 		// get the strong passwords
@@ -236,9 +236,9 @@ public class Authentication2Impl {
 	}
 	
 	private static void logObject(iWireData data, String prefix) {
-		StringBuilder sb = new StringBuilder();
-		data.append(sb, "   ", prefix);
-		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials() ::\n%s \n", sb.toString());
+//		StringBuilder sb = new StringBuilder();
+//		data.append(sb, "   ", prefix);
+//		Log.C.printf("Auth2", "Authentication2Impl.getStrongCredentials() ::\n%s \n", sb.toString());
 	}
 	
 	private static byte[] getStrongPw(Name forName, Which which) {

@@ -69,6 +69,7 @@ public class ByteContentSink implements iContentSink {
 			}
 		} catch (NoMoreWriteSpaceException e) {
 			System.out.println("ByteContentSink => got NoMoreWriteSpaceException");
+			return -1;
 		}
 		return transferred;
 	}

@@ -330,20 +330,23 @@ Dodo was successfully tested in several environments with different emulators, w
 and optionally to verify that Clearinghouse entries can be searched resp. queried,
 e.g. under XDE using the `Maintain.bcd` program or by navigating the network
 directory under GlobalView (see the examples section in the
-[clearinghouse configuration](./chs-config-files.md) document.
+[clearinghouse configuration](./chs-config-files.md) document. For Printing and Filing services
+the client OS typical operations (XDE: print.bcd, FileTool with Retrieve!, Store! Remote-Delete!,
+GVWin: printing documents, copy/move/props on remote files, documents and folders) are routinely
+tested.  
 
 The following environments were tested with Dodo server and nethub, using the
 default Clearinghouse database found in `dist.zip`:
 
-- Dwarf emulator on Windows-Vista (32 bit) and Linux-Mint (64 bit) on a Core2Duo 2.4 GHz    
+- [Dwarf](https://github.com/devhawala/dwarf) emulator on Windows-Vista (32 bit) and Linux-Mint (64 bit) on a Core2Duo 2.4 GHz    
 both XDE and GlobalView work; all components (Dwarf, Dodo server and nethub)
 run on the same (hardware) machine
 
-- Guam-Emulator with an experimental NetworkAgent on a Core2Duo 2.4 GHz with Linux Mint    
-the emulator's NetworkAgent was modified for directly connecting to a local Nethub;
-connection to Dodo was tested with XDE
+- [Guam-Emulator](https://github.com/yokwe/mesa-emulator) by Yasuhiro Hasegawa with an experimental NetworkAgent
+on a Core2Duo 2.4 GHz with Linux Mint the emulator's NetworkAgent was modified for directly
+connecting to a local Nethub; connection to Dodo was tested with XDE
 
-- Don Woodward's Dawn-emulator with Dawn's XNS driver and XDE disk    
+- Don Woodward's [Dawn](http://www.woodward.org/mps/)-emulator with Dawn's XNS driver and XDE disk    
 The following configuration was used:
     - real hardware: Laptop with 2.4 GHz Core2Duo processor
 	- ... running Windows-Vista 32 bit as host OS
@@ -364,8 +367,17 @@ system (a meanwhile outdated beta version).
 BSD 4.3 has the program `xnsbfs` allowing to do the Broadcast for Servers request (either for
 clearinghouse ot authentication servers) and then invoke the "list domains served" Courier
 request.    
-Other XNS programs in BSD 4.3 were not tested, as requiring "higher" XNS functionality not yet
-provided by Dodo.
+Other XNS programs in BSD 4.3 were not tested so far.
+
+- [Darkstar](https://github.com/livingcomputermuseum/Darkstar) (8010 emulator version 1.0.0.1 by Josh Dersch / Living Computer Museum)    
+Tested under Windows-7, configuration: NetHub with NetHubGateway and Dodo server, Darkstar
+running the Viewpoint 2.0 disk.    
+Setting time from network at 0937 does not work for unknown reasons,
+so setting Dodo's `authSkipTimestampChecks` configuration parameter to `true` is
+required for authentication with CHS/Auth and accessing the XNS network.    
+Besides this, using file and print services with Darkstar/Viewpoint-2.0 work as for GlobalView,
+however at about the speed as in the 80's (i.e. slow) with real 8010's for workstations and servers
+(Darkstar running in average at ~130% speed according to the status line) 
 
 
 ### Bibliography
@@ -390,6 +402,20 @@ still missing, like Mail protocols)
     - [Services_8.0_Filing_Programmers_Manual_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Filing_Programmers_Manual_Nov84.pdf)
 
 ### Development history
+
+- 2019-06-09    
+-- reworked acknowledge and resend machinery for SPP connections    
+-- added config parameters (development only) for SPP connections control (acks and packet resends)    
+-- fine-tuned SPP parameters to reduce resends in general, preventing flooding Darkstar with resends in particular    
+-- serialized file operations now use a specific implementation equivalent for `StreamOf<UNSPECIFIED>` with a much smaller heap footprint and probably faster.    
+-- bugfix: corrected bulk data transfer to prevent file content retrieves to be rounded up to even byte count length (for XDE)    
+-- bugfix: corrected handling for abort of file content transmission by client (for XDE)    
+-- added configuration to time service for response throttling (intended for Darkstar, but did not help setting time at 0937)
+
+- 2019-05-13    
+bugfixes to file service    
+-- properties sheet for root file drawers now works    
+-- properties sheet for objects with an 'createdBy' which is not a full 3-part-name (e.g. "catalogImpl") now works
 
 - 2019-05-11    
 added first limited but working version of xns filing services    

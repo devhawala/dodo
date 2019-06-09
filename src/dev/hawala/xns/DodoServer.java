@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import dev.hawala.xns.level1.IDP;
+import dev.hawala.xns.level2.SppConnection;
 import dev.hawala.xns.level3.courier.CourierServer;
 import dev.hawala.xns.level4.auth.Authentication2Impl;
 import dev.hawala.xns.level4.auth.BfsAuthenticationResponder;
@@ -73,8 +74,10 @@ public class DodoServer {
 	private static boolean doChecksums = true;
 	private static String netHubHost = "localhost";
 	private static int netHubPort = 3333;
+	
 	private static int localTimeOffsetMinutes = 0;
 	private static int daysBackInTime = 0;
+	private static int timeServiceSendingTimeGap = 0;
 	
 	private static boolean startEchoService = true;
 	private static boolean startTimeService = true;
@@ -94,6 +97,14 @@ public class DodoServer {
 	private static boolean printServiceDisassembleIp = false;
 	private static String printServiceIp2PsProcFilename = null;
 	private static String printServicePsPostprocessor = null;
+	
+	private static int sppHandshakeCheckInterval = -1;
+	private static int sppHandshakeSendackCountdown = -1;
+	private static int sppHandshakeResendCountdown = -1;
+	private static int sppHandshakeMaxResends = -1;
+	private static int sppResendDelay = -1;
+	private static int sppSendingTimeGap = -1;
+	private static int sppResendPacketCount = -1;
 	
 	// startFileServer = fileServiceSpecs.size() > 0
 	private static Map<String,String> fileServiceSpecs = new HashMap<>();
@@ -117,8 +128,12 @@ public class DodoServer {
 		doChecksums = props.getBoolean("useChecksums", doChecksums);
 		netHubHost = props.getString("netHubHost", netHubHost);
 		netHubPort = props.getInt("netHubPort", netHubPort);
+		
 		localTimeOffsetMinutes = props.getInt("localTimeOffsetMinutes", localTimeOffsetMinutes);
+		localTimeOffsetMinutes = props.getInt("timeService.localTimeOffsetMinutes", localTimeOffsetMinutes);
 		daysBackInTime = props.getInt("daysBackInTime", daysBackInTime);
+		daysBackInTime = props.getInt("timeService.daysBackInTime", daysBackInTime);
+		timeServiceSendingTimeGap = props.getInt("timeService.sendingTimeGap", timeServiceSendingTimeGap);
 		
 		startEchoService = props.getBoolean("startEchoService", startEchoService);
 		startTimeService = props.getBoolean("startTimeService", startTimeService);
@@ -148,6 +163,14 @@ public class DodoServer {
 			fileServiceSpecs.put(serviceThreepartName, serviceVolumePath);
 			fileSvcIdx++;
 		}
+		
+		sppHandshakeCheckInterval = props.getInt("spp.handshakeCheckInterval", -1);
+		sppHandshakeSendackCountdown = props.getInt("spp.handshakeSendackCountdown", -1);
+		sppHandshakeResendCountdown = props.getInt("spp.handshakeResendCountdown", -1);
+		sppHandshakeMaxResends = props.getInt("spp.handshakeMaxResends", -1);
+		sppResendDelay = props.getInt("spp.resendDelay", -1);
+		sppSendingTimeGap = props.getInt("spp.sendingTimeGap", -1);
+		sppResendPacketCount = props.getInt("spp.resendPacketCount", -1);
 		
 		// do verifications
 		boolean outcome = true;
@@ -211,6 +234,15 @@ public class DodoServer {
 			return;
 		}
 		
+		// configure SPP resend / acknowledge technical parameters, if any
+		if (sppHandshakeCheckInterval > 0) { SppConnection.setHandshakeCheckInterval(sppHandshakeCheckInterval); }
+		if (sppHandshakeSendackCountdown > 0) { SppConnection.setHandshakeSendackCountdown(sppHandshakeSendackCountdown); };
+		if (sppHandshakeResendCountdown > 0) { SppConnection.setHandshakeResendCountdown(sppHandshakeResendCountdown); }
+		if (sppHandshakeMaxResends > 0) { SppConnection.setHandshakeMaxResends(sppHandshakeMaxResends); }
+		if (sppResendDelay >= 0) { SppConnection.setResendDelay(sppResendDelay); }
+		if (sppResendPacketCount >= 0) { SppConnection.setResendPacketCount(sppResendPacketCount); }
+		if (sppSendingTimeGap >= 0) { SppConnection.setSendingTimeGap(sppSendingTimeGap); }
+		
 		// configure and start the network engine
 		LocalSite.configureHub(netHubHost, netHubPort);
 		LocalSite.configureLocal(networkNo, machineId, "DodoServer", doChecksums);
@@ -230,7 +262,7 @@ public class DodoServer {
 		if (startTimeService) {
 			localSite.pexListen(
 					IDP.KnownSocket.TIME.getSocket(), 
-					new TimeServiceResponder(localTimeOffsetMinutes));
+					new TimeServiceResponder(localTimeOffsetMinutes, timeServiceSendingTimeGap));
 		}
 		
 		// routing protocol responder

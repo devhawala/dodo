@@ -38,7 +38,6 @@ import dev.hawala.xns.level3.courier.CHOICE;
 import dev.hawala.xns.level3.courier.CourierRegistry;
 import dev.hawala.xns.level3.courier.RECORD;
 import dev.hawala.xns.level3.courier.StreamOf;
-import dev.hawala.xns.level3.courier.UNSPECIFIED;
 import dev.hawala.xns.level3.courier.WireWriter;
 import dev.hawala.xns.level3.courier.iWireData;
 import dev.hawala.xns.level3.courier.iWireStream;
@@ -109,6 +108,8 @@ import dev.hawala.xns.level4.filing.FilingCommon.SessionProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.SpaceErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.SpaceProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.StoreParams;
+import dev.hawala.xns.level4.filing.FilingCommon.TransferErrorRecord;
+import dev.hawala.xns.level4.filing.FilingCommon.TransferProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.UndefinedErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.iWireStreamForSerializedTree;
 import dev.hawala.xns.level4.filing.fs.FileEntry;
@@ -944,7 +945,8 @@ public class FilingImpl {
 			ByteContentSink sink = new ByteContentSink(params.content);
 			vol.retrieveContent(fe.getFileID(), sink, session.getUsername());
 		} catch (NoMoreWriteSpaceException | IOException e) {
-			new ConnectionErrorRecord(ConnectionProblem.otherCallProblem).raise();
+			log("##  Filing.Retrieve() => %s : %s\n", e.getClass().getName(), e.getMessage());
+			new TransferErrorRecord(TransferProblem.aborted).raise();
 		}
 	}
 	
@@ -1053,7 +1055,6 @@ public class FilingImpl {
 		
 		private boolean atWordStart = true;
 		private int word = 0;
-		private UNSPECIFIED w;
 		
 		private SerializeTreeByteSink(Content content) {
 			this.content = content;
@@ -1062,12 +1063,11 @@ public class FilingImpl {
 		private void putSingleByte(byte b) {
 			if (this.atWordStart) {
 				this.word = (b << 8) & 0xFF00;
-				this.w = this.content.data.add();
-				this.w.set(this.word);
+				this.content.data.add(this.word);
 				this.atWordStart = false;
 			} else {
 				this.word |= (b & 0xFF);
-				this.w.set(this.word);
+				this.content.data.setLast(this.word);
 				this.atWordStart = true;
 			}
 		}
@@ -1104,9 +1104,9 @@ public class FilingImpl {
 		@Override
 		public void beforeContent(SerializedTree node) {
 			try {
-				StringBuilder sb = new StringBuilder();
-				node.attributes.append(sb, "   ", "serializedTree.beforeContent()");
-				System.out.println(sb.toString());
+//				StringBuilder sb = new StringBuilder();
+//				node.attributes.append(sb, "   ", "serializedTree.beforeContent()");
+//				System.out.println(sb.toString());
 				
 				// initialize the content to be empty
 				node.content.data.clear();
@@ -1203,7 +1203,7 @@ public class FilingImpl {
 
 			this.wcount = this.content.data.size();
 			this.remainingBytes = 2 * wcount;
-			if (!this.content.lastByteSignificant.get()) {
+			if (!this.content.lastByteSignificant.get() && this.wcount > 0) {
 				this.remainingBytes--;
 			}
 		}
@@ -1211,7 +1211,7 @@ public class FilingImpl {
 		private byte getByte() {
 			if (this.wpos >= this.wcount) { return 0; }
 			if (this.atWordEnd) {
-				this.word = this.content.data.get(this.wpos++).get();
+				this.word = this.content.data.get(this.wpos++);
 				this.atWordEnd = false;
 				return (byte)((this.word >>> 8) & 0xFF);
 			}
