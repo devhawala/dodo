@@ -403,6 +403,10 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2019-06-13    
+optimization: all file items created in a Deserialize operation (procedure 16) are created in
+a single Volume modification session, reducing the number of metadata delta files
+
 - 2019-06-09    
 -- reworked acknowledge and resend machinery for SPP connections    
 -- added config parameters (development only) for SPP connections control (acks and packet resends)    

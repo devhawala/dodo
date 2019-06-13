@@ -683,7 +683,7 @@ public class FilingImpl {
 		// TODO: check (access-)controls on directory
 		
 		// let the file be created
-		FileEntry fe = createFile(session, dirHandle.getFe().getFileID(), params.attributes, null, null);
+		FileEntry fe = createFile(null, session, dirHandle.getFe().getFileID(), params.attributes, null, null);
 		
 		// prepare results
 		Handle fileHandle = new Handle(session, fe);
@@ -904,7 +904,7 @@ public class FilingImpl {
 		final FileEntry fe;
 		try {
 			ByteContentSource source = new ByteContentSource(params.content);
-			fe = createFile(session, dirHandle.getFe().getFileID(), params.attributes, source, null);
+			fe = createFile(null, session, dirHandle.getFe().getFileID(), params.attributes, source, null);
 		} catch (EndOfMessageException e) {
 			new ConnectionErrorRecord(ConnectionProblem.otherCallProblem).raise();
 			return;
@@ -1177,13 +1177,16 @@ public class FilingImpl {
 		
 		
 		// do the transfer and deserialization
-		SerializedFile deserializedFile = new SerializedFile(
-				ws -> new DeserializeTreeWireStream(ws, dirHandle.getFe().getFileID(), session, results)
-				);
-		try {
+		try (Volume.Session modSession = session.getService().getVolume().startModificationSession()) {
+			SerializedFile deserializedFile = new SerializedFile(
+					ws -> new DeserializeTreeWireStream(ws, dirHandle.getFe().getFileID(), session, results, modSession)
+					);
 			params.serializedFile.receive(deserializedFile);
 		} catch (EndOfMessageException e) {
 			new ConnectionErrorRecord(ConnectionProblem.otherCallProblem).raise();
+		} catch (Exception e) {
+			System.out.printf("!!! Exception: %s -- %s !!!\n", e.getClass().getName(), e.getMessage());
+			new SpaceErrorRecord(SpaceProblem.mediumFull).raise();
 		}
 	}
 	
@@ -1246,13 +1249,17 @@ public class FilingImpl {
 		private boolean hadRootFile = false;
 		private final FileHandleRecord results;
 		
-		private DeserializeTreeWireStream(iWireStream ws, long parentID, Session session, FileHandleRecord results) {
+		private final Volume.Session modSession;
+		
+		private DeserializeTreeWireStream(iWireStream ws, long parentID, Session session, FileHandleRecord results, Volume.Session modSession) {
 			super(ws);
 			this.session = session;
 			this.results = results;
 
 			this.parentIDs.push(parentID); // fallback in case of nesting handling problems
 			this.currentParentId = parentID;
+			
+			this.modSession = modSession;
 		}
 		
 		/*
@@ -1275,6 +1282,7 @@ public class FilingImpl {
 			// if the file cannot be created => throw AbortTransmissionException to abort transmission
 			log("afterContent() -> before createFile()");
 			FileEntry fe = createFile(
+							this.modSession,
 							this.session,
 							this.currentParentId,
 							node.attributes,
@@ -1434,6 +1442,7 @@ public class FilingImpl {
 	}
 	
 	private static FileEntry createFile(
+				Volume.Session modificationSession,
 				Session session,
 				long directoryFileID,
 				AttributeSequence pAttributes,
@@ -1471,19 +1480,29 @@ public class FilingImpl {
 		// create the new file
 		List<iValueSetter> attrSetters = getCourier2FileAttributeSetters(pAttributes);
 		System.out.printf("volStartModificationsession()\n");
-		try (Volume.Session modSession = vol.startModificationSession()) {
+		try {
 			System.out.printf(
 					"createFile( dirId = %d , isdirectory = %s , name = '%s' )\n", 
 					directoryFileID, "" + isDirectory, name);
-			FileEntry fe = modSession.createFile(
-								directoryFileID,
-								isDirectory,
-								name,
-								version,
-								type,
-								session.getUsername(),
-								attrSetters,
-								source);
+			Volume.Session modSession = (modificationSession == null)
+					? vol.startModificationSession()
+					: modificationSession;
+			final FileEntry fe;
+			try {
+				fe = modSession.createFile(
+									directoryFileID,
+									isDirectory,
+									name,
+									version,
+									type,
+									session.getUsername(),
+									attrSetters,
+									source);
+			} finally {
+				if (modificationSession == null) {
+					modSession.close();
+				}
+			}
 			System.out.printf("-> done createFile(): fileID = %d\n", (fe != null) ? fe.getFileID() : -2);
 			return fe;
 		} catch (InterruptedException e) {
