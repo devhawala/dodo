@@ -403,6 +403,10 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2019-07-08    
+bugfix: (Courier-connection) if the client supports more than one protocol version, the server
+must first send the own supported versions before awaiting the first remote procedure call
+
 - 2019-06-13    
 optimization: all file items created in a Deserialize operation (procedure 16) are created in
 a single Volume modification session, reducing the number of metadata delta files

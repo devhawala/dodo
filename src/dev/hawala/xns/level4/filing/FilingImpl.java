@@ -1686,6 +1686,11 @@ public class FilingImpl {
 		public void dropToEOM(byte reqDatastreamType) throws EndOfMessageException {
 			this.ws.dropToEOM(reqDatastreamType);
 		}
+		
+		@Override
+		public void flush() throws NoMoreWriteSpaceException {
+			this.ws.flush();
+		}
 
 		@Override
 		public byte getStreamType() {

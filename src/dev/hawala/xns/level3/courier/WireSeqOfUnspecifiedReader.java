@@ -116,6 +116,11 @@ public class WireSeqOfUnspecifiedReader implements iWireStream {
 	public void dropToEOM(byte reqDatastreamType) {
 		this.rdPos = this.data.size();
 	}
+	
+	@Override
+	public void flush() throws NoMoreWriteSpaceException {
+		// ignored
+	}
 
 	@Override
 	public byte getStreamType() {

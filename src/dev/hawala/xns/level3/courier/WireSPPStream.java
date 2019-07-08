@@ -33,6 +33,7 @@ import dev.hawala.xns.iSppInputStream;
 import dev.hawala.xns.iSppInputStream.iSppReadResult;
 import dev.hawala.xns.iSppOutputStream;
 import dev.hawala.xns.level2.SPP;
+import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 
 /**
  * Implementation of the wire functionality used by Courier (de)serialization
@@ -92,6 +93,12 @@ public class WireSPPStream extends WireBaseStream {
 			this.writePad(); // last write was a single byte at upper nibble position?
 		}
 		this.writeBuf(true);
+	}
+	
+	@Override
+	public void flush() throws NoMoreWriteSpaceException {
+		this.writePad();
+		this.writeBuf(false);
 	}
 
 	@Override

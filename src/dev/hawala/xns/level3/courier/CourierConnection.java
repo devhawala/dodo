@@ -87,6 +87,7 @@ public class CourierConnection {
 			Log.C.printf(this.connId, "CourierConnection - sendVersions: low = high = %d\n", this.courierVersion);
 			this.wireStream.writeI16(this.courierVersion);
 			this.wireStream.writeI16(this.courierVersion);
+			this.wireStream.flush();
 			this.sendVersions = false;
 		}
 		

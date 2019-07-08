@@ -79,6 +79,12 @@ public class WireWriter extends WireBaseStream {
 		}
 		this.bytes[this.currPos++] = (byte)b;
 	}
+	
+	
+	@Override
+	public void flush() throws NoMoreWriteSpaceException {
+		// ignored
+	}
 
 
 	@Override

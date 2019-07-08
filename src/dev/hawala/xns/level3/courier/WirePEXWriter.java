@@ -58,6 +58,11 @@ public class WirePEXWriter extends WireBaseStream {
 		if (this.pex != null) { return; }
 		this.pex = new PEX(this.buffer, 0, this.currIdx);
 	}
+	
+	@Override
+	public void flush() throws NoMoreWriteSpaceException {
+		// ignored, as there is no "intermediate packet" in single-packet-in-and-out Courier
+	}
 
 	@Override
 	public void beginStreamType(byte datastreamType) throws NoMoreWriteSpaceException {

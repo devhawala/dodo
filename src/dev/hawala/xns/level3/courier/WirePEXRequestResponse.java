@@ -92,6 +92,11 @@ public class WirePEXRequestResponse implements iWireStream {
 	public void writeEOM() throws NoMoreWriteSpaceException {
 		this.wrPex.writeEOM();
 	}
+	
+	@Override
+	public void flush() throws NoMoreWriteSpaceException {
+		this.wrPex.flush();
+	}
 
 	@Override
 	public void beginStreamType(byte datastreamType) throws NoMoreWriteSpaceException {

@@ -77,6 +77,11 @@ public class WirePacketReader extends WireBaseStream {
 		// call of write method on reader?
 		throw new NoMoreWriteSpaceException();
 	}
+	
+	@Override
+	public void flush() throws NoMoreWriteSpaceException {
+		// ignored
+	}
 
 	@Override
 	public void beginStreamType(byte datastreamType) throws NoMoreWriteSpaceException {

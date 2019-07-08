@@ -146,6 +146,11 @@ public class MockWireStream implements iWireStream {
 	public void writeEOM() {
 		this.put(EOM);
 	}
+	
+	@Override
+	public void flush() throws NoMoreWriteSpaceException {
+		// not relevant
+	}
 
 	@Override
 	public void beginStreamType(byte datastreamType) {

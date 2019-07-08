@@ -112,9 +112,14 @@ public interface iWireStream {
 	void writeEOM() throws NoMoreWriteSpaceException;
 	
 	/**
+	 * Transmit the data written so far, not closing the current message
+	 * but forcing the stream to a word boundary.
+	 */
+	void flush() throws NoMoreWriteSpaceException;
+	
+	/**
 	 * Switch to stream type, implicitly sending an EOM of the stream type
-	 * changes (resp. ignoring the request if already using this stream type). 
-	 * @return
+	 * changes (resp. ignoring the request if already using this stream type).
 	 */
 	void beginStreamType(byte datastreamType) throws NoMoreWriteSpaceException;
 	
