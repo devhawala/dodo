@@ -5,12 +5,12 @@ Using Dodo XNS file services requires configuration at 3 levels:
 - in the Clearinghouse    
 where file services are defined by associating a network address to a file service name
 
-- for the Dodo server instance(s)
+- for the Dodo server instance(s)    
 by defining which file services are provided by a server instance and where the filing volume
 for each file service is located (in the file system of the hosting computer); as it is intended
 in XNS, a single server can provide several file services
 
-- in each filing volume
+- in each filing volume    
 for defining which root folders (*File drawers* in Star/ViewPoint/GlobalView jargon) are to be
 created if not present
 
@@ -104,16 +104,16 @@ clearinghouse which will need private drawers in the XNS File service. (there ar
 no means to *remove* file drawers)
 
 As the root of a file service volume is always read/only, the file `root-folder.lst`
-is the only means for changing the top-level of the folder hierarchy of a (Dodo) file service. 
+is the only means for changing the top-level of the folder hierarchy of a Dodo file service. 
 
 The file `root-folder.lst` must have one line for each file drawer with the
 following fields separated by (real) tabs:
 
 - name of the file drawer
 - name of the owning user for the drawer (3-part CHS name)    
-this user will also be added to the accessList and defaultAccessList attributes
+this user will also be added to the _accessList_ and _defaultAccessList_ attributes
 with full access permissions
-- tab-separated list of users to be added to the accessList attribute of the drawer    
+- tab-separated list of users to be added to the _accessList_ attribute of the drawer    
 each entry must have the format: `accesscode!3-part-chs-username`    
 the *accesscode* is a single character identifying the permissions for the user
 *3-part-chs-username*, one of `O` for full access (owner), `R` for read access
@@ -123,7 +123,7 @@ a user-group defined in the clearinghouse, or a pattern for an existing domain a
 Example:    
 the following content for the `root-folders.lst` will initialize the volume
 with 2 file drawers, both owned by user `admin:dev:hawala`, granting write access
-to all users in the `:dev:hawala` domain:
+for the second drawer (`test`) to all users in the `:dev:hawala` domain:
 
 	hans    admin:dev:hawala
 	test    admin:dev:hawala    w!*:dev:hawala
@@ -157,14 +157,11 @@ and work as expected for single files and sets of files:
 #### GVWin functionality supported
 
 Copying and moving files and folders between a file service and the local
-desktop works as expected, as well as opening the properties window
-for items on the file service.
+desktop as well as between folder windows for the same file service work
+as expected, as well as opening the properties window for items on the file service.
 
 Logging off with "move desktop to file service" and later logging on again
 with the restored desktop also works.
-
-Currently not supported are copy or moves between folder windows for the same
-file service (see below: filing courier protocol procedures not implemented)
 
 #### Unimplemented functionality
 
@@ -178,24 +175,25 @@ the file attributes `accessList` and `defaultAccessList` are stored in the metad
 they are currently not interpreted and checked against the session's user identity
 
 - filing courier protocol procedures not implemented:
-    - procedure 6 : GetControls()
+    - procedure 6 : GetControls() (present as minimal _dummy_ to allow move in GlobalView)
     - procedure 7 : ChangeControls()
-    - procedure 10: Copy()
-    - procedure 11: Move()
     - procedure 14: Replace()
-    - procedure 17: Find()
     - procedure 20: UnifyAccessLists()
     - procedure 23: ReplaceBytes()
     - procedure 22: RetrieveBytes()
 
 #### Incomplete implementation
 
-- procedure 18 List(): matching for the name attribute will probably produce mismatches (false or missing hits)
-if the pattern or the file name contain non-ascii characters
+- procedure 17 Find():    
+-- matching for the name attribute will probably find the wrong file
+if the pattern or the file name contain non-ascii characters    
+-- matching for the pathname attribute is unimplemented and will not find the file
 
-- procedure 18 List(): matching for the pathname attribute is unimplemented and will never match
-
-- procedure 18 List(): enumeration in backward direction is unsupported and rejected with an error
+- procedure 18 List():    
+-- matching for the name attribute will probably produce mismatches (false or missing hits)
+if the pattern or the file name contain non-ascii characters    
+-- matching for the pathname attribute is unimplemented and will never match    
+-- enumeration in backward direction is unsupported and rejected with an error
 
 #### Known problems
 

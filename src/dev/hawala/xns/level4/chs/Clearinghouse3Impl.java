@@ -467,6 +467,7 @@ public class Clearinghouse3Impl {
 			List<String> matches = (doObjects)
 					? chsDatabase.findNames(patternObject, property)
 					: chsDatabase.findAliases(patternObject, property);
+			matches.sort( (l,r) -> l.compareTo(r) );
 			for (String match : matches) {
 				streamData.add().set(match);
 			}

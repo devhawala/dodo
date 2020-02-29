@@ -36,6 +36,7 @@ import dev.hawala.xns.level2.SppConnection;
 import dev.hawala.xns.level3.courier.CourierServer;
 import dev.hawala.xns.level4.auth.Authentication2Impl;
 import dev.hawala.xns.level4.auth.BfsAuthenticationResponder;
+import dev.hawala.xns.level4.boot.BootResponder;
 import dev.hawala.xns.level4.chs.BfsClearinghouseResponder;
 import dev.hawala.xns.level4.chs.Clearinghouse3Impl;
 import dev.hawala.xns.level4.common.AuthChsCommon;
@@ -61,7 +62,8 @@ import dev.hawala.xns.level4.time.TimeServiceResponder;
  * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
  */
 public class DodoServer {
-	
+
+	private static final String DEFAULT_BASECONFIG_FILE = "dodo_common_configurations.properties";
 	private static final String DEFAULT_CONFIG_FILE = "dodo.properties";
 	
 	// the machine running the Dodo server
@@ -83,6 +85,7 @@ public class DodoServer {
 	private static boolean startTimeService = true;
 	private static boolean startChsAndAuth = true;
 	private static boolean startRipService = true;
+	private static boolean startBootService = false;
 	
 	private static String organizationName = "hawala";
 	private static String domainName = "dev";
@@ -90,13 +93,16 @@ public class DodoServer {
 	private static boolean authSkipTimestampChecks = false;
 	private static String chsDatabaseRoot = null;
 	
-	// startPrintServer = printServiceName != null && printServiceOutputDirectory != null 
+	// startPrintServer <=> printServiceName != null && printServiceOutputDirectory != null 
 	private static String printServiceName = null;
 	private static String printServiceOutputDirectory = null;
 	private static String printServicePaperSizes = null;
 	private static boolean printServiceDisassembleIp = false;
 	private static String printServiceIp2PsProcFilename = null;
 	private static String printServicePsPostprocessor = null;
+	
+	private static String bootServiceBasedir = "bootsvc";
+	private static boolean bootServiceVerbose = false;
 	
 	private static int sppHandshakeCheckInterval = -1;
 	private static int sppHandshakeSendackCountdown = -1;
@@ -106,9 +112,8 @@ public class DodoServer {
 	private static int sppSendingTimeGap = -1;
 	private static int sppResendPacketCount = -1;
 	
-	// startFileServer = fileServiceSpecs.size() > 0
+	// startFileServer <=> fileServiceSpecs.size() > 0
 	private static Map<String,String> fileServiceSpecs = new HashMap<>();
-	
 
 	private static boolean initializeConfiguration(String filename) {
 		// load the properties file
@@ -139,6 +144,7 @@ public class DodoServer {
 		startTimeService = props.getBoolean("startTimeService", startTimeService);
 		startChsAndAuth = props.getBoolean("startChsAndAuthServices", startChsAndAuth);
 		startRipService = props.getBoolean("startRipService", startRipService);
+		startBootService = props.getBoolean("startBootService", startBootService);
 		
 		strongKeysAsSpecified = props.getBoolean("strongKeysAsSpecified", strongKeysAsSpecified);
 		authSkipTimestampChecks = props.getBoolean("authSkipTimestampChecks", authSkipTimestampChecks);
@@ -153,6 +159,9 @@ public class DodoServer {
 		printServiceIp2PsProcFilename = props.getString("printService.ip2PsProcFilename", printServiceIp2PsProcFilename);
 		printServicePsPostprocessor = props.getString("printService.psPostprocessor", printServicePsPostprocessor);
 		
+		bootServiceBasedir = props.getString("bootService.basedir", bootServiceBasedir);
+		bootServiceVerbose = props.getBoolean("bootService.verbose", bootServiceVerbose);
+		
 		int fileSvcIdx = 0;
 		String serviceName;
 		String serviceVolumePath;
@@ -164,13 +173,13 @@ public class DodoServer {
 			fileSvcIdx++;
 		}
 		
-		sppHandshakeCheckInterval = props.getInt("spp.handshakeCheckInterval", -1);
-		sppHandshakeSendackCountdown = props.getInt("spp.handshakeSendackCountdown", -1);
-		sppHandshakeResendCountdown = props.getInt("spp.handshakeResendCountdown", -1);
-		sppHandshakeMaxResends = props.getInt("spp.handshakeMaxResends", -1);
-		sppResendDelay = props.getInt("spp.resendDelay", -1);
-		sppSendingTimeGap = props.getInt("spp.sendingTimeGap", -1);
-		sppResendPacketCount = props.getInt("spp.resendPacketCount", -1);
+		sppHandshakeCheckInterval = props.getInt("spp.handshakeCheckInterval", sppHandshakeCheckInterval);
+		sppHandshakeSendackCountdown = props.getInt("spp.handshakeSendackCountdown", sppHandshakeSendackCountdown);
+		sppHandshakeResendCountdown = props.getInt("spp.handshakeResendCountdown", sppHandshakeResendCountdown);
+		sppHandshakeMaxResends = props.getInt("spp.handshakeMaxResends", sppHandshakeMaxResends);
+		sppResendDelay = props.getInt("spp.resendDelay", sppResendDelay);
+		sppSendingTimeGap = props.getInt("spp.sendingTimeGap", sppSendingTimeGap);
+		sppResendPacketCount = props.getInt("spp.resendPacketCount", sppResendPacketCount);
 		
 		// do verifications
 		boolean outcome = true;
@@ -214,12 +223,16 @@ public class DodoServer {
 	}
 
 	public static void main(String[] args) throws XnsException {
+		String baseCfgFile = null;
 		String cfgFile = null;
 		boolean dumpChs = false;
 
-		// get commandline args and load basic configuration
+		// get commandline args
 		for (String arg : args) {
-			if ("-dumpchs".equalsIgnoreCase(arg)) {
+			if (arg.toLowerCase().startsWith("-basecfg:")) {
+				String[] parts = arg.split(":");
+				baseCfgFile = parts[1];
+			} else if ("-dumpchs".equalsIgnoreCase(arg)) {
 				dumpChs = true;
 			} else if (cfgFile == null) {
 				cfgFile = arg;
@@ -227,8 +240,20 @@ public class DodoServer {
 				System.out.printf("Warning: ignoring unknown argument: %s\n", arg);
 			}
 		}
+		
+		// load configuration
+		if (baseCfgFile == null) {
+			File f = new File(DEFAULT_BASECONFIG_FILE);
+			if (f.exists() && f.canRead()) {
+				baseCfgFile = DEFAULT_BASECONFIG_FILE;
+				System.out.printf("Found and using default commons configuration: %s\n", baseCfgFile);
+			}
+		}
 		if (cfgFile == null && (new File(DEFAULT_CONFIG_FILE)).canRead()) {
 			cfgFile = DEFAULT_CONFIG_FILE;
+		}
+		if (baseCfgFile != null) {
+			initializeConfiguration(baseCfgFile);
 		}
 		if (cfgFile != null && !initializeConfiguration(cfgFile)) {
 			return;
@@ -250,6 +275,14 @@ public class DodoServer {
 		
 		// set time base for all time dependent items
 		Time2.setTimeWarp(daysBackInTime);
+		
+		// boot service
+		if (startBootService) {
+			BootResponder bootService = new BootResponder(bootServiceBasedir, bootServiceVerbose);
+			localSite.clientBindToSocket(
+					IDP.KnownSocket.BOOT.getSocket(),
+					bootService);
+		}
 		
 		// echo service
 		if (startEchoService) {
@@ -328,8 +361,8 @@ public class DodoServer {
 		
 		// file service(s)
 		if (fileServiceSpecs.size() > 0) {
-			// initalize
-			FilingImpl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase); 
+			// initialize
+			FilingImpl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase);
 			
 			// open volume(s)
 			int openVolumes = 0;

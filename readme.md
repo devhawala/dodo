@@ -1,19 +1,21 @@
 ## Dodo Services - XNS with Java
 
-Dodo Services is an attempt to implement Xerox Network Services (XNS) in Java. It is
-currently much more work in progress than useful to provide services to existing emulated
-(or real) Xerox client environments like XDE or GlobalView. The work is focused up to now
-on building up the necessary infrastructure to provide XNS services (see section
-**Functionality**).    
+Dodo Services implement Xerox Network Services (XNS) protocols in Java, providing XNS
+services to existing emulated or real Xerox client machines running XDE or GlobalView.
+    
 Currently the following XNS services are provided by Dodo:
 - Time
 - Routing Information
 - Clearinghouse
 - Authentication
-- Printing (usable)
-- Filing (incomplete but usable)
+- Boot
+- Printing
+- Filing
 
-In fact, it is not a single Java program, but a set of programs creating a
+(although in most cases the implementation is incomplete regarding the specification,
+the services provide a working and useful subset for working "as usual" with XDE and GlobalView/ViewPoint)
+
+In fact, Dodo is not a single Java program, but a set of programs creating a
 simple virtual network infrastructure, a kind of XNS-over-TCP/IP. This virtual
 network allows different programs to inter-connect, among them the Dodo server proper,
 a gateway to a (real) network device and of course the Xerox client machines wanting
@@ -28,8 +30,8 @@ of a flight incapable bird came in mind: the [Dodo](https://en.wikipedia.org/wik
 
 ### Functionality
 
-The Dodo system implements parts of the Xerox Network Services protocol stack in Java,
-providing the functionality to build things like XNS file or print services.
+The Dodo system implements large parts of the Xerox Network Services protocol stack in Java,
+providing the functionality to build higher-level things like XNS file or print services.
 
 In the XNS levels terminology, the Dodo system supports resp. implements the
 following protocols:
@@ -63,15 +65,18 @@ information
     broadcaster for routing information as well as responder to
     client requests
     - Courier    
-    infrastructure for implementing both Courier server programs and
-    Courier clients;    
+    infrastructure for implementing Courier server programs;    
     however no Courier compiler is currently available, so mapping
     the Courier program definitions (.cr files) to the corresponding
     Java constructs must be done manually. 
 
 - Level 4
-    - Broadcast for Servers (BfS)
+    - Broadcast for Servers (BfS)    
 	responder for Clearinghouse BfS and Authentication BfS requests
+    - Boot Service    
+	responder providing boot-files (microcode, germ, boot-file) to a requesting
+	machine, supporting both the SimpleRequest/SimpleData and SPP variants of the
+	boot protocol
     - Clearinghouse (CHS)
 	(Courier program 2, versions 2 and 3)    
 	all protocol procedures are implemented for a *read-only* clearinghouse
@@ -83,7 +88,7 @@ information
 	all protocol procedures are implemented for a *read-only* clearinghouse
 	database, allowing to log in to XDE and GVWin; however changes to the
 	database are rejected
-	- Printing
+    - Printing
 	(Courier program 4, version 3)    
 	all protocol procedures are implemented, allowing to print from XDE and GVWin,
 	to query a print job status, the printer properties and the printer status.    
@@ -93,13 +98,12 @@ information
 	The PostScript generation provides a basic support for western-european
 	character sets as well as simple graphics (vector and uncompressed bitmaps),
 	giving usable but far from perfect results.
-	- Filing
+    - Filing
 	(Courier program 10, versions 4,5,6)    
 	a large subset of the protocol procedures is implemented, allowing
 	to access file drawers, folders and files on Dodo XNS File services from XDE
-	and GVWin. Although substantial functionality is missing (like copy/move
-	operations, access control), Dodo file services are already usable in a
-	single user environment.
+	and GVWin. Although substantial functionality is missing (like access control
+	and access rights), Dodo file services are already usable in a single user environment.
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -124,7 +128,7 @@ NetHub listens on port 3333 for client connections (currently hard-coded).
 - Dodo server    
 this is the program providing the XNS services.
 
-2 additional program components of Dodo services can be used if required:
+3 additional program components of Dodo services can be used if required:
 - NetHubGateway    
 this is a NetHub client program that connects to a local PCap network device, implementing
 a gateway for XNS packets between a (more or less) real network and NetHub, allowing
@@ -136,7 +140,11 @@ this is a "read-only program" connecting to the NetHub with the only purpose to
 receive all packets traveling in the virtual network and to dump the packet
 content to `stdout`; in addition to the raw packet content, it issues the recognized
 packet type specific structural data at the different layers (ethernet, IDP, PEX,
-SPP etc. headers, type specific payload). 
+SPP etc. headers, type specific payload).
+
+- FsUtil    
+this file service utility allows to list folders in a Dodo file service folder, as well as
+importing or exporting files from/to the local file system. 
 
 Additional unsupported examples programs show the usage of the Dodo XNS-API for client
 and server applications, see [example-programs](./example-programs.md).
@@ -147,7 +155,7 @@ and server applications, see [example-programs](./example-programs.md).
 
 The following prerequisites must be installed and possibly configured to
 run Dodo services:
-- for NetHub, Dodo server, NetSpy:
+- for NetHub, Dodo server, NetSpy, FsUtil:
     - Java 8 JRE or newer
 - for NetHubGateway:    
 additionally requires the following platform specific (Windows/Linux/...,
@@ -244,6 +252,10 @@ do start Dodo's Clearinghouse service and Authentication service? (both can only
 be started (or not) together, as they serve the same domain jointly)    
 _optional_, _default_: `true`
 
+- `startBootService`    
+do start Dodo's Boot service?    
+_optional_, _default_: `false`
+
 - `localTimeOffsetMinutes`    
 time zone parameter for the time service as
 difference between local time and GMT in minutes, with positive values being
@@ -264,6 +276,11 @@ _optional_, _default_: `0` (i.e. no date change)
 these 5 properties define the Clearinghouse service provided by this
 Dodo instance;    
 see [Clearinghouse configuration](./chs-config-files.md) for details
+
+- `bootService.baseDir`    
+`bootService.verbose`    
+these 2 properties configure the boot service provided by this Dodo instance;    
+see [Boot service configuration](./bootsvc-configuration.md) for details
 
 - `printService.name`    
 `printService.outputDirectory`    
@@ -310,7 +327,7 @@ Parameter|Default|Description
 
 #### NetSpy
 
-The `main`class for NetSpy is:
+The `main`-class for NetSpy is:
 
 	dev.hawala.hub.NetSpy
 	
@@ -321,6 +338,79 @@ and is started with:
 The sample Windows batch file is: `run-netspy.cmd`
 
 This program has no command line parameters and connects to port 3333 on `localhost`.
+
+#### FsUtil
+
+The `FsUtil` program allows to list the contents of a Dodo file service volume and to copy files between
+the local file system and a file service volume. FsUtil accesses manipulates the volume directly on the local
+file system, so no XNS login is required.
+
+The `main`-class for FsUtil is:
+
+	dev.hawala.xns.FsUtil
+
+and is started with:
+
+`java -cp dodoserver-and-nethub.jar dev.hawala.xns.FsUtil` _parameters_
+
+The sample Windows batch file is: `fsutil.cmd`
+
+FsUtil has the following command line options:
+
+- `fsutil`&nbsp;&nbsp;_volume_&nbsp;&nbsp;&nbsp;_path-to-folder_&nbsp;&nbsp;`ls` [`-r`]
+- `fsutil`&nbsp;&nbsp;_volume_&nbsp;&nbsp;&nbsp;_path-to-folder_&nbsp;&nbsp;`dump` [`-r`]
+- `fsutil`&nbsp;&nbsp;_volume_&nbsp;&nbsp;&nbsp;_path-to-folder_&nbsp;&nbsp;`export` [`-r`]
+- `fsutil`&nbsp;&nbsp;_volume_&nbsp;&nbsp;&nbsp;_path-to-folder_&nbsp;&nbsp;`import` _src1_ [_src2_ ...]
+
+The _volume_ argument specifies the directory for the file service volume in the local file system.
+
+The _path-to-folder_ argument specifies the folder in the volume to work with and must be given from the
+volume root, i.e. starting with the file drawer name. The folder or file versions (e.g. _folder-name_`;1`)
+are optional and need only to be specified for items having a different version than `1`.
+
+FsUtil has the following subcommands:
+
+- `ls`    
+do a terse list of the folder content to stdout, having one line per item with creation date,
+item type, size in bytes and item name with version; it `-r` is given, the subfolder hierarchy is
+also issued, with each folder level indented.
+  
+- `dump`    
+do a verbose list of the folder content (navigating the subfolder hierarchy if `-r` is given), writing
+3 lines with the following item attributes:
+    - full path to the item
+    - file-id, name, version, creation time, type, checksum, data-site, stored-size
+    - byte-size, created-by, read-by, modified-by
+
+- `export`    
+copy all file items from the specified folder to the current directory in the local file system; if `-r`is
+given, the folder hierarchy below the specified folder will be included and a corresponding directory
+structure is created; care should be taken if items appear in multiple versions, as files with same name
+will overwrite (only the last exported version will persist) and folder content will be merged.
+
+- `import`    
+copy the items _src1_, _src2_, ... from the local file system into the volume folder; if a directory is
+given, a folder is created for the directory and the items in the directory are (recursively) imported
+to this folder.
+
+**Remark**: as only one program at a time can work with a volume directory to prevent data loss in the Dodo file
+service volume, `FsUtil` can only be used if no Dodo server instance is running a file service on the volume.
+
+**Examples**:
+
+List the files in folder `test/vp-documents` of the file service volume directory `../dodo-services/vol-fs1`:
+
+	fsutil ../dodo-services/vol-fs1 test/vp-documents ls
+
+Import all files in the local directoy `old-docs` into the folder `test/vp-documents` of the file
+service volume directory `../dodo-services/vol-fs1`, creating a new subfolder `old-docs`:
+
+	fsutil ../dodo-services/vol-fs1 test/vp-documents import old-docs
+
+Export all files in the folder `test/vp-documents/archive` including all subfolders of the same volume
+to the current directory:
+
+	fsutil ../dodo-services/vol-fs1 test/vp-documents/archive export -r
 
 
 ### Environments known to work
@@ -376,7 +466,7 @@ Setting time from network at 0937 does not work for unknown reasons,
 so setting Dodo's `authSkipTimestampChecks` configuration parameter to `true` is
 required for authentication with CHS/Auth and accessing the XNS network.    
 Besides this, using file and print services with Darkstar/Viewpoint-2.0 work as for GlobalView,
-however at about the speed as in the 80's (i.e. slow) with real 8010's for workstations and servers
+however at about the network speed (i.e. slow) as in the 80's with real 8010's for workstations and servers
 (Darkstar running in average at ~130% speed according to the status line) 
 
 
@@ -400,8 +490,19 @@ still missing, like Mail protocols)
     - [Services_8.0_Programmers_Guide_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Programmers_Guide_Nov84.pdf)
     - [Filing_Protocol_May1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns/standards/SNSS_108605_Filing_Protocol_May1986.pdf)
     - [Services_8.0_Filing_Programmers_Manual_Nov84.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_8.0/Services_8.0_Filing_Programmers_Manual_Nov84.pdf)
+    - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2020-02-29    
+-- Dodo: added boot service (optional)    
+-- CHS: added _workstation_ as chs object    
+-- CHS: lists of objects or aliases are now returned sorted alphabetically    
+-- FS: implemented operations Move(), Copy(), Find() (and _dummy_ GetControls())    
+-- FS: added FsUtil program for list, export, import files from/to folders in a volume    
+-- FS bugfix: prevent session timeout for long Serialize()/Deserialize() operations    
+-- FS bugfix: the ordering attribute is now saved correctly in the metadata of a file    
+-- SPP bugfix: close protocol packets are now sent with incrementing sequence number
 
 - 2019-07-08    
 bugfix: (Courier-connection) if the client supports more than one protocol version, the server

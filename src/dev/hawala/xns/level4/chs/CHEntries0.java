@@ -194,4 +194,16 @@ public class CHEntries0 extends CrProgram {
 	public static final int authKeys = 6; // what content? dangerous?
 	public static final int services = 51;
 	
+	/*
+	 * ***** additional primary properties:  all have associated Item == Description
+	 */
+	
+	/*
+	 * Workstation: {
+	 *     (workstation, Description),
+	 *     (addressList, AddressListValue)}
+	 *   workstation: Clearinghouse.Property = 10005;
+	 */
+	public static final int workstation = 10005;
+	
 }

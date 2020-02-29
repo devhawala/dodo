@@ -43,6 +43,7 @@ import java.nio.channels.OverlappingFileLockException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +68,7 @@ import dev.hawala.xns.level4.common.Time2;
  * for directories containing a file {@code root-folder.lst} defining the root folders in the
  * volume ("File Drawers" in Star/ViewPoint/GlobalView jargon).
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2019)
+ * @author Dr. Hans-Walter Latz / Berlin (2019,2020)
  */
 public class Volume {
 	
@@ -76,7 +77,7 @@ public class Volume {
 	}
 	
 	// max. number of files in content-directories when adding files
-	private static final int DATA_DIR_LIMIT = 256;
+	private static final int DATA_DIR_LIMIT = 512;
 	
 	private static final String METADATA_SUBDIR = "metadata";
 	private static final String OLDMETADATA_SUBDIR = "old-metadata";
@@ -398,7 +399,7 @@ public class Volume {
 			this.deltaFiles.put(fe.getFileID(), fe);
 		}
 		
-		public void moveFile(long fileID, long newParentFileID, String movingUser) {
+		public void move(long fileID, long newParentFileID, List<iValueSetter> valueSetters, String movingUser) {
 			FileEntry fe = this.volume.fileEntries.get(fileID);
 			FileEntry newParentFe = this.volume.fileEntries.get(newParentFileID);
 			
@@ -407,11 +408,11 @@ public class Volume {
 			} else if (newParentFe == null) {
 				this.volume.errorRaiser.fileNotFound(newParentFileID, "File not found with newParentFileID: " + newParentFileID);
 			} else {
-				this.moveFile(fe, newParentFe, movingUser);
+				this.move(fe, newParentFe, valueSetters, movingUser);
 			}
 		}
 		
-		public void moveFile(FileEntry fe, FileEntry newParentFe, String movingUser) {
+		public void move(FileEntry fe, FileEntry newParentFe, List<iValueSetter> valueSetters, String movingUser) {
 			if (!newParentFe.isDirectory()) {
 				this.volume.errorRaiser.notADirectory(newParentFe.getFileID(), "Move file aborted: Target file for move is not a directory");
 			}
@@ -431,13 +432,7 @@ public class Volume {
 			
 			// check if moving would break the tree structure
 			if (fe.isDirectory()) {
-				long feFileID = fe.getFileID();
-				long checkFileID = newParentFe.getFileID();
-				while (checkFileID != 0) {
-					if (checkFileID == feFileID) {
-						this.volume.errorRaiser.wouldCreateLoopInHierarchy("Move file aborted: new parent is a child of file to move");
-					}
-				}
+				this.checkForInvalidTargetFolder(fe, newParentFe);
 			}
 			
 			long now = Time2.getMesaTime();
@@ -459,9 +454,107 @@ public class Volume {
 			fe.setParent(newParentFe);
 			fe.setModifiedOn(now);
 			fe.setModifiedBy(movingUser);
+			if (valueSetters != null) {
+				for (iValueSetter s : valueSetters) {
+					s.access(fe);
+				}
+			}
 			this.deltaFiles.put(fe.getFileID(), fe);
 
 			this.volume.checkConsistency();
+		}
+		
+		public FileEntry copy(FileEntry fe, FileEntry newParentFe, List<iValueSetter> valueSetters, String copyingUser) throws IOException {
+			if (!newParentFe.isDirectory()) {
+				this.volume.errorRaiser.notADirectory(newParentFe.getFileID(), "Copy file aborted: Target file for move is not a directory");
+			}
+			if (fe.getFileID() == newParentFe.getFileID()) {
+				this.volume.errorRaiser.wouldCreateLoopInHierarchy("Copy file aborted: Moving file into itelf as parent");
+			}
+			
+			// check if copying would break the tree structure
+			if (fe.isDirectory()) {
+				this.checkForInvalidTargetFolder(fe, newParentFe);
+			}
+			
+			// extend the value setters
+			List<iValueSetter> newValuesetters = new ArrayList<>();
+			if (fe.isDirectory()) {
+				newValuesetters.add( f -> {
+					f.setChildrenUniquelyNamed(fe.isChildrenUniquelyNamed());
+					f.setOrderingAscending(fe.isOrderingAscending());
+					f.setOrderingInterpretation(fe.getOrderingInterpretation());
+					f.setOrderingKey(fe.getOrderingKey());
+				});
+			}
+			newValuesetters.add( f -> {
+				f.setCreatedBy(fe.getCreatedBy());
+				f.setCreatedOn(fe.getCreatedOn());
+				f.setModifiedBy(fe.getModifiedBy());
+				f.setModifiedOn(fe.getModifiedOn());
+			});
+			
+			// copy the file
+			if (fe.isDirectory()) {
+				return this.copyDir(fe, newParentFe, newValuesetters, copyingUser);
+			} else {
+				return this.copyFile(fe, newParentFe, newValuesetters, copyingUser);
+			}
+		}
+		
+		private FileEntry copyFile(FileEntry srcFile, FileEntry parent, List<iValueSetter> valueSetters, String creatingUser) throws IOException {
+			final FileEntry fe;
+			if (srcFile.getHasContent()) {
+				File contentFile = this.volume.getDataFile(srcFile.getFileID(), false);
+				if (contentFile == null) {
+					this.volume.errorRaiser.fileContentDamaged("File content missing or lost");
+				}
+				try (FileInputStream fis = new FileInputStream(contentFile)) {
+					iContentSource contentSource = (b) -> {
+						int count;
+						try {
+							count = fis.read(b);
+						} catch (IOException e) {
+							return -1;
+						}
+						if (count < 0) {
+							return 0;
+						} else {
+							return count;
+						}
+					};
+					fe = this.createFile(parent.getFileID(), false, srcFile.getName(), null, srcFile.getType(), creatingUser, valueSetters, contentSource);
+				}
+			} else {
+				fe = this.createFile(parent.getFileID(), false, srcFile.getName(), null, srcFile.getType(), creatingUser, valueSetters, null);
+			}
+			return fe;
+		}
+		
+		private FileEntry copyDir(FileEntry srcDir, FileEntry parent, List<iValueSetter> valueSetters, String creatingUser) throws IOException {
+			FileEntry newDir = this.createFile(parent.getFileID(), true, srcDir.getName(), null, srcDir.getType(), creatingUser, valueSetters, null);
+			
+			List<FileEntry> children = srcDir.getChildren().getChildren();
+			for (FileEntry child : children) {
+				if (child.isDirectory()) {
+					this.copyDir(child, newDir, Collections.emptyList(), creatingUser);
+				} else {
+					this.copyFile(child, newDir, Collections.emptyList(), creatingUser);
+				}
+			}
+			
+			return newDir;
+		}
+		
+		private void checkForInvalidTargetFolder(FileEntry fe, FileEntry newParentFe) {
+			long feFileID = fe.getFileID();
+			long checkFileID = newParentFe.getFileID();
+			while (checkFileID != 0 && checkFileID != FsConstants.rootFileID) {
+				if (checkFileID == feFileID) {
+					this.volume.errorRaiser.wouldCreateLoopInHierarchy("Move/copy file aborted: new parent is a child of file to move/copy");
+				}
+				checkFileID = this.volume.fileEntries.get(checkFileID).getParentID();
+			}
 		}
 		
 		public void replaceFileContent(long fileID, iContentSource contentSource, String updatingUser) throws IOException {
@@ -1140,13 +1233,17 @@ public class Volume {
 			return null; // signal non-existence
 		}
 		
-		if (idx == (this.dataDirStarts.size() - 1) && filesInlastDataDir >= DATA_DIR_LIMIT) {
-			this.dataDirStarts.add(fileID);
-			filesInlastDataDir = 1;
-			dirName = String.format(DATADIR_PATTERN, fileID);
-			dataDir = new File(this.baseDir, dirName);
-			dataDir.mkdir();
-			f = new File(dataDir, filename);
+		if (idx == (this.dataDirStarts.size() - 1)) {
+			if (filesInlastDataDir >= DATA_DIR_LIMIT) {
+				this.dataDirStarts.add(fileID);
+				filesInlastDataDir = 1;
+				dirName = String.format(DATADIR_PATTERN, fileID);
+				dataDir = new File(this.baseDir, dirName);
+				dataDir.mkdir();
+				f = new File(dataDir, filename);
+			} else {
+				filesInlastDataDir++;
+			}
 		}
 		f.createNewFile();
 		

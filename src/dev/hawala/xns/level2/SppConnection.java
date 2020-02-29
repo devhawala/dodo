@@ -428,8 +428,10 @@ public class SppConnection {
 						this.state = State.CLOSED;
 						removeActiveConnection(this);
 						if (!this.otherRequestedClose) {
-							SPP closeAck = this.fillSppConnectionData(new SPP());
-							closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
+							int seqNo = this.myNextSeqNo++;
+							SPP closeAck = this.fillSppConnectionData(new SPP())
+									.setSequenceNumber(seqNo)
+									.setDatastreamType((byte)SST_CLOSE_CONFIRM);
 							this.sendSequencedOOB(closeAck);
 							Log.L3.printf(this.intro, "** handleIngonePacket(): sent final close-ack (as close-initiator)\n");
 						}
@@ -440,8 +442,10 @@ public class SppConnection {
 					if (sst == SST_CLOSE_REQUEST) {
 						// overlapping close requests
 						// we send our confirmation and wait for others confirmation 
-						SPP closeAck = this.fillSppConnectionData(new SPP());
-						closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
+						int seqNo = this.myNextSeqNo++;
+						SPP closeAck = this.fillSppConnectionData(new SPP())
+								.setSequenceNumber(seqNo)
+								.setDatastreamType((byte)SST_CLOSE_CONFIRM);
 						this.sendSequencedOOB(closeAck);
 						this.otherRequestedClose = true;
 						Log.L3.printf(this.intro, "** handleIngonePacket(): received close-request while waiting for close-ack, sent close-ack\n");
@@ -632,8 +636,10 @@ public class SppConnection {
 				if (sst == SST_CLOSE_REQUEST) {
 					this.state = State.CLOSING;
 					this.otherRequestedClose = true;
-					SPP closeAck = this.fillSppConnectionData(new SPP());
-					closeAck.setDatastreamType((byte)SST_CLOSE_CONFIRM);
+					int seqNo = this.myNextSeqNo++;
+					SPP closeAck = this.fillSppConnectionData(new SPP())
+							.setSequenceNumber(seqNo)
+							.setDatastreamType((byte)SST_CLOSE_CONFIRM);
 					this.sendSequencedOOB(closeAck);
 					Log.L3.printf(this.intro, "** dequeueIngonePacket(): received close-request, sent close-ack\n");
 					return null; // as we are closing, anything ingoing is ignored from now
@@ -837,8 +843,10 @@ public class SppConnection {
 			
 			// phase 1: initiate and request close
 			this.state = State.CLOSING;
-			SPP closeReq = this.fillSppConnectionData(new SPP());
-			closeReq.setDatastreamType((byte)SST_CLOSE_REQUEST);
+			int seqNo = this.myNextSeqNo++;
+			SPP closeReq = this.fillSppConnectionData(new SPP())
+					.setSequenceNumber(seqNo)
+					.setDatastreamType((byte)SST_CLOSE_REQUEST);
 			this.sendSequencedOOB(closeReq);
 			Log.L3.printf(this.intro, "** closeConnection(): sent close initiating packet\n");
 			

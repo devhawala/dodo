@@ -162,7 +162,8 @@ public class ChsDatabase {
 				if (fn.startsWith("m~")) { entry = new ChsMailSvc(ef); } else
 				if (fn.startsWith("p~")) { entry = new ChsPrintSvc(ef); } else
 				if (fn.startsWith("u~")) { entry = new ChsUser(ef); } else
-				if (fn.startsWith("ug~")) { entry = new ChsUserGroup(ef); }
+				if (fn.startsWith("ug~")) { entry = new ChsUserGroup(ef); } else
+				if (fn.startsWith("ws~")) { entry = new ChsWorkstation(ef); }
 			} catch (Exception e) {
 				System.out.printf("Unable to load CHS entry from file '%s': %s\n", ef.getName(), e.getMessage());
 				continue;
@@ -437,6 +438,28 @@ public class ChsDatabase {
 			hash = ((hash << 16) + cv) % 65357;
 		}
 		return (int)(hash & 0xFFFFL);
+	}
+	
+	private static long getMachineId(PropertiesExt props, String forKind, String name) {
+		String mId = props.getProperty("machineId", null);
+		if (mId == null) {
+			throw new IllegalStateException("No machineId defined for " + forKind + ": " + name);
+		}
+		String[] submacs = mId.split("-");
+		if (submacs.length != 6) {
+			throw new IllegalStateException("Invalid processor id format (not XX-XX-XX-XX-XX-XX): " + mId);
+		}
+		
+		long macId = 0;
+		for (int i = 0; i < submacs.length; i++) {
+			macId = macId << 8;
+			try {
+				macId |= Integer.parseInt(submacs[i], 16) & 0xFF;
+			} catch (Exception e) {
+				throw new IllegalStateException("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): " + mId);
+			}
+		}
+		return macId;
 	}
 	
 	/*
@@ -775,25 +798,7 @@ public class ChsDatabase {
 				break;
 			}
 			
-			String mId = this.props.getProperty("machineId", null);
-			if (mId == null) {
-				throw new IllegalStateException("No machineId defined for service: " + this.objNameFromCfgFile);
-			}
-			String[] submacs = mId.split("-");
-			if (submacs.length != 6) {
-				throw new IllegalStateException("Invalid processor id format (not XX-XX-XX-XX-XX-XX): " + mId);
-			}
-			
-			long macId = 0;
-			for (int i = 0; i < submacs.length; i++) {
-				macId = macId << 8;
-				try {
-					macId |= Integer.parseInt(submacs[i], 16) & 0xFF;
-				} catch (Exception e) {
-					throw new IllegalStateException("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): " + mId);
-				}
-			}
-			this.machineId = macId;
+			this.machineId = ChsDatabase.getMachineId(this.props, "service", this.objNameFromCfgFile);
 		}
 		
 		@Override
@@ -1022,6 +1027,56 @@ public class ChsDatabase {
 		
 	}
 	
+	private class ChsWorkstation extends ChsEntry {
+		
+		private final String description;
+		private final long machineId;
+		
+		protected ChsWorkstation(File cfgFile) {
+			super(CHEntries0.workstation, cfgFile);
+			
+			String desc = this.props.getProperty("description", null);
+			if (desc == null) {
+				desc = "Workstation " + this.objNameFromCfgFile;
+			}
+			this.description = desc;
+			
+			this.machineId = ChsDatabase.getMachineId(this.props, "workstation", this.objNameFromCfgFile);
+		}
+		
+		@Override
+		public void postpare(String fqn) {
+			super.postpare(fqn);
+			
+			NetworkAddressList addrList = NetworkAddressList.make();
+			NetworkAddress addr = addrList.add();
+			addr.network.set(networkId);
+			addr.host.set(this.machineId);
+			addr.socket.set(0);
+			this.putItemProperty(CHEntries0.addressList, addrList);
+		}
+		
+		protected void dumpSpecifics() {
+			super.dumpSpecifics();
+			System.out.printf("  description  : %s\n", this.description);
+			System.out.printf("  machineId    : %012X\n", this.machineId);
+		}
+
+		@Override
+		public String getDescription() {
+			return this.description;
+		}
+
+		@Override
+		public String getObjectName() {
+			return this.objNameFromCfgFile;
+		}
+		
+		public long getMachineId() {
+			return machineId;
+		}
+	}
+	
 	/*
 	 * methods to access database entries
 	 */
@@ -1029,6 +1084,12 @@ public class ChsDatabase {
 	public boolean isValidName(ThreePartName name) {
 		ChsEntry e = this.getEntryForName(name);
 		return (e != null);
+	}
+	
+	public String resolveName(ThreePartName name) {
+		ChsEntry e = this.getEntryForName(name);
+		if (e == null) { return null; }
+		return e.fqn;
 	}
 	
 	public List<String> findNames(String pattern, long reqProperty) {

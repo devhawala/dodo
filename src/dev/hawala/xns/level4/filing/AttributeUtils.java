@@ -265,7 +265,7 @@ public class AttributeUtils {
 		}
 		
 		fe.setOrderingKey(ord.key.get());
-		fe.setOrderingAscending(ord.isByAscendingPosition());
+		fe.setOrderingAscending(ord.ascending.get());
 		fe.setOrderingInterpretation(interpretation);
 	}
 	
@@ -388,15 +388,34 @@ public class AttributeUtils {
 				(s,fe) -> s.value.add().setAsTime(FilingCommon.atFiledOn, fe.getCreatedOn()), // filed{By,On} and created{By,On} are treated same
 				
 				// atStoredSize = 26
-				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atStoredSize, fe.getStoredSize()),
+				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atStoredSize, mapSize(fe, fe.getStoredSize())),
 				
 				// atSubtreeSize = 27
-				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atSubtreeSize, fe.getSubtreeSize()),
+				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atSubtreeSize, mapSize(fe, fe.getSubtreeSize())),
 				
 				// atSubtreeSizeLimit = 28
 				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atSubtreeSizeLimit, fe.getSubtreeSizeLimit())
 				
 				);
+	}
+	
+	// problem:
+	// -> the Filing protocol spec. defines the attributes 'storedSize' and 'treeSize' to be in bytes
+	//    and in multiples of the allocation size of the service
+	// -> this is plausible regarding the value displayed in the GlobalView property sheet for a file 
+	// -> the network installation bootfile (Othello) interprets 'storedSize' as number of 512 byte pages
+	//    e.g. installing Dove.germ (31744 bytes = 62 pages) for VP20 form the Installation Drawer
+	//    uses 32257 pages (free blocks go down from 115350 to 84093)
+	// -> assuming that Xerox software is validated (at least tested and successfully used in production
+	//    in the publicly available files used here), there are 2 contradicting "correct" behaviors
+	//
+	// as a solution, the storedSize is delivered as page-size if the file queries is located in the
+	// installation drawer and as byte-size in all other cases
+	private static long mapSize(FileEntry fe, long value) {
+		if (fe.getPathname().toLowerCase().startsWith("installation drawer!")) {
+			return (value + 511) / 512;
+		}
+		return value;
 	}
 	
 	public static iValueFilter buildPredicate(CHOICE<FilterType> filter) {
@@ -550,6 +569,15 @@ public class AttributeUtils {
 			}
 		case FilingCommon.atVersion: {
 			int val = attr.getAsCardinal();
+			// begin temp:
+			// if the required version is 0 (lowest) or 0xFFFF (highest), the
+			// version and name attributes must be checked together; but this
+			// currently not supported (maybe later), so these required values
+			// will temporarily match any version
+			if (val == 0 || val == 0xFFFF) {
+				return fe -> true;
+			}
+			// end temp
 			return fe -> compare(val, fe.getVersion(), evaluator);
 			}
 		case FilingCommon.atPathname: {

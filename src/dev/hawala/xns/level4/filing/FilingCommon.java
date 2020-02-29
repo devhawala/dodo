@@ -1250,7 +1250,7 @@ public abstract class FilingCommon extends CrProgram {
 	public static final int atReadBy = 14;
 	
 	/*
-	 * reedOn: AttributeType = 15;
+	 * readOn: AttributeType = 15;
 	 * ReadOn: TYPE = Time;
 	 */
 	public static final int atReadOn = 15;

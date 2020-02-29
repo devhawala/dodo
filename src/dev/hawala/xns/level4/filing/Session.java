@@ -55,6 +55,7 @@ public class Session {
 	
 	private long nextContinuanceDue = System.currentTimeMillis() + CONTINUANCE_DURANCE;
 	private boolean closed = false;
+	private boolean disableClosing = false;
 	
 	public Session(Service service, ThreePartName username, Long remoteHostId, int[] conversationKey) {
 		this.service = service;
@@ -90,22 +91,30 @@ public class Session {
 		return this.conversationKey;
 	}
 
-	public int /* secs */ continueUse() {
+	public synchronized int /* secs */ continueUse() {
+		this.disableClosing = false;
 		this.nextContinuanceDue = System.currentTimeMillis() + CONTINUANCE_DURANCE;
 		return CONTINUANCE_DURANCE;
 	}
 	
-	public boolean isOverdue() {
+	public synchronized boolean isOverdue() {
 		return this.nextContinuanceDue < System.currentTimeMillis();
 	}
 	
-	public void close() {
+	public synchronized void close() {
+		if (this.disableClosing) {
+			return;
+		}
 		this.service.dropSession(this);
 		this.closed = true;
 	}
 	
-	public boolean isClosed() {
+	public synchronized boolean isClosed() {
 		return this.closed;
+	}
+	
+	public synchronized void holdClosing() {
+		this.disableClosing = true;
 	}
 
 }

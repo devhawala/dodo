@@ -54,8 +54,10 @@ import dev.hawala.xns.level4.common.BulkData1;
 import dev.hawala.xns.level4.common.ChsDatabase;
 import dev.hawala.xns.level4.common.StrongAuthUtils;
 import dev.hawala.xns.level4.filing.Filing6.Filing6LogonParams;
+import dev.hawala.xns.level4.filing.FilingCommon.AccessControl;
 import dev.hawala.xns.level4.filing.FilingCommon.AccessErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.AccessProblem;
+import dev.hawala.xns.level4.filing.FilingCommon.AccessType;
 import dev.hawala.xns.level4.filing.FilingCommon.ArgumentProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.Attribute;
 import dev.hawala.xns.level4.filing.FilingCommon.AttributeSequence;
@@ -68,6 +70,7 @@ import dev.hawala.xns.level4.filing.FilingCommon.ConnectionErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.ConnectionProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.Content;
 import dev.hawala.xns.level4.filing.FilingCommon.ContinueResults;
+import dev.hawala.xns.level4.filing.FilingCommon.ControlType;
 import dev.hawala.xns.level4.filing.FilingCommon.CopyParams;
 import dev.hawala.xns.level4.filing.FilingCommon.CopyResults;
 import dev.hawala.xns.level4.filing.FilingCommon.CreateParams;
@@ -84,6 +87,8 @@ import dev.hawala.xns.level4.filing.FilingCommon.GetControlsResults;
 import dev.hawala.xns.level4.filing.FilingCommon.HandleErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.HandleProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.ListParams;
+import dev.hawala.xns.level4.filing.FilingCommon.Lock;
+import dev.hawala.xns.level4.filing.FilingCommon.LockControl;
 import dev.hawala.xns.level4.filing.FilingCommon.LogoffOrContinueParams;
 import dev.hawala.xns.level4.filing.FilingCommon.LogonResults;
 import dev.hawala.xns.level4.filing.FilingCommon.MoveParams;
@@ -96,8 +101,8 @@ import dev.hawala.xns.level4.filing.FilingCommon.ScopeCountRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.ScopeDepthRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.ScopeDirection;
 import dev.hawala.xns.level4.filing.FilingCommon.ScopeDirectionRecord;
+import dev.hawala.xns.level4.filing.FilingCommon.ScopeSequence;
 import dev.hawala.xns.level4.filing.FilingCommon.ScopeType;
-import dev.hawala.xns.level4.filing.FilingCommon.ScopeTypeErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.SerializeParams;
 import dev.hawala.xns.level4.filing.FilingCommon.SerializedFile;
 import dev.hawala.xns.level4.filing.FilingCommon.SerializedTree;
@@ -108,6 +113,7 @@ import dev.hawala.xns.level4.filing.FilingCommon.SessionProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.SpaceErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.SpaceProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.StoreParams;
+import dev.hawala.xns.level4.filing.FilingCommon.TimeoutControl;
 import dev.hawala.xns.level4.filing.FilingCommon.TransferErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.TransferProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.UndefinedErrorRecord;
@@ -127,7 +133,7 @@ import dev.hawala.xns.level4.filing.fs.iValueSetter;
  * Implementation of the Filing Courier programs (PROGRAM 10 VERSIONs 4,5,6)
  * for a set of XNS File Services.
  * 
- * @author Dr. Hans-Walter Latz / Berlin 2019
+ * @author Dr. Hans-Walter Latz / Berlin 2019,2020
  */
 public class FilingImpl {
 	
@@ -398,8 +404,8 @@ public class FilingImpl {
 	}
 	
 	private static void innerLogon(ThreePartName service, Credentials credentials, Verifier verifier, Long remoteHostId, LogonResults results) {
-		String svcName = service.getLcFqn();
-		final Service svc;
+		String svcName = chsDatabase.resolveName(service);
+		Service svc;
 		if (svcName.isEmpty() || "::".equals(svcName)) {
 			svc = defaultService;
 		} else {
@@ -742,7 +748,51 @@ public class FilingImpl {
 	 *   = 6;
 	 */
 	private static void getControls(GetControlsParams params, GetControlsResults results) {
-		notImplemented("getControls", params);
+		logParams("getControls", params);
+		
+		// check session
+		Session session = resolveSession(params.session);
+		session.continueUse();
+		
+		// check specified file handle
+		Handle fileHandle = Handle.get(params.handle);
+		if (fileHandle.isNullHandle()) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		
+		// DUMMY: lie to the client, telling anything is possible/allowed (necessary for move (GVWin 2.1 queries controls before moving)
+		// TODO: implement non-lying response
+		for (int idx = 0; idx < params.types.size(); idx++) {
+			ControlType controlType = params.types.get(idx).get();
+			switch(controlType) {
+			
+			case accessControl: {
+					CHOICE<ControlType> value = results.controls.add();
+					AccessControl ctl = (AccessControl)value.setChoice(ControlType.accessControl);
+					ctl.value.add().set(AccessType.fullAccess);
+					break;
+				}
+			
+			case timeoutControl: {
+					CHOICE<ControlType> value = results.controls.add();
+					TimeoutControl ctl = (TimeoutControl)value.setChoice(ControlType.timeoutControl);
+					ctl.value.set(5);
+					break;
+				}
+			
+			case lockControl: {
+					CHOICE<ControlType> value = results.controls.add();
+					LockControl ctl = (LockControl)value.setChoice(ControlType.lockControl);
+					ctl.lock.set(Lock.exclusive);
+					break;
+				}
+			
+			default: // ignored
+			}
+		}
+		
+		// done
+		logResult("getControls", results);
 	}
 	
 	/*
@@ -857,7 +907,51 @@ public class FilingImpl {
 	 *   = 10;
 	 */
 	private static void copy(CopyParams params, CopyResults results) {
-		notImplemented("copy", params);
+		logParams("copy", params);
+		
+		// check session
+		Session session = resolveSession(params.session);
+		Volume vol = session.getService().getVolume();
+		session.continueUse();
+		
+		// check specified file handle
+		Handle fileHandle = Handle.get(params.handle);
+		if (fileHandle.isVolumeRoot()) { // the file system root cannot be copied
+			new AccessErrorRecord(AccessProblem.accessRightsInsufficient).raise();
+		}
+		if (fileHandle.isNullHandle()) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		FileEntry fe = fileHandle.getFe();
+		if (fe.getParentID() == FsConstants.rootFileID) { // file system root folders cannot be copied
+			new AccessErrorRecord(AccessProblem.accessRightsInsufficient).raise();
+		}
+		
+		// check the destination
+		Handle destinationDirHandle = Handle.get(params.destinationDirectory);
+		if (destinationDirHandle.isVolumeRoot()) { // the file system root cannot be target
+			new AccessErrorRecord(AccessProblem.accessRightsInsufficient).raise();
+		}
+		if (destinationDirHandle.isNullHandle()) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		FileEntry destinationDirectory = destinationDirHandle.getFe();
+		
+		// copy the file and return new file
+		List<iValueSetter> attrSetters = getCourier2FileAttributeSetters(params.attributes);
+		try (Volume.Session modSession = vol.startModificationSession()) {
+			// do the copy
+			FileEntry newFe = modSession.copy(fe, destinationDirectory, attrSetters, session.getUsername());
+			
+			// prepare results
+			Handle newFeHandle = new Handle(session, newFe);
+			newFeHandle.setIdTo(results.newHandle);
+			logResult("copy", results);
+		} catch (InterruptedException e) {
+			new UndefinedErrorRecord(FilingCommon.UNDEFINEDERROR_CANNOT_MODIFY_VOLUME).raise();
+		} catch (Exception e) {
+			new SpaceErrorRecord(SpaceProblem.mediumFull).raise();
+		}
 	}
 	
 	/*
@@ -869,7 +963,46 @@ public class FilingImpl {
 	 *   = 11;
 	 */
 	private static void move(MoveParams params,RECORD result) {
-		notImplemented("move", params);
+		logParams("move", params);
+		
+		// check session
+		Session session = resolveSession(params.session);
+		Volume vol = session.getService().getVolume();
+		session.continueUse();
+		
+		// check specified file handle
+		Handle fileHandle = Handle.get(params.handle);
+		if (fileHandle.isVolumeRoot()) { // the file system root cannot be copied
+			new AccessErrorRecord(AccessProblem.accessRightsInsufficient).raise();
+		}
+		if (fileHandle.isNullHandle()) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		FileEntry fe = fileHandle.getFe();
+		if (fe.getParentID() == FsConstants.rootFileID) { // file system root folders cannot be moved
+			new AccessErrorRecord(AccessProblem.accessRightsInsufficient).raise();
+		}
+		
+		// check the destination
+		Handle destinationDirHandle = Handle.get(params.destinationDirectory);
+		if (destinationDirHandle.isVolumeRoot()) { // the file system root cannot be target
+			new AccessErrorRecord(AccessProblem.accessRightsInsufficient).raise();
+		}
+		if (destinationDirHandle.isNullHandle()) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		FileEntry destinationDirectory = destinationDirHandle.getFe();
+		
+		// move the file
+		List<iValueSetter> attrSetters = getCourier2FileAttributeSetters(params.attributes);
+		try (Volume.Session modSession = vol.startModificationSession()) {
+			modSession.move(fe, destinationDirectory, attrSetters, session.getUsername());
+			logResult("move", result);
+		} catch (InterruptedException e) {
+			new UndefinedErrorRecord(FilingCommon.UNDEFINEDERROR_CANNOT_MODIFY_VOLUME).raise();
+		} catch (Exception e) {
+			new SpaceErrorRecord(SpaceProblem.mediumFull).raise();
+		}
 	}
 	
 	/*
@@ -984,16 +1117,24 @@ public class FilingImpl {
 		if (fileHandle.isVolumeRoot()) {
 			new AccessErrorRecord(AccessProblem.accessRightsInsufficient).raise();
 		}
+
+		// prevent session timeout when processing large trees
+		session.holdClosing();
 		
-		// build up the tree structure
-		SerializedFile serializedFile = new SerializedFile(
-				ws -> new SerializeTreeWireStream(ws, session)
-			);
-		FileEntry startFe = fileHandle.getFe();
-		fillSerializeData(startFe, serializedFile.file);
-		
-		// transfer the data
-		sendBulkData("serialize", params.serializedFile, serializedFile);
+		try {			
+			// build up the tree structure
+			SerializedFile serializedFile = new SerializedFile(
+					ws -> new SerializeTreeWireStream(ws, session)
+				);
+			FileEntry startFe = fileHandle.getFe();
+			fillSerializeData(startFe, serializedFile.file);
+			
+			// transfer the data
+			sendBulkData("serialize", params.serializedFile, serializedFile);
+		} finally {
+			// restart timeout checks on the session
+			session.continueUse();
+		}
 	}
 	
 	// attributes used by GV 2.1 for serializing files and directories
@@ -1175,6 +1316,8 @@ public class FilingImpl {
 			new AccessErrorRecord(AccessProblem.accessRightsInsufficient).raise();
 		}
 		
+		// prevent session timeout when processing large trees
+		session.holdClosing();
 		
 		// do the transfer and deserialization
 		try (Volume.Session modSession = session.getService().getVolume().startModificationSession()) {
@@ -1187,6 +1330,9 @@ public class FilingImpl {
 		} catch (Exception e) {
 			System.out.printf("!!! Exception: %s -- %s !!!\n", e.getClass().getName(), e.getMessage());
 			new SpaceErrorRecord(SpaceProblem.mediumFull).raise();
+		} finally {
+			// restart timeout checks on the session
+			session.continueUse();
 		}
 	}
 	
@@ -1348,7 +1494,24 @@ public class FilingImpl {
 	 *   = 17;
 	 */
 	private static void find(FindParams params, FileHandleRecord results) {
-		notImplemented("find", params);
+		logParams("find", params);
+		
+		// check session
+		Session session = resolveSession(params.session);
+		
+		// check specified file handle
+		Handle dirHandle = Handle.get(params.directory);
+		long dirFileID = (dirHandle == null || dirHandle.isNullHandle() || dirHandle.isVolumeRoot()) ? 0 : dirHandle.getFe().getFileID();
+		
+		// do the enumeration
+		final List<FileEntry> hits = getFileHits(session, dirFileID, params.scope);
+		
+		// get the first hit or raise error if no matching file found
+		if (hits.isEmpty()) {
+			new AccessErrorRecord(AccessProblem.fileNotFound).raise();
+		}
+		Handle newHandle = new Handle(session, hits.get(0));
+		newHandle.setIdTo(results.file);
 	}
 	
 	/*
@@ -1372,54 +1535,11 @@ public class FilingImpl {
 		Handle dirHandle = Handle.get(params.directory);
 		long dirFileID = (dirHandle == null || dirHandle.isNullHandle() || dirHandle.isVolumeRoot()) ? 0 : dirHandle.getFe().getFileID();
 		
-		// check if we support this scope?
-		int maxCount = FilingCommon.unlimitedCount;
-		int maxDepth = 1;
-		iValueFilter valueFilter = fe -> true;
-		for (int i = 0; i < params.scope.size(); i++) {
-			CHOICE<ScopeType> singleScope = params.scope.get(i);
-			switch(singleScope.getChoice()) {
-			case count: {
-				ScopeCountRecord scr = (ScopeCountRecord)singleScope.getContent();
-				maxCount = scr.value.get();
-				break; }
-			case depth:
-			case depthFiling4: {
-				ScopeDepthRecord sdr = (ScopeDepthRecord)singleScope.getContent();
-				maxDepth = sdr.value.get();
-				break; }
-			case direction: {
-				ScopeDirectionRecord sdr = (ScopeDirectionRecord)singleScope.getContent();
-				if (sdr.value.get() != ScopeDirection.forward) {
-					new ScopeTypeErrorRecord(ArgumentProblem.unimplemented, ScopeType.direction).raise();
-				}
-				break; }
-			case filter: {
-				FilterRecord ft = (FilterRecord)singleScope.getContent();
-				valueFilter = AttributeUtils.buildPredicate(ft.value);
-				break; }
-			}
-		}
+		// do the enumeration
+		final List<FileEntry> hits = getFileHits(session, dirFileID, params.scope);
 		
 		// prepare the attribute getters
 		List<iValueGetter<FilingCommon.AttributeSequence>> getters = getFile2CourierAttributeGetters(params.types);
-		
-		// do the enumeration
-		final List<FileEntry> hits;
-		if (maxDepth < 2) {
-			hits = session.getService().getVolume().listDirectory(
-						dirFileID,
-						valueFilter,
-						maxCount,
-						session.getUsername());
-		} else {
-			hits = session.getService().getVolume().findFiles(
-					dirFileID,
-					valueFilter,
-					maxCount,
-					maxDepth,
-					session.getUsername());
-		}
 		
 		// build the result stream and send it
 		StreamOf<AttributeSequence> stream = new StreamOf<>(0, 1, 16, AttributeSequence::make);
@@ -1525,6 +1645,63 @@ public class FilingImpl {
 		return null; // keep the compiler happy
 	}
 	
+	private static List<FileEntry> getFileHits(Session session, long dirFileID, ScopeSequence scope) {
+		// check if we support this scope?
+		int maxCount = FilingCommon.unlimitedCount;
+		int maxDepth = 1;
+		boolean backward = false;
+		iValueFilter valueFilter = fe -> true;
+		for (int i = 0; i < scope.size(); i++) {
+			CHOICE<ScopeType> singleScope = scope.get(i);
+			switch(singleScope.getChoice()) {
+			case count: {
+				ScopeCountRecord scr = (ScopeCountRecord)singleScope.getContent();
+				maxCount = scr.value.get();
+				break; }
+			case depth:
+			case depthFiling4: {
+				ScopeDepthRecord sdr = (ScopeDepthRecord)singleScope.getContent();
+				maxDepth = sdr.value.get();
+				break; }
+			case direction: {
+				ScopeDirectionRecord sdr = (ScopeDirectionRecord)singleScope.getContent();
+				backward = (sdr.value.get() == ScopeDirection.backward);
+				break; }
+			case filter: {
+				FilterRecord ft = (FilterRecord)singleScope.getContent();
+				valueFilter = AttributeUtils.buildPredicate(ft.value);
+				break; }
+			}
+		}
+		
+		// do the enumeration
+		final List<FileEntry> hits;
+		if (maxDepth < 2) {
+			hits = session.getService().getVolume().listDirectory(
+						dirFileID,
+						valueFilter,
+						maxCount,
+						session.getUsername());
+		} else {
+			hits = session.getService().getVolume().findFiles(
+					dirFileID,
+					valueFilter,
+					maxCount,
+					maxDepth,
+					session.getUsername());
+		}
+		
+		// done (or almost)
+		if (backward) {
+			List<FileEntry> revHits = new ArrayList<>();
+			for (int i = hits.size() - 1; i >= 0; i--) {
+				revHits.add(hits.get(i));
+			}
+			return revHits;
+		}
+		return hits;
+	}
+	
 	/*
 	 * utils
 	 */
@@ -1548,14 +1725,19 @@ public class FilingImpl {
 	}
 	
 	private static void sendBulkData(String procName, BulkData1.Sink sink, iWireData streamData) {
-		System.out.printf("FilingImpl.%s() :: sending data via bulk data transfer\n", procName);
-		try {
-			sink.send(streamData, true);
-		} catch (NoMoreWriteSpaceException e) {
-			System.out.printf("FilingImpl.%s() :: NoMoreWriteSpaceException (i.e. abort) during BDT.send()\n", procName);
-			new ConnectionErrorRecord(ConnectionProblem.otherCallProblem).raise();
-		}
-	}
+    	System.out.printf("FilingImpl.%s() :: sending data via bulk data transfer\n", procName);
+        if (logParamsAndResults) {
+            StringBuilder sb = new StringBuilder();
+               streamData.append(sb, "  ", "bulk-data");
+               System.out.printf("##\n##\n%s\n##\n##\n", sb.toString());
+        }
+        try {
+               sink.send(streamData, true);
+        } catch (NoMoreWriteSpaceException e) {
+               System.out.printf("FilingImpl.%s() :: NoMoreWriteSpaceException (i.e. abort) during BDT.send()\n", procName);
+               new ConnectionErrorRecord(ConnectionProblem.otherCallProblem).raise();
+        }
+  }
 	
 	private static List<iValueGetter<FilingCommon.AttributeSequence>> getFile2CourierAttributeGetters(AttributeTypeSequence types) {
 		List<iValueGetter<FilingCommon.AttributeSequence>> getters = new ArrayList<>();

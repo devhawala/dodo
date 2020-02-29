@@ -85,6 +85,7 @@ the type of the item defined. The _kind_ must be one of:
 - `p` for a print service
 - `u` for a user
 - `ug` for a user group
+- `ws` for a workstation
 
 The _name_ part should be a single word. In case of an user the _name_ will usually
 define the first alias of this user (see below). All names defined in the clearinghouse
@@ -195,8 +196,7 @@ The name of the user group is defined by the _name_ part of the properties filen
 characteristics are configured with the following parameters in the properties file:
 
 - `description`    
-the description text of the service, like the location or capabilities of a printer. If
-omitted, a description will be generated    
+the description text of the group. If omitted, a description will be generated    
 _optional_, _default_: Usergroup _name_
 
 - `members`    
@@ -205,6 +205,24 @@ from the list if the member is not found, if it is redundant (e.g. the same item
 different aliases) or if user-groups are nested and contain a cyclic reference (then one of the
 recursion items will be removed in an arbitrary level)     
 _required_
+
+### Workstations
+
+Workstations have a description, a machine-id and aliases. The first alias is defined by the _name_ part
+of the properties filename. The other characteristics are configured with the following parameters in the
+properties file:
+
+- `description`    
+the description text of the workstation. If omitted, a description will be generated    
+_optional_, _default_: Workstation _name_
+
+- `machineId`    
+the processor or machine id of the workstation (in the format HH-HH-HH-HH-HH-HH)    
+_required_
+
+- `aliases`    
+comma separated list of additional aliases for the workstation    
+_optional_ (no default)
 
 
 ### Examples

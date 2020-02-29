@@ -58,10 +58,23 @@ public class UNSPECIFIED implements iWireData {
 	}
 	
 	@Override
-	public StringBuilder append(StringBuilder to, String indent, String fieldName) {
-		to.append(indent).append(fieldName).append(": ").append(Integer.toString(this.value));
-		return to;
-	}
+    public StringBuilder append(StringBuilder to, String indent, String fieldName) {
+          to.append(indent)
+            .append(fieldName)
+            .append(": ")
+            .append(String.format(
+    			"0x%04X (%c%c - %d)", 
+    			this.value, getc((this.value >> 8) & 0xFF), getc(this.value & 0xFF), this.value));
+          return to;
+    }
+    
+    private static char getc(int val) {
+          if (val > 31 && val < 127) {
+                 return (char)val;
+          } else {
+                 return '.';
+          }
+    }
 	
 	public static UNSPECIFIED make() { return new UNSPECIFIED(); }
 	
