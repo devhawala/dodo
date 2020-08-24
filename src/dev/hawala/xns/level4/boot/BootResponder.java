@@ -58,6 +58,13 @@ import dev.hawala.xns.network.iIDPSender;
  */
 public class BootResponder implements iIDPReceiver {
 	
+	// time interval in milliseconds between 2 'simpleData' packets
+	private static int simpleDataSendInterval = 40; // default: ~ 25 packets per second
+	
+	public static void setSimpleDataSendInterval(int msecs) {
+		simpleDataSendInterval = msecs;
+	}
+	
 	// seed for local connection IDs
 	private int lastConnId = (int)(System.currentTimeMillis() & 0xFFFF);
 	
@@ -146,7 +153,7 @@ public class BootResponder implements iIDPReceiver {
 				long bfn0 = rcvIdp.rdCardinal(2);
 				long bfn1 = rcvIdp.rdCardinal(4);
 				long bfn2 = rcvIdp.rdCardinal(6);
-				long bfn = (bfn0 << 32) | (bfn1 << 16) | bfn2; 
+				long bfn = (bfn0 << 32) | (bfn1 << 16) | bfn2;
 				this.logf(
 						"## bootSvc: processing simple-request from 0x%012X for boot-file-number 0x%012X\n",
 						rcvIdp.getSrcHost(), bfn);
@@ -156,6 +163,10 @@ public class BootResponder implements iIDPReceiver {
 					this.logf("## bootSvc : ERROR -> no bootfile defined for boot-file-number 0x%012X\n", bfn);
 					return;
 				}
+				File bootfile = this.bootFiles.get(bfn);
+				this.logf(
+						"## bootSvc: sending file '%s' via simpleFile for boot-file-number 0x%012X\n",
+						bootfile.getName(), bfn);
 				
 				// prepare idp packet for sending the boot file
 				IDP idp = new IDP().asReplyTo(rcvIdp).withSource(this.localEndpoint);
@@ -166,8 +177,8 @@ public class BootResponder implements iIDPReceiver {
 				
 				// start sending thread
 				try {
-					BufferedInputStream bis = new BufferedInputStream(new FileInputStream(this.bootFiles.get(bfn)));
-					Thread thr = new Thread(new SimpleDataSender(bis, idp, this.sender));
+					BufferedInputStream bis = new BufferedInputStream(new FileInputStream(bootfile));
+					Thread thr = new Thread(new SimpleDataSender(bis, idp, this.sender, this.verbose));
 					thr.setDaemon(true);
 					thr.start();
 				} catch (FileNotFoundException e) {
@@ -354,36 +365,42 @@ public class BootResponder implements iIDPReceiver {
 	// implementation of the thread sending a boot file
 	// as sequence of simpleData packets
 	private static class SimpleDataSender implements Runnable {
-		private static final int SEND_INTERVAL = 20; // ~ 50 packets per second
 		
 		private final IDP idp;
 		private InputStream src;
 		private final iIDPSender sender;
+		private final boolean verbose;
 		
 		private int nextPageNo = 1;
 		
-		private SimpleDataSender(InputStream src, IDP idp, iIDPSender sender) {
+		private SimpleDataSender(InputStream src, IDP idp, iIDPSender sender, boolean verbose) {
 			this.idp = idp;
 			this.sender = sender;
 			this.src = src;
+			this.verbose = verbose;
 		}
 
 		@Override
 		public void run() {
 			boolean done = false;
+			long startMs = System.currentTimeMillis();
 			try {
 				while(!done) {
-					Thread.sleep(SEND_INTERVAL);
+					Thread.sleep(simpleDataSendInterval);
 					int pageNo = this.nextPageNo++;
 					this.idp.wrCardinal(8, pageNo);
 					int packetLength = 10;
-					if (this.fillPage(this.idp)) {
-						packetLength += 512;
-					} else {
-						done = true;
-					}
+					int bootfileBytes = this.fillPage(this.idp);
+					done = (bootfileBytes < 1);
+					packetLength += bootfileBytes;
 					this.idp.setPayloadLength(packetLength);
 					this.sender.send(this.idp);
+					if (this.verbose) {
+						System.out.printf("## bootSvc - simpleData: at +%d sent %d bootfile bytes%s\n",
+								System.currentTimeMillis() - startMs,
+								bootfileBytes,
+								done ? " - transfer done" : "");
+					}
 				}
 			} catch (InterruptedException e) {
 				this.close();
@@ -391,21 +408,25 @@ public class BootResponder implements iIDPReceiver {
 			
 		}
 		
-		private boolean fillPage(IDP idp) {
+		private int fillPage(IDP idp) {
+			if (this.src == null) {
+				return 0;
+			}
+			int byteCount = 0;
 			try {
 				for (int i = 0; i < 512; i++) {
 					int b = this.src.read();
 					if (b < 0) {
 						this.close();
-						return false;
+						break;
 					}
 					idp.wrByte(10 + i, (byte)b);
+					byteCount++;
 				}
 			} catch (IOException e) {
 				this.close();
-				return false;
 			}
-			return true;
+			return byteCount;
 		}
 		
 		private void close() {

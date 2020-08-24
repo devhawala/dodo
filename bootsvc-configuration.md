@@ -77,3 +77,8 @@ _optional_, _default_: `bootsvc`
 log the boot service activities?   
 _optional_, _default_: `false`
 
+- `bootService.simpleDataSendInterval`    
+interval in milliseconds between 2 packets when using the simple protocol,
+so this parameter controls the packet transmission rate for microcode and
+germ files    
+_optional_, _default_: `40` (meaning 25 packets/second)

@@ -279,7 +279,8 @@ see [Clearinghouse configuration](./chs-config-files.md) for details
 
 - `bootService.baseDir`    
 `bootService.verbose`    
-these 2 properties configure the boot service provided by this Dodo instance;    
+`bootService.simpleDataSendInterval`    
+these 3 properties configure the boot service provided by this Dodo instance;    
 see [Boot service configuration](./bootsvc-configuration.md) for details
 
 - `printService.name`    

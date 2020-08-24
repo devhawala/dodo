@@ -103,6 +103,7 @@ public class DodoServer {
 	
 	private static String bootServiceBasedir = "bootsvc";
 	private static boolean bootServiceVerbose = false;
+	private static int bootServiceSimpleDataSendInterval = -1;
 	
 	private static int sppHandshakeCheckInterval = -1;
 	private static int sppHandshakeSendackCountdown = -1;
@@ -161,6 +162,7 @@ public class DodoServer {
 		
 		bootServiceBasedir = props.getString("bootService.basedir", bootServiceBasedir);
 		bootServiceVerbose = props.getBoolean("bootService.verbose", bootServiceVerbose);
+		bootServiceSimpleDataSendInterval = props.getInt("bootService.simpleDataSendInterval", bootServiceSimpleDataSendInterval);
 		
 		int fileSvcIdx = 0;
 		String serviceName;
@@ -278,6 +280,9 @@ public class DodoServer {
 		
 		// boot service
 		if (startBootService) {
+			if (bootServiceSimpleDataSendInterval > 0) {
+				BootResponder.setSimpleDataSendInterval(bootServiceSimpleDataSendInterval);
+			}
 			BootResponder bootService = new BootResponder(bootServiceBasedir, bootServiceVerbose);
 			localSite.clientBindToSocket(
 					IDP.KnownSocket.BOOT.getSocket(),
