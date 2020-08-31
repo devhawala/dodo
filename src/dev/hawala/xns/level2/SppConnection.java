@@ -782,7 +782,7 @@ public class SppConnection {
 			}
 			SPP spp = new SPP(data, offset, length);
 			this.fillSppConnectionData(spp)
-					.asSendAcknowledge()
+//					.asSendAcknowledge()
 					.setDatastreamType(datastreamType)
 					.setSequenceNumber(seqNo);
 			if (isEndOfMessage) { spp.asEndOfMessage(); }
@@ -991,21 +991,21 @@ public class SppConnection {
 		// so do the resends
 		long now = System.currentTimeMillis();
 		int othersAckNo = this.outNextExpectedSeqNo;
-		System.out.printf("!!!!!!!!!!! begin resending un-acknowledged packets starting with seqNo %d (actor: %s)\n", othersAckNo, actor);
+		int resentCount = 0;
 		int packetsResent = 0;
 		for (int i = 0; i < this.outgoingPackets.length; i++) {
 			SPP resendSpp = this.outgoingPackets[i];
 			if (resendSpp == null || resendSpp.getSequenceNumber() < othersAckNo) { continue; }
 			this.updateOthersWindowNumbers(resendSpp);
-			resendSpp.asSendAcknowledge();
 			this.transmitPacket(resendSpp.idp);
-			System.out.printf("!!!!!! resent packet with seqNo %d\n", resendSpp.getSequenceNumber());
+			resentCount++;
 			packetsResent++;
 			if (packetsResent >= maxResentPackets) {
 				break; // max. number of packets in a resend chunk reached
 			}
 		}
-		System.out.printf("!!!!!!!!!!! done resending un-acknowledged packets starting with seqNo %d\n", othersAckNo);
+		this.requestAcknowledge();
+		System.out.printf("!!!! resent un-acknowledged packets starting with seqNo = %d , count = %d (actor: %s)\n", othersAckNo, resentCount, actor);
 		
 		this.noResendBefore = now + RESEND_DELAY;
 		this.resendRetries++;

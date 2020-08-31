@@ -298,6 +298,12 @@ see [Print service configuration](./printsvc-configuration.md) for details
 a set of these parameter pairs (with the numerical *NN* parts being a sequence starting with 0)
 define the file services provided by this Dodo instance;    
 see [File service configuration](./filesvc-configuration.md) for details
+
+- `ether.useDarkstarWorkaround`    
+if `true`: activate a work-around for a problem in _Darkstar_ where IDP packets having the correct
+ethernet packet length for the IDP length may be ignored. The work-around is to add 2 extra words to
+the ethernet packet.     
+_optional_, _default: `false`
  
 
 #### NetHubGateway
@@ -461,14 +467,24 @@ request.
 Other XNS programs in BSD 4.3 were not tested so far.
 
 - [Darkstar](https://github.com/livingcomputermuseum/Darkstar) (8010 emulator version 1.0.0.1 by Josh Dersch / Living Computer Museum)    
-Tested under Windows-7, configuration: NetHub with NetHubGateway and Dodo server, Darkstar
-running the Viewpoint 2.0 disk.    
+Tested under Windows-10, configuration: NetHub with NetHubGateway and Dodo server, Darkstar
+running Viewpoint 2.0.6 or Star OS 5.0.        
+The network speed is comparable with real 8010's for workstations and servers (i.e. slow as in the 80's)
+(Darkstar running in average at ~130% speed according to the status line). For reliable network connections,
+the option `ether.useDarkstarWorkaround` should be set to `true` (see above) and the (internal
+low-level) option `spp.sendingTimeGap` (milliseconds between packets of the same SPP connection) should
+be set to a value between 50 to 75 for throttling Dodo's transmission rate, depending on Darkstars emulation speed.    
 Setting time from network at 0937 does not work for unknown reasons,
 so setting Dodo's `authSkipTimestampChecks` configuration parameter to `true` is
 required for authentication with CHS/Auth and accessing the XNS network.    
-Besides this, using file and print services with Darkstar/Viewpoint-2.0 work as for GlobalView,
-however at about the network speed (i.e. slow) as in the 80's with real 8010's for workstations and servers
-(Darkstar running in average at ~130% speed according to the status line) 
+Besides this, using file and print services with Darkstar works for viewpoint 2.0.6, however Star OS seems
+to be more picky about XNS protocols, so only printing to a Dodo print service currently works with Star OS,
+but accessing file services fails.    
+Remark: Darkstar version 1.1.0.0 seems to have a broken network support, as ethernet packets are sent over the network
+but received packets are not relayed to the emulator (the necessary line appears to have been removed accidentally
+along with some logging line cleanups during commit "Small tweaks, updated readme"). Darkstar version 1.0.0.1
+has a working network interface, so this version should be used if networking is intended.
+
 
 
 ### Bibliography

@@ -39,7 +39,7 @@ public class XnsTestClient {
 	public static void main(String[] args) throws XnsException, InterruptedException, SppAttention {
 		
 		//LocalSite.configureHub(null, 0);
-		LocalSite.configureLocal(0x0401, LocalSite.getMachineId(), "XnsClient", true);
+		LocalSite.configureLocal(0x0401, LocalSite.getMachineId(), "XnsClient", true, false);
 		localSite = LocalSite.getInstance();
 		
 		iSppSocket sock= localSite.sppConnect(XNSHOST, SPP_SOCK);

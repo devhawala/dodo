@@ -242,7 +242,7 @@ public class XnsResponder {
 		
 		// configure and start the network engine
 		LocalSite.configureHub(hubHost, hubPort);
-		LocalSite.configureLocal(localNetwork, localMachine, "XnsResponder", true);
+		LocalSite.configureLocal(localNetwork, localMachine, "XnsResponder", true, false);
 		iNetMachine localSite = LocalSite.getInstance();
 		
 		// set time base for all time dependent items

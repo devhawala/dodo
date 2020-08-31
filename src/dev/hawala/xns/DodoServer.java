@@ -74,6 +74,7 @@ public class DodoServer {
 	private static long networkNo = 0x0401;
 	private static long machineId = LocalSite.getMachineId();
 	private static boolean doChecksums = true;
+	private static boolean doDarkstarWorkaround = false;
 	private static String netHubHost = "localhost";
 	private static int netHubPort = 3333;
 	
@@ -132,6 +133,7 @@ public class DodoServer {
 		networkNo = props.getLong("networkNo", networkNo);
 		String mId = props.getString("machineId", null);
 		doChecksums = props.getBoolean("useChecksums", doChecksums);
+		doDarkstarWorkaround = props.getBoolean("ether.useDarkstarWorkaround", doDarkstarWorkaround);
 		netHubHost = props.getString("netHubHost", netHubHost);
 		netHubPort = props.getInt("netHubPort", netHubPort);
 		
@@ -272,7 +274,7 @@ public class DodoServer {
 		
 		// configure and start the network engine
 		LocalSite.configureHub(netHubHost, netHubPort);
-		LocalSite.configureLocal(networkNo, machineId, "DodoServer", doChecksums);
+		LocalSite.configureLocal(networkNo, machineId, "DodoServer", doChecksums, doDarkstarWorkaround);
 		localSite = LocalSite.getInstance();
 		
 		// set time base for all time dependent items

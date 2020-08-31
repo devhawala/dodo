@@ -54,15 +54,17 @@ import dev.hawala.xns.network.NetMachine;
  */
 public class LocalSite {
 	
-	// 60 bytes seems the minimum length accepted by Pilot (Ethernet requirement?)
-	private static final int MIN_PACKET_LEN = 60;
+	// 60 bytes seems the minimum ethernet packet length accepted by Pilot (Ethernet requirement?)
+	private static final int MIN_ETHER_PACKET_LEN = 60;
+	private static final int MIN_IDP_PACKET_LEN = MIN_ETHER_PACKET_LEN - 14; // 2x 3 words for ether-addr + 1 word for ether-type
 	
 	private static final Object lock = new Object();
 	
 	// configuration with defaults
 	private static long networkId = 2273; // 0x0001_0120; // arbitrary
 	private static long machineId = 0x0000_1000_FF12_3401L; // 10-00-FF-12-34-01
-	private static boolean enforceChecksums = false; // false; // true;
+	private static boolean enforceChecksums = true;
+	private static boolean prolongatePacketsForDarkstar = false;
 	
 	private static String machineName = "DwarfSvc:domain:org";
 	
@@ -142,12 +144,19 @@ public class LocalSite {
 				NetPacket p = idp.packet;
 				int packetLength = p.rdBytes(0, p.getPayloadLength(), sendBuffer, 16, sendBuffer.length - 16);
 				
-				// add trailing bytes to pad the content up to minimal length 
-				if (packetLength < MIN_PACKET_LEN) {
-					for (int i = packetLength; i < MIN_PACKET_LEN; i++) {
+				// add trailing bytes to pad the content up to minimal length (giving the minimal ethernet packet length)
+				if (packetLength < MIN_IDP_PACKET_LEN) {
+					for (int i = packetLength; i < MIN_IDP_PACKET_LEN; i++) {
 						sendBuffer[i + 16] = 0;
 					}
-					packetLength = MIN_PACKET_LEN;
+					packetLength = MIN_IDP_PACKET_LEN;
+				}
+				
+				// add 2 words for StarOS under DarkStar-1.0.0.1 if requested
+				// (work-around for possible lost 2 words, resulting in ignored packets) 
+				if (prolongatePacketsForDarkstar) {
+					sendBuffer[16 + (packetLength++)] = 0;
+					sendBuffer[16 + (packetLength++)] = 0;
 				}
 				
 				// set ethernet destination mac address
@@ -266,15 +275,19 @@ public class LocalSite {
 	 * 		checksums to be generated for outgoing packets?
 	 * 		<br/>WARNING: using {@code true} slows down communications!
 	 * 		<br/>Default: {@code true}
+	 * @param doDarkstarWorkaround add 2 additional zero words to an ethernet packet
+	 * 		for Darkstar clients to accept the packets
 	 * @return {@code true} if the parameters where set.
 	 */
-	public static boolean configureLocal(long network, long machine, String name, boolean doChecksums) {
+	public static boolean configureLocal(long network, long machine, String name, boolean doChecksums, boolean doDarkstarWorkaround) {
 		synchronized(lock) {
 			if (theMachine != null) { return false; }
 			networkId = network;
 			machineId = machine;
 			machineName = name;
 			enforceChecksums = doChecksums;
+			prolongatePacketsForDarkstar = doDarkstarWorkaround;
+			
 			return true;
 		}
 	}
