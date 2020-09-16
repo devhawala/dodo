@@ -44,7 +44,7 @@ public class SEQUENCE<T extends iWireData> implements iWireData {
 	
 	private final List<T> elems = new ArrayList<T>();
 	
-	protected SEQUENCE(int maxCount, iWireDynamic<T> builder) {
+	public SEQUENCE(int maxCount, iWireDynamic<T> builder) {
 		this.maxElemCount = maxCount;
 		this.elemBuilder = builder;
 	}

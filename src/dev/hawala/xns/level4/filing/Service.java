@@ -110,13 +110,14 @@ public class Service implements Runnable {
 				Credentials credentials,
 				Verifier verifier,
 				Long remoteHostId,
-				StrongVerifier decodedVerifier) {
+				StrongVerifier decodedVerifier,
+				int filingVersion) {
 		if (this.shutdown) {
 			throw new IllegalStateException("Service shut down");
 		}
 		int[] conversationKey = new int[4];
 		ThreePartName username = this.checkCredentials(credentials, verifier, conversationKey, decodedVerifier);
-		Session s = new Session(this, username, remoteHostId, conversationKey);
+		Session s = new Session(this, username, remoteHostId, conversationKey, filingVersion);
 		this.sessions.add(s);
 		return s;
 	}

@@ -55,13 +55,29 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 import dev.hawala.xns.level4.common.AuthChsCommon;
 import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
 import dev.hawala.xns.level4.common.BulkData1;
+import dev.hawala.xns.level4.filing.fs.FsConstants;
 
 /**
  * Definition of the Filing Courier program (PROGRAM 10)
  * parts common to versions 4, 5 and 6,
  * (transcribed from Filing4.cr, Filing5.cr, Filing6.cr).
+ * <p>
+ * Remark: the files 'Filing4.cr' found in the internet are inaccurate
+ * or even wrong regarding some datatypes, the errors were discovered when
+ * using StarOS 5.0 (running under Darkstar) to access the Dodo file services.
+ * These deviations between existing 'Filing4.cr' files and the Courier data
+ * streams produced (resp. expected) by a *real* Filing4 client relate to:
+ * </p>
+ * <ul>
+ * <li>AccessType and AccessSequence (bits in a single word for Filing4
+ * instead of an ENUM resp. a SEQUENCE of this enum</li>
+ * <li>ScopeType and ScopeSequence, where the Filing4 ScopeType enum
+ * has an additional value with a related value record for the scope
+ * definition; this results in incompatible find() and list() procedures</li>
+ * </ul>
+ * <p>(see the comments in the corresponding declarations below)</p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin 2019
+ * @author Dr. Hans-Walter Latz / Berlin 2019,2020
  */
 public abstract class FilingCommon extends CrProgram {
 	
@@ -177,6 +193,37 @@ public abstract class FilingCommon extends CrProgram {
 			this.value.clear();
 		}
 		
+		public void setAsPosition(long position) {
+			this.type.set(FilingCommon.atPosition);
+			
+			// manually emulate a SEQUENCE
+			if (position <= 0xFFFF) {
+				this.value.add().set(1);       // SEQUENCE<UNSPECIFIED> :: length = 1
+				this.value.add().set((position == 0xFFFF) ? 0 : 0xFFFF);
+			} else {
+				int posUpper = (int)((position >> 16) & 0xFFFFL);
+				int posLower = (int)(position & 0xFFFFL);
+				this.value.add().set(2);       // SEQUENCE<UNSPECIFIED> :: length = 2 
+				this.value.add().set(posUpper);// SEQUENCE<UNSPECIFIED> :: element[0]
+				this.value.add().set(posLower);// SEQUENCE<UNSPECIFIED> :: element[1]
+			}
+		}
+		
+		public long getAsPosition() {
+			if (this.type.get() != FilingCommon.atPosition) {
+				return 0;
+			}
+			if (this.value.size() < 2) {
+				return 0;
+			} else if (this.value.size() == 2) {
+				return (this.value.get(1).get() == 0xFFFF) ? 0xFFFF : 0;
+			} else {
+				int posUpper = this.value.get(1).get();
+				int posLower = this.value.get(2).get();
+				return (posUpper << 16) | posLower;
+			}
+		}
+		
 	}
 	public static class AttributeSequence extends RECORD {
 		public final SEQUENCE<Attribute> value = mkSEQUENCE(Attribute::make);
@@ -215,11 +262,17 @@ public abstract class FilingCommon extends CrProgram {
 	public static final int defaultTimeout = 0177777;
 	
 	/*
-	 * AccessType: TYPE = {
-	 *   readAccess(0), writeAccess(1), ownerAccess(2),	-- all files --
-	 *   addAccess(3), removeAccess(4) };		-- directories only --
-	 * AccessSequence: TYPE = SEQUENCE 5 OF AccessType;
-	 * fullAccess: AccessSequence = [177777B];
+	 * Filing version 5/6:
+	 * 
+	 *   AccessType: TYPE = {
+	 *     readAccess(0), writeAccess(1), ownerAccess(2),	-- all files --
+	 *     addAccess(3), removeAccess(4) };		-- directories only --
+	 *   AccessSequence: TYPE = SEQUENCE 5 OF AccessType;
+	 *   -- fullAccess: AccessSequence = [177777B]; --
+	 * 
+	 * Filing version 4: (defined as above in all "Filing4.cr" files found in the internet, but seems to be in reality as follows)
+	 * 
+	 *   AccessSequence ~ CARDINAL with a bit set for each AccessType
 	 */
 	public enum AccessType implements CrEnum {
 		readAccess(0), writeAccess(1), ownerAccess(2), addAccess(3), removeAccess(4), fullAccess(0177777);
@@ -229,19 +282,169 @@ public abstract class FilingCommon extends CrProgram {
 		@Override public int getWireValue() { return this.wireValue; }
 	}
 	public static final EnumMaker<AccessType> mkAccessType = buildEnum(AccessType.class).get();
-	public static class AccessSequence extends SEQUENCE<ENUM<AccessType>> {
-		private AccessSequence() { super(5, mkAccessType); }
-		public static AccessSequence make() { return new  AccessSequence(); }
-	}
-	public static boolean isFullAccess(AccessSequence attr) {
-		for (int i = 0; i < attr.size(); i++) {
-			if (attr.get(i).get() == AccessType.fullAccess) { return true; }
+	
+	public static class AccessSequence implements iWireData {
+		
+		private CARDINAL                   forFiling4 = null;
+		private SEQUENCE<ENUM<AccessType>> forFilingPost4 = null;
+		
+		private AccessSequence(boolean isFiling4) {
+			if (isFiling4) {
+				this.forFiling4 = new CARDINAL();
+			}
 		}
-		return false;
-	}
-	public static final AccessSequence asFullAccess(AccessSequence attr) {
-		attr.clear().add().set(AccessType.fullAccess);
-		return attr;
+		
+		private void ensureRepresented() {
+			if (this.forFiling4 == null && this.forFilingPost4 == null) {
+				this.forFilingPost4 = new SEQUENCE<ENUM<AccessType>>(5, mkAccessType);
+			}
+		}
+		
+		public void switchToFiling4() {
+			if (this.forFiling4 != null) { return; } // already there
+			this.forFiling4 = new CARDINAL();
+			if (this.forFilingPost4 != null) {
+				for (int i = 0; i < this.forFilingPost4.size(); i++) {
+					this.add(this.forFilingPost4.get(i).get());
+				}
+			}
+			this.forFilingPost4 = null;
+		}
+		
+		public static AccessSequence makeAny() { return new AccessSequence(false); }
+		public static AccessSequence make4() { return new AccessSequence(true); }
+		public static AccessSequence makePost4() {
+			AccessSequence as = new AccessSequence(false);
+			as.ensureRepresented();
+			return as;
+		}
+
+		private static int map(AccessType accessType) {
+			switch(accessType) {
+			case readAccess:   return 0x0010; // if this bit is not set, StarOS refuses to open a folder, so 'readAccess(0)' is assumed to be bit 0x0010
+			case writeAccess:  return 0x0008; // the placement of other bits are assumed based on the enum-wir-index in AccessType 
+			case ownerAccess:  return 0x0004; // ...
+			case addAccess:    return 0x0002; // ...
+			case removeAccess: return 0x0001; // ...
+			case fullAccess:   return 0x001F; // (all above bits)
+			default: return 0; // why is this branch required if all enum-values have their branch??
+			}
+		}
+		
+		public void add(AccessType accessType) {
+			if (this.forFiling4 != null) {
+				this.forFiling4.set((this.forFiling4.get() | map(accessType)) & 0xFFFF);
+			} else {
+				this.ensureRepresented();
+				for (int i = 0; i < this.forFilingPost4.size(); i++) {
+					if (this.forFilingPost4.get(i).get() == accessType) {
+						return;
+					}
+				}
+				this.forFilingPost4.add().set(accessType);
+			}
+		}
+		
+		public void clear() {
+			if (this.forFiling4 != null) {
+				this.forFiling4.set(0);
+			} else if (this.forFilingPost4 != null) {
+				this.forFilingPost4.clear();
+			}
+		}
+		
+		public void remove(AccessType accessType) {
+			if (this.forFiling4 != null) {
+				this.forFiling4.set((this.forFiling4.get() & (map(accessType) ^ 0xFFFF)) & 0xFFFF);
+			} else {
+				this.ensureRepresented();
+				if (this.has(accessType)) {
+					SEQUENCE<ENUM<AccessType>> newRepr = new SEQUENCE<ENUM<AccessType>>(5, mkAccessType);
+					for (int i = 0; i < this.forFilingPost4.size(); i++) {
+						ENUM<AccessType> val = this.forFilingPost4.get(i);
+						if (val.get() != accessType) {
+							newRepr.add(val);
+						}
+					}
+					this.forFilingPost4 = newRepr;
+				}
+			}
+		}
+		
+		public boolean has(AccessType accessType) {
+			if (this.forFiling4 != null) {
+				int accessTypeBit = map(accessType);
+				return (this.forFiling4.get() & accessTypeBit) == accessTypeBit;
+			} else if (this.forFilingPost4 != null) {
+				for (int i = 0; i < this.forFilingPost4.size(); i++) {
+					if (this.forFilingPost4.get(i).get() == accessType) {
+						return true;
+					}
+					if (this.forFilingPost4.get(i).get() == AccessType.fullAccess) {
+						return true;
+					}
+				}
+				return false;
+			} else {
+				return false;
+			}
+		}
+
+		@Override
+		public void serialize(iWireStream ws) throws NoMoreWriteSpaceException {
+			if (this.forFiling4 != null) {
+				this.forFiling4.serialize(ws);
+			} else {
+				this.ensureRepresented();
+				this.forFilingPost4.serialize(ws);
+			}
+		}
+	
+		@Override
+		public void deserialize(iWireStream ws) throws EndOfMessageException {
+			if (this.forFiling4 != null) {
+				this.forFiling4.deserialize(ws);
+			} else if (this.forFilingPost4 != null) {
+				this.forFilingPost4.deserialize(ws);
+			} else {
+				// decide how to decode by interpreting the first word...
+				int firstWord = ws.readI16() & 0xFFFF;
+				if (firstWord == 0) {
+					// well this means "no access" in all filing versions (no bits in Filing4-word resp. empty sequence for Filing5/6)
+					// so leave our fields blank, also signaling "no access values set"
+				} else if (firstWord <= 5 && !ws.isAtEnd()) {
+					// this is the only ambiguous case!
+					// assuming that a file has at least 'readAccess' if it is accessible at all, a Filing4-Access should be > 15
+					// so any value larger than 5 (the max. length of a Filing5/6 AccessSequence) is assumed to be Filing4
+					// however: if a programmer uses only a unfavorable mix of 'add', 'remove' or 'owner' accesses, we will run into trouble... 
+					this.ensureRepresented(); // switch to post-Filing4
+					
+					// assuming that a AccessSequence-instance not yet bound to a Filing-version is used in attribute lists only,
+					// a word-sequence is decoded by 'ws', we switch to post-filing4 as there is more than one word in the serialized attribute
+					for (int i = 0; i < firstWord; i++) {
+						ENUM<AccessType> elem = mkAccessType.make();
+						elem.deserialize(ws);
+						this.forFilingPost4.add(elem);
+					}
+				} else {
+					// this is a filing4 access list (single word)
+					this.forFiling4 = new CARDINAL();
+					this.forFiling4.set(firstWord);
+					// there should be no more data for this item (if really Filing4), but who knows...
+				}
+			}
+		}
+	
+		@Override
+		public StringBuilder append(StringBuilder to, String indent, String fieldName) {
+			if (this.forFiling4 != null) {
+				return this.forFiling4.append(to, indent, fieldName);
+			} else {
+				this.ensureRepresented();
+				return this.forFilingPost4.append(to, indent, fieldName);
+			}
+		}
+		
 	}
 	
 	/*
@@ -264,7 +467,7 @@ public abstract class FilingCommon extends CrProgram {
 		public static TimeoutControl make() { return new TimeoutControl(); }
 	}
 	public static class AccessControl extends RECORD {
-		public final AccessSequence value = mkMember(AccessSequence::make);
+		public final AccessSequence value = mkMember(AccessSequence::makeAny);
 		
 		private AccessControl() {}
 		public static AccessControl make() { return new AccessControl(); }
@@ -390,6 +593,8 @@ public abstract class FilingCommon extends CrProgram {
 	}
 	
 	/*
+	 * Filing version 5 or 6:
+	 * 
 	 * ScopeType: TYPE = { count(0), direction(1), filter(2), depth(3) };
 	 * Scope: TYPE = CHOICE ScopeType OF {
 	 *   count => RECORD [value: ScopeCount],
@@ -401,8 +606,13 @@ public abstract class FilingCommon extends CrProgram {
 	 * remarks: according to Filing4 revision comment of 87/03/23  11:19:35,
 	 *          ScopeType.depth has code 4 in Filing4, but 3 in Filing5/Filing6,
 	 *          so a 'depthFiling4' was added...
+	 *          in Filing 4 code 3 has the meaning "ordering", which was dropped and replaced
+	 *          by "depth" from Filing5 on...
+	 * problem: StarOS does use code 3 with Filing version 4, so versions 4 resp. 5,6 have
+	 *          incompatible Scope representations!
+	 * So: this is for Filing version 5 or 6, and version 4 has a separate definition!
 	 */
-	public enum ScopeType { count , direction , filter , depth , depthFiling4 }
+	public enum ScopeType { count , direction , filter , depth }
 	public static final EnumMaker<ScopeType> mkScopeType = buildEnum(ScopeType.class).get();
 	public static class ScopeCountRecord extends RECORD {
 		public final CARDINAL value = mkCARDINAL();
@@ -427,11 +637,46 @@ public abstract class FilingCommon extends CrProgram {
 			.choice(ScopeType.direction, ScopeDirectionRecord::make)
 			.choice(ScopeType.filter, FilterRecord::make)
 			.choice(ScopeType.depth, ScopeDepthRecord::make)
-			.choice(ScopeType.depthFiling4, ScopeDepthRecord::make)
 			.get();
 	public static class ScopeSequence extends SEQUENCE<CHOICE<ScopeType>> {
 		private ScopeSequence() { super(4, mkScope); }
 		public static ScopeSequence make() { return new ScopeSequence(); }
+	}
+	
+	/*
+	 * Filing version 4:
+	 * assumptions for the 'ordering'-scope based on:
+	 * - "Service 8.0 Filing Programmers Manual Nov84"
+	 * - and analysis of StarOS Courier requests
+	 * BUT definition resp. Courier representation of ScopeOrdering is highly unclear!
+	 * 
+	 * ScopeType: TYPE = { count(0), direction(1), filter(2), ordering(3), depth(4) };
+	 * Scope: TYPE = CHOICE ScopeType OF {
+	 *   count => RECORD [value: ScopeCount],
+	 *   depth => RECORD [value: ScopeDepth],
+	 *   direction => RECORD [value: ScopeDirection],
+	 *   filter => RECORD [value: ScopeFilter],
+	 *   ordering => RECORD[value ScopeOrdering] };
+	 * ScopeSequence: TYPE = SEQUENCE 4 OF Scope;
+	 */
+	public enum ScopeType4 { count , direction , filter , ordering , depth }
+	public static final EnumMaker<ScopeType4> mkScopeType4 = buildEnum(ScopeType4.class).get();
+	public static class ScopeOrdering extends RECORD {
+		public final ARRAY<UNSPECIFIED> words = mkARRAY(7, UNSPECIFIED::make); // 7 words are experimentally assumed based find() requests from StarOS
+		
+		private ScopeOrdering() { }
+		public static ScopeOrdering make() { return new ScopeOrdering(); }
+	}
+	public static final ChoiceMaker<ScopeType4> mkScope4 = buildChoice(mkScopeType4)
+			.choice(ScopeType4.count, ScopeCountRecord::make)
+			.choice(ScopeType4.direction, ScopeDirectionRecord::make)
+			.choice(ScopeType4.filter, FilterRecord::make)
+			.choice(ScopeType4.depth, ScopeDepthRecord::make)
+			.choice(ScopeType4.ordering, ScopeOrdering::make)
+			.get();
+	public static class ScopeSequence4 extends SEQUENCE<CHOICE<ScopeType4>> {
+		private ScopeSequence4() { super(5, mkScope4); }
+		public static ScopeSequence4 make() { return new ScopeSequence4(); }
 	}
 	
 	/*
@@ -934,7 +1179,7 @@ public abstract class FilingCommon extends CrProgram {
 	 * currentVersion: LONG CARDINAL = 3;
 	 */
 	public static class SerializedFile extends RECORD {
-		public final LONG_CARDINAL version = mkLONG_CARDINAL();
+		private final LONG_CARDINAL version = mkLONG_CARDINAL();
 		public final SerializedTree file = mkRECORD(SerializedTree::make);
 		
 		private final WireStreamMapper streamMapper;
@@ -951,11 +1196,11 @@ public abstract class FilingCommon extends CrProgram {
 			super.deserialize(ws);
 		}
 		
-		public SerializedFile(WireStreamMapper mapper) {
+		public SerializedFile(WireStreamMapper mapper, boolean forFiling4) {
 			this.streamMapper = mapper;
-			this.version.set(3);
+			this.version.set(forFiling4 ? 2 : 3);
 		}
-		public SerializedFile make() { return new SerializedFile(null); }
+		public SerializedFile make() { return new SerializedFile(null, false); }
 	}
 	
 	/*
@@ -1008,10 +1253,12 @@ public abstract class FilingCommon extends CrProgram {
 	 */
 	public static class AccessEntry extends RECORD {
 		public final AuthChsCommon.Name key = mkMember(AuthChsCommon.Name::make);
-		public final AccessSequence access = mkMember(AccessSequence::make);
+		public final AccessSequence access = mkMember(AccessSequence::makeAny);
 		
 		private AccessEntry() {}
 		public static AccessEntry make() { return new AccessEntry(); }
+		
+		public void forFiling4() { this.access.switchToFiling4(); }
 	}
 	public static class AccessList extends RECORD {
 		public final SEQUENCE<AccessEntry> entries = mkSEQUENCE(AccessEntry::make);
@@ -1068,6 +1315,7 @@ public abstract class FilingCommon extends CrProgram {
 	 * nullFileID: FileID = [0,0,0,0,0];
 	 */
 	public static final int atFileID = 4;
+	public static final long DRAWER_PARENT_ROOTDIR_FILEID = 0x7FFF_FFFF_FFFF_0001L; // alternative FileID for file drawer parent, see AttributeUtils
 	public static class FileID extends ARRAY<UNSPECIFIED> {
 		private FileID() { super(5, UNSPECIFIED::make); }
 		public static FileID make() { return new FileID(); }
@@ -1089,7 +1337,8 @@ public abstract class FilingCommon extends CrProgram {
 			return this;
 		}
 		
-		public FileID set(long id) {
+		public FileID set(long internalId) {
+			long id = (internalId == FsConstants.rootFileID) ? 0 : internalId;
 			int w0 = (int)((id >>> 48) & 0xFFFFL);
 			int w1 = (int)((id >>> 32) & 0xFFFFL);
 			int w3 = (int)((id >>> 16) & 0xFFFFL);
@@ -1104,12 +1353,13 @@ public abstract class FilingCommon extends CrProgram {
 		
 		public long get() {
 			if (this.get(2).get() == 0) {
-				int w0 = this.get(0).get();
-				int w1 = this.get(1).get();
-				int w3 = this.get(3).get();
-				int w4 = this.get(4).get();
+				long w0 = this.get(0).get();
+				long w1 = this.get(1).get();
+				long w3 = this.get(3).get();
+				long w4 = this.get(4).get();
 				
-				return (long)((w0 << 48) | (w1 << 32) | (w3 << 16) | w4); 
+				long externalId = (long)((w0 << 48) | (w1 << 32) | (w3 << 16) | w4);
+				return (externalId == 0 || externalId == DRAWER_PARENT_ROOTDIR_FILEID) ? FsConstants.rootFileID : externalId;
 			} else {
 				new HandleErrorRecord(HandleProblem.invalid).raise();
 				return -1; // keep the compiler happy
@@ -1955,6 +2205,11 @@ public abstract class FilingCommon extends CrProgram {
 	
 	/*
 	 * -- Locating and Listing Files in a Directory --
+	 * 
+	 * due to incompatible definition of the scope (version 4 vs. version 5/6), different
+	 * versions of find() and list() must be given in the version specific subclasses
+	 * 
+	 * the version specific parameter structures are defined here
 	 */
 	
 	/*
@@ -1976,16 +2231,15 @@ public abstract class FilingCommon extends CrProgram {
 		private FindParams() {}
 		public static FindParams make() { return new FindParams(); }
 	}
-	public final PROC<FindParams,FileHandleRecord> Find = mkPROC(
-						"Find",
-						17,
-						FindParams::make,
-						FileHandleRecord::make,
-						AccessError, AuthenticationError,
-						ControlTypeError, ControlValueError, HandleError,
-						ScopeTypeError, ScopeValueError,
-						SessionError, UndefinedError
-						);
+	public static class FindParams4 extends RECORD {
+		public final UNSPECIFIED2 directory = mkUNSPECIFIED2();
+		public final ScopeSequence4 scope = mkMember(ScopeSequence4::make);
+		public final ControlSequence controls = mkMember(ControlSequence::make);
+		public final Session session = mkRECORD(Session::make);
+		
+		private FindParams4() {}
+		public static FindParams4 make() { return new FindParams4(); }
+	}
 	
 	/*
 	 * List: PROCEDURE [ directory: Handle, types: AttributeTypeSequence,
@@ -2008,16 +2262,15 @@ public abstract class FilingCommon extends CrProgram {
 		private ListParams() {}
 		public static ListParams make() { return new ListParams(); }
 	}
-	public final PROC<ListParams,RECORD> List = mkPROC(
-						"List",
-						18,
-						ListParams::make,
-						RECORD::empty,
-						AccessError, AttributeTypeError,
-						AuthenticationError, ConnectionError,
-						HandleError,
-						ScopeTypeError, ScopeValueError,
-						SessionError, TransferError, UndefinedError
-						);
+	public static class ListParams4 extends RECORD {
+		public final UNSPECIFIED2 directory = mkUNSPECIFIED2();
+		public final AttributeTypeSequence types = mkMember(AttributeTypeSequence::make);
+		public final ScopeSequence4 scope = mkMember(ScopeSequence4::make);
+		public final BulkData1.Sink listing = mkRECORD(BulkData1.Sink::make);
+		public final Session session = mkRECORD(Session::make);
+		
+		private ListParams4() {}
+		public static ListParams4 make() { return new ListParams4(); }
+	}
 	
 }

@@ -38,8 +38,8 @@ import dev.hawala.xns.level4.common.AuthChsCommon;
  * (transcribed from Filing6.cr).
  * <p>
  * Remark: the Filing protocol is mostly defined in {@code FilingCommon},
- * only the version-specific "Logon" procedure is defined here to complete 
- * the protocol definition. 
+ * only the version-specific "Logon", "Find" and "List" procedures are defined
+ * here to complete the protocol definition.
  * </p>
  * 
  * @author Dr. Hans-Walter Latz / Berlin 2019
@@ -234,6 +234,55 @@ public class Filing6 extends FilingCommon {
 						Filing6LogonParams::make,
 						LogonResults::make,
 						AuthenticationError, ServiceError, SessionError, UndefinedError
+						);
+	
+	
+	/*
+	 * -- Locating and Listing Files in a Directory --
+	 */
+	
+	/*
+	 * Find: PROCEDURE [ directory: Handle, scope: ScopeSequence,
+	 *                   controls: ControlSequence, session: Session ]
+	 *   RETURNS [ file: Handle ]
+	 *   REPORTS [ AccessError, AuthenticationError,
+	 *             ControlTypeError, ControlValueError, HandleError,
+	 *             ScopeTypeError, ScopeValueError,
+	 *             SessionError, UndefinedError ]
+	 *   = 17;
+	 */
+	public final PROC<FindParams,FileHandleRecord> Find = mkPROC(
+						"Find",
+						17,
+						FindParams::make,
+						FileHandleRecord::make,
+						AccessError, AuthenticationError,
+						ControlTypeError, ControlValueError, HandleError,
+						ScopeTypeError, ScopeValueError,
+						SessionError, UndefinedError
+						);
+	
+	/*
+	 * List: PROCEDURE [ directory: Handle, types: AttributeTypeSequence,
+	 *                   scope: ScopeSequence, listing: BulkData.Sink,
+	 *                   session: Session ]
+	 *   REPORTS [ AccessError, AttributeTypeError,
+	 *             AuthenticationError, ConnectionError,
+	 *             HandleError,
+	 *             ScopeTypeError, ScopeValueError,
+	 *             SessionError, TransferError, UndefinedError ]
+	 *   = 18;
+	 */
+	public final PROC<ListParams,RECORD> List = mkPROC(
+						"List",
+						18,
+						ListParams::make,
+						RECORD::empty,
+						AccessError, AttributeTypeError,
+						AuthenticationError, ConnectionError,
+						HandleError,
+						ScopeTypeError, ScopeValueError,
+						SessionError, TransferError, UndefinedError
 						);
 
 }

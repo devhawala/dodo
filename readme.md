@@ -80,17 +80,17 @@ information
     - Clearinghouse (CHS)
 	(Courier program 2, versions 2 and 3)    
 	all protocol procedures are implemented for a *read-only* clearinghouse
-	database, allowing to log in to XDE and GlobalView, to navigate the network
+	database, allowing to log in to XDE and Star/Viewpoint/GVWin, to navigate the network
 	directory in GlobalView as well to query clearinghouse entries with `Maintain.bcd`
 	in XDE; however changes to the	database are rejected
     - Authentication (Auth)
 	(Courier program 14, version 2)    
 	all protocol procedures are implemented for a *read-only* clearinghouse
-	database, allowing to log in to XDE and GVWin; however changes to the
+	database, allowing to log in to XDE and Star/Viewpoint/GVWin; however changes to the
 	database are rejected
     - Printing
 	(Courier program 4, version 3)    
-	all protocol procedures are implemented, allowing to print from XDE and GVWin,
+	all protocol procedures are implemented, allowing to print from XDE and Star/Viewpoint/GVWin,
 	to query a print job status, the printer properties and the printer status.    
 	The interpress files are received and collected in the output directory,
 	a PostScript file can optionally be generated for the interpress master.
@@ -102,7 +102,7 @@ information
 	(Courier program 10, versions 4,5,6)    
 	a large subset of the protocol procedures is implemented, allowing
 	to access file drawers, folders and files on Dodo XNS File services from XDE
-	and GVWin. Although substantial functionality is missing (like access control
+	and Star/Viewpoint/GVWin. Although substantial functionality is missing (like access control
 	and access rights), Dodo file services are already usable in a single user environment.
 
 The network configuration of a Dodo server instance and the services provided
@@ -322,13 +322,13 @@ This program has the following optional parameters:
 
 Parameter|Default|Description
 ---------|-------|-----------
+(*1st arg*)| `localhost`| host where the NetHub runs, `=`selects the default
+(*2nd arg*)| `3333` | port for the NetHub on the NetHub host, `=`selects the default
+(*3rd arg*)| `MS LoopBack Driver` | PCap name of the network device to gateway, `=`selects the default
 `-ld`| | Log packet coming from the network device
 `-ldd`| | Log packet coming from the network device with packet content
 `-lh`| | Log packet coming from the NetHub
 `-lhd`| | Log packet coming from the NetHub with packet content
-(*1st arg*)| `localhost`| host where the NetHub runs, `=`selects the default
-(*2nd arg*)| `3333` | port for the NetHub on the NetHub host, `=`selects the default
-(*3rd arg*)| `MS LoopBack Driver` | PCap name of the network device to gateway, `=`selects the default
 `-p`| | print the list of PCap device names on the local machine instead of running the gateway
 `-h` | | print the command line help and stop 
 
@@ -435,12 +435,12 @@ tested.
 The following environments were tested with Dodo server and nethub, using the
 default Clearinghouse database found in `dist.zip`:
 
-- [Dwarf](https://github.com/devhawala/dwarf) emulator on Windows-Vista (32 bit) and Linux-Mint (64 bit) on a Core2Duo 2.4 GHz    
+- [Dwarf](https://github.com/devhawala/dwarf) emulator on Windows (Vista and newer) and Linux-Mint on a Core2Duo 2.4 GHz    
 both XDE and GlobalView work; all components (Dwarf, Dodo server and nethub)
 run on the same (hardware) machine
 
 - [Guam-Emulator](https://github.com/yokwe/mesa-emulator) by Yasuhiro Hasegawa with an experimental NetworkAgent
-on a Core2Duo 2.4 GHz with Linux Mint the emulator's NetworkAgent was modified for directly
+on a Core2Duo 2.4 GHz with Linux Mint; the emulator's NetworkAgent was modified for directly
 connecting to a local Nethub; connection to Dodo was tested with XDE
 
 - Don Woodward's [Dawn](http://www.woodward.org/mps/)-emulator with Dawn's XNS driver and XDE disk    
@@ -470,16 +470,21 @@ Other XNS programs in BSD 4.3 were not tested so far.
 Tested under Windows-10, configuration: NetHub with NetHubGateway and Dodo server, Darkstar
 running Viewpoint 2.0.6 or Star OS 5.0.        
 The network speed is comparable with real 8010's for workstations and servers (i.e. slow as in the 80's)
-(Darkstar running in average at ~130% speed according to the status line). For reliable network connections,
+(Darkstar running in average at 100~130% speed according to the status line). For reliable network connections,
 the option `ether.useDarkstarWorkaround` should be set to `true` (see above) and the (internal
 low-level) option `spp.sendingTimeGap` (milliseconds between packets of the same SPP connection) should
 be set to a value between 50 to 75 for throttling Dodo's transmission rate, depending on Darkstars emulation speed.    
 Setting time from network at 0937 does not work for unknown reasons,
 so setting Dodo's `authSkipTimestampChecks` configuration parameter to `true` is
 required for authentication with CHS/Auth and accessing the XNS network.    
-Besides this, using file and print services with Darkstar works for viewpoint 2.0.6, however Star OS seems
-to be more picky about XNS protocols, so only printing to a Dodo print service currently works with Star OS,
-but accessing file services fails.    
+Besides this, using Dodo file and print services with Darkstar works for Viewpoint 2.0.6 and Star OS 5.0. (Star OS 5.0
+can be installed on Darkstar from the floppy set [Star-4.3.zip](http://bitsavers.org/bits/Xerox/8010/Star-4.3.zip) at
+Bitsavers, which contains version 5.0 despite the name)    
+Using file services with Star OS 5.0 may be a bit unreliable, as some aspects of version 4 for the Filing protocol had to
+be reconstructed from courier data streams issued by Star OS (resp. guessed for response structures), because the `Filing4.cr`
+files found in the internet assume some structures to be same as in newer filing versions, which is clearly wrong
+in certain cases. Some operations still do not work, like opening the property sheet for a file drawer on a Dodo file
+service, but important things work.    
 Remark: Darkstar version 1.1.0.0 seems to have a broken network support, as ethernet packets are sent over the network
 but received packets are not relayed to the emulator (the necessary line appears to have been removed accidentally
 along with some logging line cleanups during commit "Small tweaks, updated readme"). Darkstar version 1.0.0.1
@@ -510,6 +515,10 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2020 August/September    
+-- Dodo: improved support for Darkstar client machines    
+-- FS: reworked Filing version 4 to correct wrong Courier structures defined in `Filing4.cr` files found in the internet to allow Star OS 5.0 to access file services
 
 - 2020-02-29    
 -- Dodo: added boot service (optional)    
@@ -607,4 +616,3 @@ Dodo is released under the BSD license, see the file `License.txt`.
 
 All product names, trademarks and registered trademarks mentioned herein and in the
 source files for the Dodo programs are the property of their respective owners.
-

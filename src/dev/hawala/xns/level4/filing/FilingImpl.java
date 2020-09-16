@@ -80,6 +80,7 @@ import dev.hawala.xns.level4.filing.FilingCommon.FileHandleRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.Filing4or5LogonParams;
 import dev.hawala.xns.level4.filing.FilingCommon.FilterRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.FindParams;
+import dev.hawala.xns.level4.filing.FilingCommon.FindParams4;
 import dev.hawala.xns.level4.filing.FilingCommon.GetAttributesParams;
 import dev.hawala.xns.level4.filing.FilingCommon.GetAttributesResults;
 import dev.hawala.xns.level4.filing.FilingCommon.GetControlsParams;
@@ -87,6 +88,7 @@ import dev.hawala.xns.level4.filing.FilingCommon.GetControlsResults;
 import dev.hawala.xns.level4.filing.FilingCommon.HandleErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.HandleProblem;
 import dev.hawala.xns.level4.filing.FilingCommon.ListParams;
+import dev.hawala.xns.level4.filing.FilingCommon.ListParams4;
 import dev.hawala.xns.level4.filing.FilingCommon.Lock;
 import dev.hawala.xns.level4.filing.FilingCommon.LockControl;
 import dev.hawala.xns.level4.filing.FilingCommon.LogoffOrContinueParams;
@@ -102,7 +104,9 @@ import dev.hawala.xns.level4.filing.FilingCommon.ScopeDepthRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.ScopeDirection;
 import dev.hawala.xns.level4.filing.FilingCommon.ScopeDirectionRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.ScopeSequence;
+import dev.hawala.xns.level4.filing.FilingCommon.ScopeSequence4;
 import dev.hawala.xns.level4.filing.FilingCommon.ScopeType;
+import dev.hawala.xns.level4.filing.FilingCommon.ScopeType4;
 import dev.hawala.xns.level4.filing.FilingCommon.SerializeParams;
 import dev.hawala.xns.level4.filing.FilingCommon.SerializedFile;
 import dev.hawala.xns.level4.filing.FilingCommon.SerializedTree;
@@ -132,6 +136,20 @@ import dev.hawala.xns.level4.filing.fs.iValueSetter;
 /**
  * Implementation of the Filing Courier programs (PROGRAM 10 VERSIONs 4,5,6)
  * for a set of XNS File Services.
+ * <p>
+ * The implementation for most Courier procedures are common to all 3 versions,
+ * there are however some differences for the Courier data types making it
+ * necessary to have specific implementations for the following procedures:
+ * </p>
+ * <ul>
+ * <li>login()</li>
+ * <li>find()</li>
+ * <li>list()</li>
+ * </ul>
+ * <p>
+ * Some other differences in Courier data types could be handled through flexible
+ * low-level implementation of the Courier encoding (AccessSequence).
+ * </p>
  * 
  * @author Dr. Hans-Walter Latz / Berlin 2019,2020
  */
@@ -228,8 +246,8 @@ public class FilingImpl {
 		Filing5 v5 = new Filing5().setLogParamsAndResults(false);
 		Filing6 v6 = new Filing6().setLogParamsAndResults(false);
 		
-		v4.Logon.use(FilingImpl::logon4or5);
-		v5.Logon.use(FilingImpl::logon4or5);
+		v4.Logon.use(FilingImpl::logon4);
+		v5.Logon.use(FilingImpl::logon5);
 		v6.Logon.use(FilingImpl::logon6);
 		
 		v4.Continue.use(FilingImpl::continueSession);
@@ -312,11 +330,11 @@ public class FilingImpl {
 		v5.ReplaceBytes.use(FilingImpl::replaceBytes);
 		v6.ReplaceBytes.use(FilingImpl::replaceBytes);
 		
-		v4.Find.use(FilingImpl::find);
+		v4.Find.use(FilingImpl::find4);
 		v5.Find.use(FilingImpl::find);
 		v6.Find.use(FilingImpl::find);
 		
-		v4.List.use(FilingImpl::list);
+		v4.List.use(FilingImpl::list4);
 		v5.List.use(FilingImpl::list);
 		v6.List.use(FilingImpl::list);
 		
@@ -366,6 +384,7 @@ public class FilingImpl {
 			sessions.remove(sessionId);
 			new SessionErrorRecord(SessionProblem.tokenInvalid).raise();
 		}
+		session.continueUse();
 		return session;
 	}
 	
@@ -391,19 +410,25 @@ public class FilingImpl {
 	 *   
 	 */
 	
-	private static void logon4or5(Filing4or5LogonParams params, LogonResults results) {
-		logParams("Logon[4,5]", params);
+	private static void logon4(Filing4or5LogonParams params, LogonResults results) {
+		logParams("Logon4", params);
 		
-		innerLogon(params.service, params.credentials, params.verifier, params.remoteHostId.get(), results);
+		innerLogon(params.service, params.credentials, params.verifier, params.remoteHostId.get(), results, 4);
+	}
+	
+	private static void logon5(Filing4or5LogonParams params, LogonResults results) {
+		logParams("Logon5", params);
+		
+		innerLogon(params.service, params.credentials, params.verifier, params.remoteHostId.get(), results, 5);
 	}
 	
 	private static void logon6(Filing6LogonParams params, LogonResults results) {
 		logParams("Logon6", params);
 		
-		innerLogon(params.service, params.credentials.primary, params.verifier, params.remoteHostId.get(), results);
+		innerLogon(params.service, params.credentials.primary, params.verifier, params.remoteHostId.get(), results, 6);
 	}
 	
-	private static void innerLogon(ThreePartName service, Credentials credentials, Verifier verifier, Long remoteHostId, LogonResults results) {
+	private static void innerLogon(ThreePartName service, Credentials credentials, Verifier verifier, Long remoteHostId, LogonResults results, int filingVersion) {
 		String svcName = chsDatabase.resolveName(service);
 		Service svc;
 		if (svcName.isEmpty() || "::".equals(svcName)) {
@@ -444,7 +469,7 @@ public class FilingImpl {
 		 */
 		
 		StrongVerifier decodedVerifier = StrongVerifier.make();
-		Session session = svc.createSession(credentials, verifier, remoteHostId, decodedVerifier);
+		Session session = svc.createSession(credentials, verifier, remoteHostId, decodedVerifier, filingVersion);
 		addSession(session);
 		
 		results.session.token.set(session.getSessionId());
@@ -539,7 +564,6 @@ public class FilingImpl {
 		// check session
 		Session session = resolveSession(params.session);
 		Volume vol = session.getService().getVolume();
-		session.continueUse();
 		
 		// check specified parent directory handle
 		Handle directoryHandle = Handle.get(params.directory);
@@ -650,7 +674,7 @@ public class FilingImpl {
 		logParams("close", params);
 		
 		// check session
-		resolveSession(params.session).continueUse();
+		resolveSession(params.session);
 		
 		// check specified file handle
 		Handle handle = Handle.get(params.handle);
@@ -675,7 +699,6 @@ public class FilingImpl {
 		
 		// check session
 		Session session = resolveSession(params.session);
-		session.continueUse();
 		
 		// check specified directory file handle
 		Handle dirHandle = Handle.get(params.directory);
@@ -707,7 +730,6 @@ public class FilingImpl {
 		
 		// check session
 		Session session = resolveSession(params.session);
-		session.continueUse();
 		
 		// check specified file handle
 		Handle fileHandle = Handle.get(params.handle);
@@ -752,7 +774,6 @@ public class FilingImpl {
 		
 		// check session
 		Session session = resolveSession(params.session);
-		session.continueUse();
 		
 		// check specified file handle
 		Handle fileHandle = Handle.get(params.handle);
@@ -769,7 +790,16 @@ public class FilingImpl {
 			case accessControl: {
 					CHOICE<ControlType> value = results.controls.add();
 					AccessControl ctl = (AccessControl)value.setChoice(ControlType.accessControl);
-					ctl.value.add().set(AccessType.fullAccess);
+					if (session.getFilingVersion() < 5) {
+						ctl.value.switchToFiling4();
+					}
+					ctl.value.add(AccessType.readAccess);
+					ctl.value.add(AccessType.writeAccess);
+				//	ctl.value.add(AccessType.ownerAccess);
+					if (fileHandle.getFe().isDirectory()) {
+						ctl.value.add(AccessType.addAccess);
+						ctl.value.add(AccessType.removeAccess);
+					}
 					break;
 				}
 			
@@ -783,7 +813,7 @@ public class FilingImpl {
 			case lockControl: {
 					CHOICE<ControlType> value = results.controls.add();
 					LockControl ctl = (LockControl)value.setChoice(ControlType.lockControl);
-					ctl.lock.set(Lock.exclusive);
+					ctl.lock.set(Lock.lockNone);
 					break;
 				}
 			
@@ -818,7 +848,7 @@ public class FilingImpl {
 		logParams("getAttributes", params);
 		
 		// check session
-		resolveSession(params.session).continueUse();
+		Session session = resolveSession(params.session);
 		
 		// check specified file handle
 		Handle fileHandle = Handle.get(params.handle);
@@ -831,7 +861,7 @@ public class FilingImpl {
 		}
 		
 		// transfer the requested values
-		List<iValueGetter<FilingCommon.AttributeSequence>> getters = getFile2CourierAttributeGetters(params.types);
+		List<iValueGetter<FilingCommon.AttributeSequence>> getters = getFile2CourierAttributeGetters(params.types, session.getFilingVersion());
 		for (iValueGetter<FilingCommon.AttributeSequence> getter : getters) {
 			getter.access(results.attributes, fe);
 		}
@@ -854,7 +884,6 @@ public class FilingImpl {
 		// check session
 		Session session = resolveSession(params.session);
 		Volume vol = session.getService().getVolume();
-		session.continueUse();
 		
 		// check specified file handle
 		Handle fileHandle = Handle.get(params.handle);
@@ -912,7 +941,6 @@ public class FilingImpl {
 		// check session
 		Session session = resolveSession(params.session);
 		Volume vol = session.getService().getVolume();
-		session.continueUse();
 		
 		// check specified file handle
 		Handle fileHandle = Handle.get(params.handle);
@@ -968,7 +996,6 @@ public class FilingImpl {
 		// check session
 		Session session = resolveSession(params.session);
 		Volume vol = session.getService().getVolume();
-		session.continueUse();
 		
 		// check specified file handle
 		Handle fileHandle = Handle.get(params.handle);
@@ -1021,7 +1048,6 @@ public class FilingImpl {
 		
 		// check session
 		Session session = resolveSession(params.session);
-		session.continueUse();
 		
 		// check specified directory file handle
 		Handle dirHandle = Handle.get(params.directory);
@@ -1061,7 +1087,6 @@ public class FilingImpl {
 		// check session
 		Session session = resolveSession(params.session);
 		Volume vol = session.getService().getVolume();
-		session.continueUse();
 		
 		// check specified file handle
 		Handle fileHandle = Handle.get(params.file);
@@ -1107,7 +1132,6 @@ public class FilingImpl {
 		
 		// check session
 		Session session = resolveSession(params.session);
-		session.continueUse();
 		
 		// check file
 		Handle fileHandle = Handle.get(params.file);
@@ -1124,10 +1148,11 @@ public class FilingImpl {
 		try {			
 			// build up the tree structure
 			SerializedFile serializedFile = new SerializedFile(
-					ws -> new SerializeTreeWireStream(ws, session)
+					ws -> new SerializeTreeWireStream(ws, session),
+					session.getFilingVersion() < 5
 				);
 			FileEntry startFe = fileHandle.getFe();
-			fillSerializeData(startFe, serializedFile.file);
+			fillSerializeData(startFe, serializedFile.file, session.getFilingVersion());
 			
 			// transfer the data
 			sendBulkData("serialize", params.serializedFile, serializedFile);
@@ -1163,13 +1188,13 @@ public class FilingImpl {
 
 	// generate attributes for serialized as GV 2.1 Filing does it
 	// (same attribute set in same sequence)
-	private static void fillGvSerializedFileAttributes(AttributeSequence s, FileEntry fe) {
+	private static void fillGvSerializedFileAttributes(AttributeSequence s, FileEntry fe, int filingVersion) {
 		for (int i = 0; i < GvSerializedFileAttributeTypes.length; i++) {
-			AttributeUtils.fillAttribute(s, GvSerializedFileAttributeTypes[i], fe);
+			AttributeUtils.fillAttribute(s, GvSerializedFileAttributeTypes[i], fe, filingVersion);
 		}
 		if (fe.isDirectory()) {
 			for (int i = 0; i < GvSerializedDirectoryAttributeTypes.length; i++) {
-				AttributeUtils.fillAttribute(s, GvSerializedDirectoryAttributeTypes[i], fe);
+				AttributeUtils.fillAttribute(s, GvSerializedDirectoryAttributeTypes[i], fe, filingVersion);
 			}
 		}
 		for (UninterpretedAttribute a: fe.getUninterpretedAttributes()) {
@@ -1179,13 +1204,13 @@ public class FilingImpl {
 	
 	// fill the serialized tree structure with attribute metadata, file-contents
 	// will be added and removed dynamically while serializing to the courier data stream
-	private static void fillSerializeData(FileEntry fe, SerializedTree to) {
-		fillGvSerializedFileAttributes(to.attributes, fe);
+	private static void fillSerializeData(FileEntry fe, SerializedTree to, int filingVersion) {
+		fillGvSerializedFileAttributes(to.attributes, fe, filingVersion);
 		to.clientData = fe;
 		if (fe.isDirectory() && fe.getChildren() != null) {
 			for (FileEntry child : fe.getChildren().getChildren()) {
 				SerializedTree childSerializedTree = to.children.add();
-				fillSerializeData(child, childSerializedTree);
+				fillSerializeData(child, childSerializedTree, filingVersion);
 			}
 		}
 	}
@@ -1305,7 +1330,6 @@ public class FilingImpl {
 		
 		// check session
 		Session session = resolveSession(params.session);
-		session.continueUse();
 		
 		// check directory
 		Handle dirHandle = Handle.get(params.directory);
@@ -1322,7 +1346,8 @@ public class FilingImpl {
 		// do the transfer and deserialization
 		try (Volume.Session modSession = session.getService().getVolume().startModificationSession()) {
 			SerializedFile deserializedFile = new SerializedFile(
-					ws -> new DeserializeTreeWireStream(ws, dirHandle.getFe().getFileID(), session, results, modSession)
+					ws -> new DeserializeTreeWireStream(ws, dirHandle.getFe().getFileID(), session, results, modSession),
+					false
 					);
 			params.serializedFile.receive(deserializedFile);
 		} catch (EndOfMessageException e) {
@@ -1504,7 +1529,27 @@ public class FilingImpl {
 		long dirFileID = (dirHandle == null || dirHandle.isNullHandle() || dirHandle.isVolumeRoot()) ? 0 : dirHandle.getFe().getFileID();
 		
 		// do the enumeration
-		final List<FileEntry> hits = getFileHits(session, dirFileID, params.scope);
+		final List<FileEntry> hits = getFileHits(session, dirFileID, new ScopeData(params.scope));
+		
+		// get the first hit or raise error if no matching file found
+		if (hits.isEmpty()) {
+			new AccessErrorRecord(AccessProblem.fileNotFound).raise();
+		}
+		Handle newHandle = new Handle(session, hits.get(0));
+		newHandle.setIdTo(results.file);
+	}
+	private static void find4(FindParams4 params, FileHandleRecord results) {
+		logParams("find4", params);
+		
+		// check session
+		Session session = resolveSession(params.session);
+		
+		// check specified file handle
+		Handle dirHandle = Handle.get(params.directory);
+		long dirFileID = (dirHandle == null || dirHandle.isNullHandle() || dirHandle.isVolumeRoot()) ? 0 : dirHandle.getFe().getFileID();
+		
+		// do the enumeration
+		final List<FileEntry> hits = getFileHits(session, dirFileID, new ScopeData(params.scope));
 		
 		// get the first hit or raise error if no matching file found
 		if (hits.isEmpty()) {
@@ -1536,10 +1581,36 @@ public class FilingImpl {
 		long dirFileID = (dirHandle == null || dirHandle.isNullHandle() || dirHandle.isVolumeRoot()) ? 0 : dirHandle.getFe().getFileID();
 		
 		// do the enumeration
-		final List<FileEntry> hits = getFileHits(session, dirFileID, params.scope);
+		final List<FileEntry> hits = getFileHits(session, dirFileID, new ScopeData(params.scope));
 		
 		// prepare the attribute getters
-		List<iValueGetter<FilingCommon.AttributeSequence>> getters = getFile2CourierAttributeGetters(params.types);
+		List<iValueGetter<FilingCommon.AttributeSequence>> getters = getFile2CourierAttributeGetters(params.types, session.getFilingVersion());
+		
+		// build the result stream and send it
+		StreamOf<AttributeSequence> stream = new StreamOf<>(0, 1, 16, AttributeSequence::make);
+		for (FileEntry fe : hits) {
+			AttributeSequence as = stream.add();
+			for (iValueGetter<FilingCommon.AttributeSequence> getter : getters) {
+				getter.access(as, fe);
+			}
+		}
+		sendBulkData("list", params.listing, stream);
+	}
+	private static void list4(ListParams4 params, RECORD results) {
+		logParams("list4", params);
+		
+		// check session
+		Session session = resolveSession(params.session);
+		
+		// check specified file handle
+		Handle dirHandle = Handle.get(params.directory);
+		long dirFileID = (dirHandle == null || dirHandle.isNullHandle() || dirHandle.isVolumeRoot()) ? 0 : dirHandle.getFe().getFileID();
+		
+		// do the enumeration
+		final List<FileEntry> hits = getFileHits(session, dirFileID, new ScopeData(params.scope));
+		
+		// prepare the attribute getters
+		List<iValueGetter<FilingCommon.AttributeSequence>> getters = getFile2CourierAttributeGetters(params.types, session.getFilingVersion());
 		
 		// build the result stream and send it
 		StreamOf<AttributeSequence> stream = new StreamOf<>(0, 1, 16, AttributeSequence::make);
@@ -1645,61 +1716,115 @@ public class FilingImpl {
 		return null; // keep the compiler happy
 	}
 	
-	private static List<FileEntry> getFileHits(Session session, long dirFileID, ScopeSequence scope) {
-		// check if we support this scope?
-		int maxCount = FilingCommon.unlimitedCount;
-		int maxDepth = 1;
-		boolean backward = false;
-		iValueFilter valueFilter = fe -> true;
-		for (int i = 0; i < scope.size(); i++) {
-			CHOICE<ScopeType> singleScope = scope.get(i);
-			switch(singleScope.getChoice()) {
-			case count: {
-				ScopeCountRecord scr = (ScopeCountRecord)singleScope.getContent();
-				maxCount = scr.value.get();
-				break; }
-			case depth:
-			case depthFiling4: {
-				ScopeDepthRecord sdr = (ScopeDepthRecord)singleScope.getContent();
-				maxDepth = sdr.value.get();
-				break; }
-			case direction: {
-				ScopeDirectionRecord sdr = (ScopeDirectionRecord)singleScope.getContent();
-				backward = (sdr.value.get() == ScopeDirection.backward);
-				break; }
-			case filter: {
-				FilterRecord ft = (FilterRecord)singleScope.getContent();
-				valueFilter = AttributeUtils.buildPredicate(ft.value);
-				break; }
-			}
-		}
+	private static List<FileEntry> getFileHits(Session session, long dirFileID, ScopeData scopeData) {
 		
 		// do the enumeration
 		final List<FileEntry> hits;
-		if (maxDepth < 2) {
+		if (scopeData.maxDepth < 2) {
 			hits = session.getService().getVolume().listDirectory(
 						dirFileID,
-						valueFilter,
-						maxCount,
+						scopeData.valueFilter,
+						(scopeData.backward) ? FilingCommon.unlimitedCount : scopeData.maxCount,
 						session.getUsername());
 		} else {
 			hits = session.getService().getVolume().findFiles(
 					dirFileID,
-					valueFilter,
-					maxCount,
-					maxDepth,
+					scopeData.valueFilter,
+					(scopeData.backward) ? FilingCommon.unlimitedCount : scopeData.maxCount,
+							scopeData.maxDepth,
 					session.getUsername());
 		}
 		
 		// done (or almost)
-		if (backward) {
+		if (scopeData.backward) {
 			List<FileEntry> revHits = new ArrayList<>();
+			int remaining = scopeData.maxCount;
 			for (int i = hits.size() - 1; i >= 0; i--) {
 				revHits.add(hits.get(i));
+				if (--remaining <= 0) {
+					break;
+				}
 			}
 			return revHits;
 		}
 		return hits;
+	}
+	
+	private static class ScopeData {
+		
+		private final int maxCount;
+		private final int maxDepth;
+		private final boolean backward;
+		private final iValueFilter valueFilter;
+		
+		private ScopeData(ScopeSequence scope) {
+			int maxCount = FilingCommon.unlimitedCount;
+			int maxDepth = 1;
+			boolean backward = false;
+			iValueFilter valueFilter = fe -> true;
+			for (int i = 0; i < scope.size(); i++) {
+				CHOICE<ScopeType> singleScope = scope.get(i);
+				switch(singleScope.getChoice()) {
+				case count: {
+					ScopeCountRecord scr = (ScopeCountRecord)singleScope.getContent();
+					maxCount = scr.value.get();
+					break; }
+				case depth: {
+					ScopeDepthRecord sdr = (ScopeDepthRecord)singleScope.getContent();
+					maxDepth = sdr.value.get();
+					break; }
+				case direction: {
+					ScopeDirectionRecord sdr = (ScopeDirectionRecord)singleScope.getContent();
+					backward = (sdr.value.get() == ScopeDirection.backward);
+					break; }
+				case filter: {
+					FilterRecord ft = (FilterRecord)singleScope.getContent();
+					valueFilter = AttributeUtils.buildPredicate(ft.value);
+					break; }
+				}
+			}
+			
+			this.maxCount = maxCount;
+			this.maxDepth = maxDepth;
+			this.backward = backward;
+			this.valueFilter = valueFilter;
+		}
+		
+		private ScopeData(ScopeSequence4 scope) {
+			int maxCount = FilingCommon.unlimitedCount;
+			int maxDepth = 1;
+			boolean backward = false;
+			iValueFilter valueFilter = fe -> true;
+			for (int i = 0; i < scope.size(); i++) {
+				CHOICE<ScopeType4> singleScope = scope.get(i);
+				switch(singleScope.getChoice()) {
+				case count: {
+					ScopeCountRecord scr = (ScopeCountRecord)singleScope.getContent();
+					maxCount = scr.value.get();
+					break; }
+				case depth: {
+					ScopeDepthRecord sdr = (ScopeDepthRecord)singleScope.getContent();
+					maxDepth = sdr.value.get();
+					break; }
+				case direction: {
+					ScopeDirectionRecord sdr = (ScopeDirectionRecord)singleScope.getContent();
+					backward = (sdr.value.get() == ScopeDirection.backward);
+					break; }
+				case filter: {
+					FilterRecord ft = (FilterRecord)singleScope.getContent();
+					valueFilter = AttributeUtils.buildPredicate(ft.value);
+					break; }
+				case ordering:
+					// Filing4 'ordering'-scope is ignored ! 
+					break;
+				}
+			}
+			
+			this.maxCount = maxCount;
+			this.maxDepth = maxDepth;
+			this.backward = backward;
+			this.valueFilter = valueFilter;
+		}
 	}
 	
 	/*
@@ -1735,23 +1860,29 @@ public class FilingImpl {
                sink.send(streamData, true);
         } catch (NoMoreWriteSpaceException e) {
                System.out.printf("FilingImpl.%s() :: NoMoreWriteSpaceException (i.e. abort) during BDT.send()\n", procName);
-               new ConnectionErrorRecord(ConnectionProblem.otherCallProblem).raise();
+               //new ConnectionErrorRecord(ConnectionProblem.otherCallProblem).raise();
         }
-  }
+	}
 	
-	private static List<iValueGetter<FilingCommon.AttributeSequence>> getFile2CourierAttributeGetters(AttributeTypeSequence types) {
+	private static List<iValueGetter<FilingCommon.AttributeSequence>> getFile2CourierAttributeGetters(AttributeTypeSequence types, int filingVersion) {
 		List<iValueGetter<FilingCommon.AttributeSequence>> getters = new ArrayList<>();
 		
 		if (types.isAllAttributeTypes()) {
-			getters.add(AttributeUtils::file2courier_allAttributes);
+			getters.add((filingVersion < 5)
+							? AttributeUtils::file2courier_allAttributes4
+							: AttributeUtils::file2courier_allAttributes5or6);
 			return getters;
 		}
 		
+		List<iValueGetter<AttributeSequence>> file2courierInterpreted
+				= (filingVersion < 5)
+				? AttributeUtils.file2courier_interpreted4
+				: AttributeUtils.file2courier_interpreted5or6;
 		for (int i = 0; i < types.size(); i++) {
 			int attrType = (int)types.get(i).get();
 			iValueGetter<FilingCommon.AttributeSequence> getter;
-			if (attrType < AttributeUtils.file2courier_interpreted.size()) {
-				if ((getter = AttributeUtils.file2courier_interpreted.get(attrType)) != null) {
+			if (attrType < file2courierInterpreted.size()) {
+				if ((getter = file2courierInterpreted.get(attrType)) != null) {
 					getters.add(getter);
 				} else {
 					new AttributeTypeErrorRecord(ArgumentProblem.unimplemented, attrType).raise();

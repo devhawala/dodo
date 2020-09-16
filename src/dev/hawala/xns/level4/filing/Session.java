@@ -35,7 +35,8 @@ import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
  */
 public class Session {
 	
-	public static final int CONTINUANCE_DURANCE = 60_000; // ms
+	public static final int CONTINUANCE_DURANCE_DEFAULT = 60_000; // 1 minute in ms
+	public static final int CONTINUANCE_DURANCE_FILING4 = 3600_000; // 1 hour in ms
 	
 	private static int lastSessionId = (int)(System.currentTimeMillis() & 0xFFFF_FFFF);
 	
@@ -53,16 +54,23 @@ public class Session {
 	
 	private final String username;
 	
-	private long nextContinuanceDue = System.currentTimeMillis() + CONTINUANCE_DURANCE;
+	private final int filingVersion;
+	private final int continuanceDuranceMillisecs;
+	
+	private long nextContinuanceDueMillisecs = System.currentTimeMillis() + CONTINUANCE_DURANCE_DEFAULT;
 	private boolean closed = false;
 	private boolean disableClosing = false;
 	
-	public Session(Service service, ThreePartName username, Long remoteHostId, int[] conversationKey) {
+	public Session(Service service, ThreePartName username, Long remoteHostId, int[] conversationKey, int filingVersion) {
 		this.service = service;
 		this.userChsName = username;
 		this.sessionId = createSessionId();
 		this.remoteHostId = remoteHostId;
 		this.conversationKey = conversationKey;
+		this.filingVersion = filingVersion;
+		this.continuanceDuranceMillisecs = (filingVersion < 5) ? CONTINUANCE_DURANCE_FILING4 : CONTINUANCE_DURANCE_DEFAULT;
+		
+		this.nextContinuanceDueMillisecs = System.currentTimeMillis() + this.continuanceDuranceMillisecs;
 		
 		this.username = this.userChsName.toString();
 	}
@@ -90,15 +98,19 @@ public class Session {
 	public int[] getConversationKey() {
 		return this.conversationKey;
 	}
+	
+	public int getFilingVersion() {
+		return this.filingVersion;
+	}
 
-	public synchronized int /* secs */ continueUse() {
+	public synchronized int /* seconds */ continueUse() {
 		this.disableClosing = false;
-		this.nextContinuanceDue = System.currentTimeMillis() + CONTINUANCE_DURANCE;
-		return CONTINUANCE_DURANCE;
+		this.nextContinuanceDueMillisecs = System.currentTimeMillis() + this.continuanceDuranceMillisecs;
+		return this.continuanceDuranceMillisecs / 1000;
 	}
 	
 	public synchronized boolean isOverdue() {
-		return this.nextContinuanceDue < System.currentTimeMillis();
+		return this.nextContinuanceDueMillisecs < System.currentTimeMillis();
 	}
 	
 	public synchronized void close() {

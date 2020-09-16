@@ -87,6 +87,13 @@ public class DirectoryChildren {
 			if (res == 0) { res = Integer.compare(l.getVersion(), r.getVersion()); }
 			return ascending ? res : - res;
 		});
+		
+		// setting the position of the files in their directory is purely transient, persisted values are
+		// irrelevant as it is replaced each time the volume is loaded or the directory child list is changed
+		long position = 0x00010001; // start behind 'lastPosition' (although it is highly improbable that a position in the list will ever be 65535
+		for (FileEntry f : this.children) {
+			f.setPosition(position++);
+		}
 	}
 
 }

@@ -346,11 +346,15 @@ public abstract class CrProgram {
 	}
 	
 	private void log(String procName, String msg, String argType, RECORD arg) {
+		this.log(procName, msg, argType, arg, false);
+	}
+	
+	private void log(String procName, String msg, String argType, RECORD arg, boolean forceDetails) {
 		if (!msg.endsWith("\n")) {
 		msg += "\n";
 		}
 		Log.C.printf("proc " + procName, msg);
-		if (this.logParamsAndResults && argType != null) {
+		if ((forceDetails || this.logParamsAndResults) && argType != null && arg != null) {
 			StringBuilder sb = new StringBuilder();
 			arg.append(sb, "  ", argType);
 			sb.append("\n");
@@ -512,7 +516,7 @@ public abstract class CrProgram {
 		}
 		
 		private void encodeAbort(int transaction, iWireStream connection, ErrorRECORD abortData) throws NoMoreWriteSpaceException {
-			CrProgram.this.log(procName, "encodeAbort", "abortData", abortData);
+			CrProgram.this.log(procName, "encodeAbort", "abortData", abortData, true);
 			connection.writeI16(3); // MessageType.abort(3)
 			connection.writeI16(transaction);
 			connection.writeI16(abortData.getErrorCode());

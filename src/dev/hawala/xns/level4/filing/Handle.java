@@ -93,9 +93,9 @@ public class Handle {
 		if (FilingCommon.isNullHandle(handle)) { return null; }
 		synchronized(handles) {
 			Handle h = handles.get(handle.get());
-			if (h == null || h.isClosed()) {
-				new HandleErrorRecord(HandleProblem.invalid).raise();
-			}
+//			if (h == null || h.isClosed()) {
+//				new HandleErrorRecord(HandleProblem.invalid).raise();
+//			}
 			return h;
 		}
 	}

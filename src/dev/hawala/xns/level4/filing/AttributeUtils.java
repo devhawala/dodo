@@ -26,6 +26,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.xns.level4.filing;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Predicate;
@@ -70,25 +71,25 @@ public class AttributeUtils {
 	 * FileEntry => Courier
 	 */
 	
-	private static void file2courier_accessList(AttributeSequence s, long atCode, boolean isDefaulted, List<AccessEntry> accessEntries) {
+	private static void file2courier_accessList(AttributeSequence s, long atCode, boolean isDefaulted, List<AccessEntry> accessEntries, boolean forFiling4) {
 		AccessList acl = AccessList.make();
 		acl.defaulted.set(isDefaulted);
 		for (AccessEntry a : accessEntries) {
 			FilingCommon.AccessEntry fa = acl.entries.add();
+			if (forFiling4) { fa.forFiling4(); }
 			fa.key.from(a.key);
 			if (a.access == FsConstants.fullAccess) {
-				//fa.access.add().set(AccessType.fullAccess);
-				fa.access.add().set(AccessType.readAccess);
-				fa.access.add().set(AccessType.writeAccess);
-				fa.access.add().set(AccessType.ownerAccess);
-				fa.access.add().set(AccessType.addAccess);
-				fa.access.add().set(AccessType.removeAccess);
+				fa.access.add(AccessType.readAccess);
+				fa.access.add(AccessType.writeAccess);
+				fa.access.add(AccessType.ownerAccess);
+				fa.access.add(AccessType.addAccess);
+				fa.access.add(AccessType.removeAccess);
 			} else {
-				if ((a.access & FsConstants.readAccess) != 0) { fa.access.add().set(AccessType.readAccess); }
-				if ((a.access & FsConstants.writeAccess) != 0) { fa.access.add().set(AccessType.writeAccess); }
-				if ((a.access & FsConstants.ownerAccess) != 0) { fa.access.add().set(AccessType.ownerAccess); }
-				if ((a.access & FsConstants.addAccess) != 0) { fa.access.add().set(AccessType.addAccess); } 
-				if ((a.access & FsConstants.removeAccess) != 0) { fa.access.add().set(AccessType.removeAccess); }
+				if ((a.access & FsConstants.readAccess) != 0) { fa.access.add(AccessType.readAccess); }
+				if ((a.access & FsConstants.writeAccess) != 0) { fa.access.add(AccessType.writeAccess); }
+				if ((a.access & FsConstants.ownerAccess) != 0) { fa.access.add(AccessType.ownerAccess); }
+				if ((a.access & FsConstants.addAccess) != 0) { fa.access.add(AccessType.addAccess); } 
+				if ((a.access & FsConstants.removeAccess) != 0) { fa.access.add(AccessType.removeAccess); }
 			}
 		}
 		Attribute attr = s.value.add();
@@ -135,13 +136,8 @@ public class AttributeUtils {
 	
 	private static void file2courier_position(AttributeSequence s, FileEntry fe) {
 		long position = fe.getPosition();
-		int posUpper = (int)((position >> 16) & 0xFFFFL);
-		int posLower = (int)(position & 0xFFFFL);
 		Attribute attr = s.value.add();
-		attr.type.set(FilingCommon.atPosition);
-		attr.value.add().set(2);       // faked SEQUENCE<UNSPECIFIED> :: length = 2 
-		attr.value.add().set(posUpper);// faked SEQUENCE<UNSPECIFIED> :: element[0]
-		attr.value.add().set(posLower);// faked SEQUENCE<UNSPECIFIED> :: element[1]
+		attr.setAsPosition(position);
 	}
 	
 	private static void file2courier_unsupported(AttributeSequence s, long atCode) {
@@ -151,18 +147,35 @@ public class AttributeUtils {
 	}
 	
 	// this list is setup in a static block at module end
-	public static final List<iValueGetter<AttributeSequence>> file2courier_interpreted;
+	public static final List<iValueGetter<AttributeSequence>> file2courier_interpreted5or6;
+	public static final List<iValueGetter<AttributeSequence>> file2courier_interpreted4;
 	
-	public static void file2courier_allAttributes(AttributeSequence s, FileEntry fe) {
-		for (int i = 0; i < file2courier_interpreted.size(); i++) {
-			fillAttribute(s, i, fe);
+	public static void file2courier_allAttributes5or6(AttributeSequence s, FileEntry fe) {
+		inner_file2courier_allAttributes(s, fe, file2courier_interpreted5or6);
+	}
+	
+	public static void file2courier_allAttributes4(AttributeSequence s, FileEntry fe) {
+		inner_file2courier_allAttributes(s, fe, file2courier_interpreted4);
+	}
+	
+	private static void inner_file2courier_allAttributes(AttributeSequence s, FileEntry fe, List<iValueGetter<AttributeSequence>> file2courier4interpreted) {
+		for (int i = 0; i < file2courier4interpreted.size(); i++) {
+			innerFillAttribute(s, i, fe, file2courier4interpreted);
 		}
 		for (UninterpretedAttribute a: fe.getUninterpretedAttributes()) {
 			file2courier_uninterpreted(s, a.getType(), fe);
 		}
 	}
 	
-	public static void fillAttribute(AttributeSequence s, int attrId, FileEntry fe) {
+	public static void fillAttribute(AttributeSequence s, int attrId, FileEntry fe, int filingVersion) {
+		innerFillAttribute(s, attrId, fe, (filingVersion < 5) ? file2courier_interpreted4 : file2courier_interpreted5or6);
+	}
+	
+	public static void fillAttribute4(AttributeSequence s, int attrId, FileEntry fe) {
+		innerFillAttribute(s, attrId, fe, file2courier_interpreted4);
+	}
+	
+	private static void innerFillAttribute(AttributeSequence s, int attrId, FileEntry fe, List<iValueGetter<AttributeSequence>> file2courier4interpreted) {
 		// transmit attributes (intentionally) without value as null-attribute-value
 		if ((attrId == FilingCommon.atReadBy && FsConstants.noUser.equals(fe.getReadBy()))
 		||  (attrId == FilingCommon.atCreatedBy && FsConstants.noUser.equals(fe.getCreatedBy()))
@@ -176,7 +189,7 @@ public class AttributeUtils {
 			return;
 		}
 		// put attribute value
-		AttributeUtils.file2courier_interpreted.get(attrId).access(s, fe);
+		file2courier4interpreted.get(attrId).access(s, fe);
 	}
 	
 	/*
@@ -224,12 +237,12 @@ public class AttributeUtils {
 			return fe -> {}; // filing protocol says it is set on Create, but makes no sense!
 		case FilingCommon.atService:    // 22, according to: Filing 8.0 Programmer's Manual (pp. 6-3 etc.)
 		case FilingCommon.atBackedUpOn: // 23, according to: Filing 8.0 Programmer's Manual (pp. 6-3 etc.)
-		case FilingCommon.atFiledBy:     // 24, according to: Filing 8.0 Programmer's Manual (pp. 6-3 etc.)
+		case FilingCommon.atFiledBy:    // 24, according to: Filing 8.0 Programmer's Manual (pp. 6-3 etc.)
 		case FilingCommon.atFiledOn:    // 25, according to: Filing 8.0 Programmer's Manual (pp. 6-3 etc.)
 			return fe -> {}; // the 4 above attributes are ignored for use-case courier -> file
 		case FilingCommon.atStoredSize:
 		case FilingCommon.atSubtreeSize:
-			return fe -> {};
+			return fe -> {};  // ignoring these elegantly circumvents the differing interpretations in Filing4 vs. Filing5/6
 		case FilingCommon.atSubtreeSizeLimit:
 			return fe -> fe.setSubtreeSizeLimit(a.getAsLongCardinal());
 			
@@ -290,25 +303,20 @@ public class AttributeUtils {
 			FilingCommon.AccessEntry ac = acl.entries.get(i);
 			String key = ac.key.getString();
 			int access = 0;
-			for (int j = 0; j < ac.access.size(); j++) {
-				AccessType at = ac.access.get(j).get();
-				switch(at) {
-				case fullAccess: access = FsConstants.fullAccess; break;
-				case readAccess: access |= FsConstants.readAccess; break;
-				case writeAccess: access |= FsConstants.writeAccess; break;
-				case ownerAccess: access |= FsConstants.ownerAccess; break;
-				case addAccess: access |= FsConstants.addAccess; break;
-				case removeAccess: access |= FsConstants.removeAccess; break;
-				default: break;
-				}
-			}
+			if (ac.access.has(AccessType.fullAccess))   { access |= FsConstants.fullAccess; }
+			if (ac.access.has(AccessType.readAccess))   { access |= FsConstants.readAccess; }
+			if (ac.access.has(AccessType.writeAccess))  { access |= FsConstants.writeAccess; }
+			if (ac.access.has(AccessType.ownerAccess))  { access |= FsConstants.ownerAccess; }
+			if (ac.access.has(AccessType.addAccess))    { access |= FsConstants.addAccess; }
+			if (ac.access.has(AccessType.removeAccess)) { access |= FsConstants.removeAccess; }
 			AccessEntry ae = new AccessEntry(key, access);
 			aes.add(ae);
 		};
 	}
 	
 	static {
-		file2courier_interpreted = Arrays.asList(
+		// build the file=>courier attribute mapping array for filing versions 5 and 6
+		file2courier_interpreted5or6 = Arrays.asList(
 				// atChecksum = 0
 				(s,fe) -> s.value.add().setAsCardinal(FilingCommon.atChecksum, fe.getChecksum()),
 				
@@ -346,7 +354,20 @@ public class AttributeUtils {
 				(s,fe) -> file2courier_ordering(s, fe.getOrderingKey(), fe.isOrderingAscending(), fe.getOrderingInterpretation()),
 				
 				// atParentID = 12
-				(s,fe) -> s.value.add().setAsFileID(FilingCommon.atParentID, fe.getParentID()),
+				(s,fe) -> {
+					long pfId = fe.getParentID();
+					if ((pfId == 0 || pfId == FsConstants.rootFileID) && fe.getType() == FilingCommon.tVPDrawer) {
+						// when StarOS makes a reference, it asks 2 levels of parents from the item to
+						// make the reference; opening the reference later will do a find() for the name of the
+						// referenced item from the parent. If either of the parentIds is nullFileID, the reference will
+						// start searching at the filesystem root (instead of the direct parent of the referenced item)
+						// so find(9 fails for items in a file drawer (bug in StarOS 5.0?).
+						// so for file drawers we deliver a dummy parent, which is also root, but with a different
+						// (additional) fileId, so a filedrawers parent is not nullFileId, although it is root...
+						pfId = FilingCommon.DRAWER_PARENT_ROOTDIR_FILEID;
+					}
+					s.value.add().setAsFileID(FilingCommon.atParentID, pfId);
+				},
 				
 				// atPosition = 13
 				(s,fe) -> file2courier_position(s, fe),
@@ -367,10 +388,10 @@ public class AttributeUtils {
 				(s,fe) -> s.value.add().setAsCardinal(FilingCommon.atVersion, fe.getVersion()),
 				
 				// atAccessList = 19;
-				(s,fe) -> file2courier_accessList(s, FilingCommon.atAccessList, fe.isAccessListDefaulted(), fe.getAccessList()),
+				(s,fe) -> file2courier_accessList(s, FilingCommon.atAccessList, fe.isAccessListDefaulted(), fe.getAccessList(), false),
 				
 				// atDefaultAccessList = 20
-				(s,fe) -> file2courier_accessList(s, FilingCommon.atDefaultAccessList, fe.isDefaultAccessListDefaulted(), fe.getDefaultAccessList()),
+				(s,fe) -> file2courier_accessList(s, FilingCommon.atDefaultAccessList, fe.isDefaultAccessListDefaulted(), fe.getDefaultAccessList(), false),
 				
 				// atPathname = 21
 				(s,fe) -> s.value.add().setAsString(FilingCommon.atPathname, fe.getPathname()),
@@ -388,34 +409,26 @@ public class AttributeUtils {
 				(s,fe) -> s.value.add().setAsTime(FilingCommon.atFiledOn, fe.getCreatedOn()), // filed{By,On} and created{By,On} are treated same
 				
 				// atStoredSize = 26
-				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atStoredSize, mapSize(fe, fe.getStoredSize())),
+				// (s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atStoredSize, mapSize(fe, fe.getStoredSize())),
+				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atStoredSize, fe.getStoredSize()),
 				
 				// atSubtreeSize = 27
-				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atSubtreeSize, mapSize(fe, fe.getSubtreeSize())),
+				// (s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atSubtreeSize, mapSize(fe, fe.getSubtreeSize())),
+				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atSubtreeSize, fe.getSubtreeSize()),
 				
 				// atSubtreeSizeLimit = 28
 				(s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atSubtreeSizeLimit, fe.getSubtreeSizeLimit())
 				
 				);
-	}
-	
-	// problem:
-	// -> the Filing protocol spec. defines the attributes 'storedSize' and 'treeSize' to be in bytes
-	//    and in multiples of the allocation size of the service
-	// -> this is plausible regarding the value displayed in the GlobalView property sheet for a file 
-	// -> the network installation bootfile (Othello) interprets 'storedSize' as number of 512 byte pages
-	//    e.g. installing Dove.germ (31744 bytes = 62 pages) for VP20 form the Installation Drawer
-	//    uses 32257 pages (free blocks go down from 115350 to 84093)
-	// -> assuming that Xerox software is validated (at least tested and successfully used in production
-	//    in the publicly available files used here), there are 2 contradicting "correct" behaviors
-	//
-	// as a solution, the storedSize is delivered as page-size if the file queries is located in the
-	// installation drawer and as byte-size in all other cases
-	private static long mapSize(FileEntry fe, long value) {
-		if (fe.getPathname().toLowerCase().startsWith("installation drawer!")) {
-			return (value + 511) / 512;
-		}
-		return value;
+
+		// derive the file=>courier attribute mapping array for filing version 4 by copy the version5/6 list and replacing version specifing mappings
+		file2courier_interpreted4 = new ArrayList<>(file2courier_interpreted5or6);
+		// access-lists: access value has a different representation in Filing4 (bitmap in a word instead of enum-sequence)
+		file2courier_interpreted4.set(19, (s,fe) -> file2courier_accessList(s, FilingCommon.atAccessList, fe.isAccessListDefaulted(), fe.getAccessList(), true));
+		file2courier_interpreted4.set(20, (s,fe) -> file2courier_accessList(s, FilingCommon.atDefaultAccessList, fe.isDefaultAccessListDefaulted(), fe.getDefaultAccessList(), true));
+		// stored&subtree sizes are given in pages in Filing4 (instead of bytes)
+		file2courier_interpreted4.set(26, (s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atStoredSize, (fe.getStoredSize() + 511) / 512) );
+		file2courier_interpreted4.set(27, (s,fe) -> s.value.add().setAsLongCardinal(FilingCommon.atSubtreeSize, (fe.getSubtreeSize() + 511) / 512) );
 	}
 	
 	public static iValueFilter buildPredicate(CHOICE<FilterType> filter) {
@@ -548,7 +561,7 @@ public class AttributeUtils {
 			return fe -> compare(val, fe.getParentID(), evaluator);
 			}
 		case FilingCommon.atPosition: {
-			long val = attr.getAsLongCardinal();
+			long val = attr.getAsPosition();
 			return fe -> compare(val, fe.getPosition(), evaluator);
 			}
 		case FilingCommon.atReadBy: {
