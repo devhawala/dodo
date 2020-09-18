@@ -1244,28 +1244,49 @@ public abstract class FilingCommon extends CrProgram {
 	 * 
 	 * -- attributes --
 	 */
-	
-	
+
 	/*
 	 * accessList: AttributeType = 19;
+	 * 
+	 * Filing version 5/6:
+	 * 
 	 * AccessEntry: TYPE = RECORD [key: Clearinghouse.Name, access: AccessSequence];
+	 * AccessList: TYPE = RECORD [entries: SEQUENCE OF AccessEntry, defaulted: BOOLEAN];
+	 * 
+	 * Filing version 4:
+	 * (reconstructed/assumed based "Filing 8.0 programmer's manual")
+	 * 
+	 * AccessEntryType: TYPE = {individual, alias, group, other};
+	 * AccessEntry: TYPE = RECORD [key: Clearinghouse.Name, type: AccessEntrxType, access: AccessSequence];
 	 * AccessList: TYPE = RECORD [entries: SEQUENCE OF AccessEntry, defaulted: BOOLEAN];
 	 */
 	public static class AccessEntry extends RECORD {
-		public final AuthChsCommon.Name key = mkMember(AuthChsCommon.Name::make);
-		public final AccessSequence access = mkMember(AccessSequence::makeAny);
+		public final AuthChsCommon.Name key;
+		private final UNSPECIFIED entryType; // Filing version 4 has this extra field => handle depending on protocol version
+		public final AccessSequence access;
 		
-		private AccessEntry() {}
-		public static AccessEntry make() { return new AccessEntry(); }
-		
-		public void forFiling4() { this.access.switchToFiling4(); }
+		private AccessEntry(boolean forFiling4) {
+			this.key = mkMember(AuthChsCommon.Name::make);
+			this.entryType = forFiling4 ? mkUNSPECIFIED() : null;
+			this.access = mkMember(AccessSequence::makeAny);
+			if (forFiling4) {
+				this.entryType.set(3); // AccessEntryType.other
+				this.access.switchToFiling4();
+			}
+		}
+		public static AccessEntry make4() { return new AccessEntry(true); }
+		public static AccessEntry make5or6() { return new AccessEntry(false); }
 	}
 	public static class AccessList extends RECORD {
-		public final SEQUENCE<AccessEntry> entries = mkSEQUENCE(AccessEntry::make);
-		public final BOOLEAN defaulted = mkBOOLEAN();
+		public final SEQUENCE<AccessEntry> entries;
+		public final BOOLEAN defaulted;
 		
-		private AccessList() {}
-		public static AccessList make() { return new AccessList(); }
+		private AccessList(boolean forFiling4) {
+			this.entries = mkSEQUENCE(forFiling4 ? AccessEntry::make4 : AccessEntry::make5or6);
+			this.defaulted = mkBOOLEAN();
+		}
+		public static AccessList make4() { return new AccessList(true); }
+		public static AccessList make5or6() { return new AccessList(false); }
 	}
 	public static final int atAccessList = 19;
 	

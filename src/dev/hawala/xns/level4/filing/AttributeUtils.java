@@ -72,13 +72,13 @@ public class AttributeUtils {
 	 */
 	
 	private static void file2courier_accessList(AttributeSequence s, long atCode, boolean isDefaulted, List<AccessEntry> accessEntries, boolean forFiling4) {
-		AccessList acl = AccessList.make();
+		AccessList acl = forFiling4 ? AccessList.make4() : AccessList.make5or6();
 		acl.defaulted.set(isDefaulted);
 		for (AccessEntry a : accessEntries) {
 			FilingCommon.AccessEntry fa = acl.entries.add();
-			if (forFiling4) { fa.forFiling4(); }
 			fa.key.from(a.key);
 			if (a.access == FsConstants.fullAccess) {
+				//fa.access.add().set(AccessType.fullAccess);
 				fa.access.add(AccessType.readAccess);
 				fa.access.add(AccessType.writeAccess);
 				fa.access.add(AccessType.ownerAccess);
@@ -283,12 +283,19 @@ public class AttributeUtils {
 	}
 	
 	private static void courier2file_accessList(Attribute a, FileEntry fe, boolean isDefaultAcl) {
-		AccessList acl;
+		AccessList acl = null;
 		try {
-			acl = a.decodeData(AccessList::make);
+			acl = a.decodeData(AccessList::make5or6); // try as post-version 4 AccessLIst
 		} catch (Exception e) {
-			// ignored, use defaults
-			acl = AccessList.make();
+			// does not seem to be version 5 or 6, so check for version 4
+		}
+		if (acl == null) {
+			try {
+				acl = a.decodeData(AccessList::make4); // try as version 4 AccessList
+			} catch (Exception e) {
+				// none of the supported versions was ok, so use defaults
+				acl = AccessList.make5or6();
+			}
 		}
 		
 		if (isDefaultAcl) {

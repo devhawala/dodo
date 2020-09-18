@@ -103,7 +103,7 @@ information
 	a large subset of the protocol procedures is implemented, allowing
 	to access file drawers, folders and files on Dodo XNS File services from XDE
 	and Star/Viewpoint/GVWin. Although substantial functionality is missing (like access control
-	and access rights), Dodo file services are already usable in a single user environment.
+	and access rights), Dodo file services are already usable in a mostly single-user environment.
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -483,8 +483,7 @@ Bitsavers, which contains version 5.0 despite the name)
 Using file services with Star OS 5.0 may be a bit unreliable, as some aspects of version 4 for the Filing protocol had to
 be reconstructed from courier data streams issued by Star OS (resp. guessed for response structures), because the `Filing4.cr`
 files found in the internet assume some structures to be same as in newer filing versions, which is clearly wrong
-in certain cases. Some operations still do not work, like opening the property sheet for a file drawer on a Dodo file
-service, but important things work.    
+in certain cases. Some operations still may not work, but important things do.    
 Remark: Darkstar version 1.1.0.0 seems to have a broken network support, as ethernet packets are sent over the network
 but received packets are not relayed to the emulator (the necessary line appears to have been removed accidentally
 along with some logging line cleanups during commit "Small tweaks, updated readme"). Darkstar version 1.0.0.1
