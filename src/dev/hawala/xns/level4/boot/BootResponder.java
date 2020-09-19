@@ -206,10 +206,11 @@ public class BootResponder implements iIDPReceiver {
 				int myConnectionID = (this.lastConnId + 3) & 0xFFFF;
 				this.lastConnId = myConnectionID;
 				try {
-					BufferedInputStream bis = new BufferedInputStream(new FileInputStream(this.bootFiles.get(bfn)));
+					File bootfile = this.bootFiles.get(bfn);
+					BufferedInputStream bis = new BufferedInputStream(new FileInputStream(bootfile));
 					int key = (otherConnectionID << 16) | myConnectionID;
 					this.requests.put(key,  new Request(bis));
-					this.logf("## bootSvc: created session key 0x%08X for request\n", key);
+					this.logf("## bootSvc: created session key 0x%08X for request, providing boot file '%s'\n", key, bootfile.getName());
 				} catch (FileNotFoundException e) {
 					this.logf(
 						"## bootSvc : ERROR -> failed to access bootfile boot-file-number 0x%012X: %s\n",
@@ -290,8 +291,7 @@ public class BootResponder implements iIDPReceiver {
 				}
 				
 				// finally send the packet
-				this.dumpSpp("## bootSvc - reply SPP:", rplySpp);
-				this.sender.send(rplySpp.idp);
+				this.sendIDP(rplySpp);
 			} else if (sst == SppConnection.SST_CLOSE_REQUEST || sst == SppConnection.SST_CLOSE_CONFIRM) {
 				// this is either:
 				// -> a request from the booting machine to close: reply with close confirmation
@@ -306,8 +306,7 @@ public class BootResponder implements iIDPReceiver {
 					.setAllocationNumber(0)
 					.setAcknowledgeNumber(0)
 					.setDatastreamType((byte)SppConnection.SST_CLOSE_CONFIRM);
-				this.dumpSpp("## bootSvc - reply SPP:", rplySpp);
-				this.sender.send(rplySpp.idp);
+				this.sendIDP(rplySpp);
 				
 				// if drop request => this will silently ignore the SST_CLOSE_CONFIRM reply to our confirmation packet
 				request.close();
@@ -316,6 +315,12 @@ public class BootResponder implements iIDPReceiver {
 			}
 		}
 		
+	}
+	
+	private void sendIDP(SPP spp) {
+		try { Thread.sleep(simpleDataSendInterval); } catch (InterruptedException ie) { /* ignored */ };
+		this.dumpSpp("## bootSvc - reply SPP:", spp);
+		this.sender.send(spp.idp);
 	}
 
 	@Override
@@ -461,21 +466,19 @@ public class BootResponder implements iIDPReceiver {
 			if (this.src == null) {
 				return false;
 			}
+			int count = 0;
 			try {
-				int count = this.src.read(this.page);
+				count = this.src.read(this.page);
 				if (count <= 0) {
 					this.close();
 					return false;
-				}
-				while(count < this.page.length) {
-					this.page[count++] = (byte)0;
 				}
 			} catch (IOException e) {
 				this.close();
 				return false;
 			}
-			spp.wrBytes(0, this.page.length, this.page, 0, this.page.length);
-			spp.setPayloadLength(this.page.length);
+			spp.wrBytes(0, count, this.page, 0, count);
+			spp.setPayloadLength(count);
 			this.lastPageSent++;
 			return true;
 		}
