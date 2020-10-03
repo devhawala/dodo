@@ -204,13 +204,60 @@ and is started with:
 
 The sample Windows batch file is: `run-dodoserver.cmd`
 
-This program takes as optional parameter the name of a `.properties` file
-for configuration of the Dodo server. If no file is given, the program looks
-for a file `dodo.properties` in the current directory and uses this file
-if found.    
-A sample configuration file is available in the directory `dist`.
+This program uses 2 types of files to configure the functionality provided to the
+XNS network:
 
-The following parameters can be specified in the configuration file:
+- a Dodo configuration file (a Java `.properties` file) defining the characteristics
+  of the XNS network, the services provided by the Dodo server process and the
+  configuration data for these services.    
+  If the XNS services are to be provided by several Dodo server processes, e.g.
+  one for clearinghouse and a print service, one for file services and one
+  further for a second print service, the common definitions can be given in
+  a configuration file used by all server processes (through option `-baseCfg:`)
+  with main configuration file given for the server defining the specifics for each
+  of the server processes.
+- an optional machine file giving symbolic names to machine-IDs (processor-ID or MAC
+  address in todays wording). The machine names defined here can be used wherever
+  a machine-ID is to be given in configuration files, either for the Dodo
+  server itself or in the configuration files for the Dodo clearinghouse database
+  (see [Clearinghouse configuration](./chs-config-files.md));    
+  Another purpose of this file is to override some of the configuration parameters
+  for certain client machines of Dodo servers, for example to throttle communication
+  for slower (real or emulated) machines like Darkstar clients while allowing faster
+  emulated machines in the same network to access Dodo servers as fast as possible.
+
+##### Dodo server command line parameters
+
+The Dodo server program can be invoked without command line parameters, which will
+use the following default configuration file names:
+
+- `dodo.properties`    
+  for the main server configuration file
+- `machines.cfg`    
+  for the optional machine name to processor id mappings file; if this file does not
+  exist, no machine mappings are used.
+
+This program accepts the following optional parameters:
+
+- _filename_    
+  the name of the main `.properties` file to use as configuration for the Dodo server
+  instead of `dodo.properties`
+- `-basecfg:`_filename_    
+  the optional name of the `.properties` file defining the common configuration
+  for a set of Dodo server processes providing together the XNS services.    
+  All these servers should use the same `-baseCfg` configuration file, the main
+  configuration file given for each server defines the specific configuration for
+  the corresponding server, overriding or adding configuration items to the common base
+  configuration.
+- `-machinecfg:`_filename_    
+  the name of the machine definitions file to use instead of `machines.cfg`
+
+A sample configuration file `dodo.properties` is available in the directory `dist`.
+
+##### Dodo server configuration file
+
+The following parameters can be specified in the configuration file for defining the basic
+communication parameters and the XNS services to be provided:
 
 - `networkNo`    
 the (decimal) network number that Dodo server belongs to and which is provided in
@@ -218,14 +265,10 @@ time and BfS service responses
 _optional_, _default_: 1025
 
 - `machineId`    
-the processor or machine id for the Dodo machine (or MAC address in todays wording)  
+the processor or machine id for the Dodo server machine (or MAC address in todays wording)  
 (it should be ensured that **all** machines on the network have an unique processor id,
 or Pilot-based machines will stop by entering 0915 state)    
 _optional_, _default_: `10-00-FF-12-34-01`
-
-- `useChecksums`    
-specifies if checksums are to be verified resp. generated at IDP level    
-_optional_, _default_: `true`
 
 - `netHubHost`    
 the name of the NetHub host to connect to    
@@ -280,7 +323,8 @@ see [Clearinghouse configuration](./chs-config-files.md) for details
 - `bootService.baseDir`    
 `bootService.verbose`    
 `bootService.simpleDataSendInterval`    
-these 3 properties configure the boot service provided by this Dodo instance;    
+`bootService.sppDataSendInterval`    
+these 4 properties configure the boot service provided by this Dodo instance;    
 see [Boot service configuration](./bootsvc-configuration.md) for details
 
 - `printService.name`    
@@ -299,12 +343,116 @@ a set of these parameter pairs (with the numerical *NN* parts being a sequence s
 define the file services provided by this Dodo instance;    
 see [File service configuration](./filesvc-configuration.md) for details
 
+The following parameters can be specified in the configuration file to control the communication
+at the packet level:
+
+- `useChecksums`    
+specifies if checksums are to be verified resp. generated at IDP level    
+_optional_, _default_: `true`
+
 - `ether.useDarkstarWorkaround`    
 if `true`: activate a work-around for a problem in _Darkstar_ where IDP packets having the correct
 ethernet packet length for the IDP length may be ignored. The work-around is to add 2 extra words to
 the ethernet packet.     
-_optional_, _default: `false`
- 
+_optional_, default: `false`
+
+- `spp.sendingTimeGap`    
+milliseconds to wait before transmitting next packet in an SPP connection after having sent a packet
+in the same connection.
+_optional_, default: `5`
+
+- `spp.resendDelay`    
+milliseconds before sending the acknowledge-request on missing acknowledge after having sent a packet,
+initiating the server side resend standard procedure.    
+_optional_, default: `20`
+
+- `spp.handshakeCheckInterval`    
+interval in milliseconds for the count down stepping in the SPP handshake check cycles;
+a SPP packet resend cycle or an acknowledge send is initiated when the corresponding counter of a
+specific connection reaches `0`.    
+_optional, default: `10`
+
+- `spp.handshakeSendackCountdown`    
+number of check intervals after receiving the others send-ack before sending the servers ack packet,
+giving the local service some processing time to react on the ingone data and sending result
+data packets before the ack-packet is sent to the client side    
+_optional_, default: `4 ` (giving 30..40 ms before a requested ack is sent)
+
+- `spp.handshakeResendCountdown`    
+number of check intervals after sending a server-side request for acknowledgment before
+starting to resend packets if no acknowledge arrives from the client in the meantime.    
+_optional_, default: `50` (giving the other side about 500 ms to respond to a send-ack)
+
+- `spp.handshakeMaxResends`    
+max. number of resend cycles without response from the client side before the
+connection is considered dead and hard-closed on the server side.    
+_optional_, default: `5`
+
+- `spp.resendPacketCount`    
+max. number of packets (starting with the oldest i.e. lowest sequence number) in
+one resend cycle.    
+_optional_, default: `2`
+
+##### Dodo server machine ids file
+
+The symbolic name for both a Dodo server and client machine processor-id is defined 
+in the machine ids file with a single line as follows:
+
+_name_ = `XX-XX-XX-XX-XX-XX`
+
+The symbolic name can be used in configuration files for Dodo and the clearinghouse
+database files at any place where a machine or processor id is expected. If an
+undefined machine name is used in a configuration file, a dummy processor id is used
+for that name, allowing to continue loading the configuration file(s) and possibly
+collect further undefined symbolic machine names, but the server is not started
+after processing all configuration files and the undefined machine names are listed
+to `stdout`. 
+
+(as usual empty lines and lines with `#` as the first non-blank character are
+ignored)
+
+For a client machine, the above definition line is the anchor for adding configuration
+parameters specifically for this machine, overriding the default defined for the Dodo server.
+Following the definition line, the parameters for this machine are given one per line
+introduced with a `+`, for example:
+
+```
+#
+# slow down for the Darkstar machine (running XDE, StarOS or ViewPoint)
+#
+darkstar-1 = 10-00-AA-10-00-11
++ authSkipTimestampChecks = true
++ spp.resendDelay = 60
++ spp.sendingTimeGap = 60
+```
+
+The following configuration parameters can be specified for a machine in a machine
+ids file to override the global settings:
+- `authSkipTimestampChecks`
+- `bootService.simpleDataSendInterval`
+- `bootService.sppDataSendInterval`
+- `spp.sendingTimeGap`
+- `spp.handshakeSendackCountdown`
+- `spp.resendDelay`
+- `spp.handshakeResendCountdown`
+- `spp.handshakeMaxResends`
+- `spp.resendPacketCount`
+
+(other configuration parameters are ignored)
+
+If several client machines need the same parameter overrides, it is not necessary
+to duplicate the parameters, instead it is possible to copy the settings from another
+machine with a line: `:like `_other-machine_
+
+For example:
+
+```
+#
+# the second Darkstar machine
+#
+darkstar-2 = 10-00-AA-10-00-12
+:like darkstar-1
+```
 
 #### NetHubGateway
 
@@ -430,7 +578,7 @@ directory under GlobalView (see the examples section in the
 [clearinghouse configuration](./chs-config-files.md) document. For Printing and Filing services
 the client OS typical operations (XDE: print.bcd, FileTool with Retrieve!, Store! Remote-Delete!,
 GVWin: printing documents, copy/move/props on remote files, documents and folders) are routinely
-tested.  
+tested.
 
 The following environments were tested with Dodo server and nethub, using the
 default Clearinghouse database found in `dist.zip`:
@@ -468,7 +616,7 @@ Other XNS programs in BSD 4.3 were not tested so far.
 
 - [Darkstar](https://github.com/livingcomputermuseum/Darkstar) (8010 emulator version 1.0.0.1 by Josh Dersch / Living Computer Museum)    
 Tested under Windows-10, configuration: NetHub with NetHubGateway and Dodo server, Darkstar
-running Viewpoint 2.0.6 or Star OS 5.0.        
+running Viewpoint 2.0.6 or Star OS 5.0.    
 The network speed is comparable with real 8010's for workstations and servers (i.e. slow as in the 80's)
 (Darkstar running in average at 100~130% speed according to the status line). For reliable network connections,
 the option `ether.useDarkstarWorkaround` should be set to `true` (see above) and the (internal
@@ -514,6 +662,11 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2020-10-03    
+-- added machine ids file to simplify configuration and define machine specific configurations    
+-- new parameter bootService.sppDataSendInterval    
+-- documented command line options and packet level configuration parameters for the Dodo server process
 
 - 2020 August/September    
 -- Dodo: improved support for Darkstar client machines    

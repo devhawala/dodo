@@ -109,7 +109,6 @@ public class Service implements Runnable {
 	public synchronized Session createSession(
 				Credentials credentials,
 				Verifier verifier,
-				Long remoteHostId,
 				StrongVerifier decodedVerifier,
 				int filingVersion) {
 		if (this.shutdown) {
@@ -117,7 +116,7 @@ public class Service implements Runnable {
 		}
 		int[] conversationKey = new int[4];
 		ThreePartName username = this.checkCredentials(credentials, verifier, conversationKey, decodedVerifier);
-		Session s = new Session(this, username, remoteHostId, conversationKey, filingVersion);
+		Session s = new Session(this, username, conversationKey, filingVersion);
 		this.sessions.add(s);
 		return s;
 	}

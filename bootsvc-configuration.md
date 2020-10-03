@@ -78,7 +78,13 @@ log the boot service activities?
 _optional_, _default_: `false`
 
 - `bootService.simpleDataSendInterval`    
-interval in milliseconds between 2 packets when using the simple protocol,
+interval in milliseconds between 2 packets when using the simple boot protocol,
 so this parameter controls the packet transmission rate for microcode and
 germ files    
 _optional_, _default_: `40` (meaning 25 packets/second)
+
+- `bootService.sppDataSendInterval`    
+interval in milliseconds before sending the next data packet (after receiving the acknowledge
+for the last packet) when using the spp boot protocol,
+so this parameter controls the packet transmission rate for boot files    
+_optional_, _default_: `20` (meaning max. 50 packets/second)

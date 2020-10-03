@@ -49,7 +49,6 @@ public class Session {
 	private final ThreePartName userChsName;
 	private final int sessionId;
 	
-	private final Long remoteHostId;
 	private final int[] conversationKey;
 	
 	private final String username;
@@ -61,11 +60,10 @@ public class Session {
 	private boolean closed = false;
 	private boolean disableClosing = false;
 	
-	public Session(Service service, ThreePartName username, Long remoteHostId, int[] conversationKey, int filingVersion) {
+	public Session(Service service, ThreePartName username, int[] conversationKey, int filingVersion) {
 		this.service = service;
 		this.userChsName = username;
 		this.sessionId = createSessionId();
-		this.remoteHostId = remoteHostId;
 		this.conversationKey = conversationKey;
 		this.filingVersion = filingVersion;
 		this.continuanceDuranceMillisecs = (filingVersion < 5) ? CONTINUANCE_DURANCE_FILING4 : CONTINUANCE_DURANCE_DEFAULT;
@@ -89,10 +87,6 @@ public class Session {
 
 	public String getUsername() {
 		return username;
-	}
-	
-	public Long getRemoteHostid() {
-		return this.remoteHostId;
 	}
 	
 	public int[] getConversationKey() {

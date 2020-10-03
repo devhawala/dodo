@@ -27,11 +27,13 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns.level4.common;
 
 import dev.hawala.xns.Log;
+import dev.hawala.xns.MachineIds;
 import dev.hawala.xns.level3.courier.ARRAY;
 import dev.hawala.xns.level3.courier.CrProgram;
 import dev.hawala.xns.level3.courier.ENUM;
 import dev.hawala.xns.level3.courier.LONG_CARDINAL;
 import dev.hawala.xns.level3.courier.RECORD;
+import dev.hawala.xns.level3.courier.RemoteHostId;
 import dev.hawala.xns.level3.courier.SEQUENCE;
 import dev.hawala.xns.level3.courier.STRING;
 import dev.hawala.xns.level3.courier.UNSPECIFIED;
@@ -205,6 +207,10 @@ public abstract class AuthChsCommon extends CrProgram {
 		public final ENUM<CredentialsType> type = mkENUM(mkCredentialsType);
 		public final SEQUENCE<UNSPECIFIED> value = mkSEQUENCE(UNSPECIFIED::make);
 		
+		// this one does not participate in the Courier data stream, but has
+		// the only purpose to provide the machine-id of the invoker, if available
+		public final RemoteHostId remoteHostId = mkMember(RemoteHostId::make);
+		
 		private Credentials() {}
 		public static Credentials make() { return new Credentials(); }
 	}
@@ -311,12 +317,6 @@ public abstract class AuthChsCommon extends CrProgram {
 	/*
 	 * ***************** non-Courier public methods
 	 */
-	
-	private static boolean skipTimestampChecks = false;
-	
-	public static void skipTimestampChecks() {
-		skipTimestampChecks = true;
-	}
 	
 	/**
 	 * Check that the password encoded in the {@code verifier} is the
@@ -447,6 +447,7 @@ public abstract class AuthChsCommon extends CrProgram {
 			System.out.println("** checkStrongCredentials() => ERR: creds.initiator is not a valid name");
 			return null;
 		}
+		boolean skipTimestampChecks = MachineIds.getCfgBoolean(credentials.remoteHostId.get(), MachineIds.CFG_AUTH_SKIP_TIMESTAMP_CHECKS, false);
 		if (!skipTimestampChecks) {
 			if (now.get() > creds.expirationTime.get()) {
 				System.out.println("** checkStrongCredentials() => ERR: now > creds.expirationTime");

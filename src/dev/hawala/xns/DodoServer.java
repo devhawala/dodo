@@ -28,6 +28,7 @@ package dev.hawala.xns;
 
 import java.io.File;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -39,7 +40,6 @@ import dev.hawala.xns.level4.auth.BfsAuthenticationResponder;
 import dev.hawala.xns.level4.boot.BootResponder;
 import dev.hawala.xns.level4.chs.BfsClearinghouseResponder;
 import dev.hawala.xns.level4.chs.Clearinghouse3Impl;
-import dev.hawala.xns.level4.common.AuthChsCommon;
 import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
 import dev.hawala.xns.level4.common.ChsDatabase;
 import dev.hawala.xns.level4.common.Time2;
@@ -104,15 +104,16 @@ public class DodoServer {
 	
 	private static String bootServiceBasedir = "bootsvc";
 	private static boolean bootServiceVerbose = false;
-	private static int bootServiceSimpleDataSendInterval = -1;
+	private static int bootServiceSimpleDataSendInterval = 40; // default: ~ 25 packets per second
+	private static int bootServiceSppDataSendInterval = 20; // default: ~ 50 packets per second
 	
-	private static int sppHandshakeCheckInterval = -1;
-	private static int sppHandshakeSendackCountdown = -1;
-	private static int sppHandshakeResendCountdown = -1;
-	private static int sppHandshakeMaxResends = -1;
-	private static int sppResendDelay = -1;
-	private static int sppSendingTimeGap = -1;
-	private static int sppResendPacketCount = -1;
+	private static int sppHandshakeCheckInterval = 10;
+	private static int sppHandshakeSendackCountdown = 4;
+	private static int sppHandshakeResendCountdown = 50;
+	private static int sppHandshakeMaxResends = 5;
+	private static int sppResendDelay = 20;
+	private static int sppSendingTimeGap = 5;
+	private static int sppResendPacketCount = 2;
 	
 	// startFileServer <=> fileServiceSpecs.size() > 0
 	private static Map<String,String> fileServiceSpecs = new HashMap<>();
@@ -150,7 +151,7 @@ public class DodoServer {
 		startBootService = props.getBoolean("startBootService", startBootService);
 		
 		strongKeysAsSpecified = props.getBoolean("strongKeysAsSpecified", strongKeysAsSpecified);
-		authSkipTimestampChecks = props.getBoolean("authSkipTimestampChecks", authSkipTimestampChecks);
+		authSkipTimestampChecks = props.getBoolean(MachineIds.CFG_AUTH_SKIP_TIMESTAMP_CHECKS, authSkipTimestampChecks);
 		organizationName = props.getString("organizationName", organizationName);
 		domainName = props.getString("domainName", domainName);
 		chsDatabaseRoot = props.getString("chsDatabaseRoot", chsDatabaseRoot);
@@ -164,7 +165,8 @@ public class DodoServer {
 		
 		bootServiceBasedir = props.getString("bootService.basedir", bootServiceBasedir);
 		bootServiceVerbose = props.getBoolean("bootService.verbose", bootServiceVerbose);
-		bootServiceSimpleDataSendInterval = props.getInt("bootService.simpleDataSendInterval", bootServiceSimpleDataSendInterval);
+		bootServiceSimpleDataSendInterval = props.getInt(MachineIds.CFG_BOOTSVC_SIMPLEDATA_SEND_INTERVAL, bootServiceSimpleDataSendInterval);
+		bootServiceSppDataSendInterval = props.getInt(MachineIds.CFG_BOOTSVC_SPPDATA_SEND_INTERVAL, bootServiceSppDataSendInterval);
 		
 		int fileSvcIdx = 0;
 		String serviceName;
@@ -178,34 +180,18 @@ public class DodoServer {
 		}
 		
 		sppHandshakeCheckInterval = props.getInt("spp.handshakeCheckInterval", sppHandshakeCheckInterval);
-		sppHandshakeSendackCountdown = props.getInt("spp.handshakeSendackCountdown", sppHandshakeSendackCountdown);
-		sppHandshakeResendCountdown = props.getInt("spp.handshakeResendCountdown", sppHandshakeResendCountdown);
-		sppHandshakeMaxResends = props.getInt("spp.handshakeMaxResends", sppHandshakeMaxResends);
-		sppResendDelay = props.getInt("spp.resendDelay", sppResendDelay);
-		sppSendingTimeGap = props.getInt("spp.sendingTimeGap", sppSendingTimeGap);
-		sppResendPacketCount = props.getInt("spp.resendPacketCount", sppResendPacketCount);
+		sppHandshakeSendackCountdown = props.getInt(MachineIds.CFG_SPP_HANDSHAKE_SENDACK_COUNTDOWN, sppHandshakeSendackCountdown);
+		sppHandshakeResendCountdown = props.getInt(MachineIds.CFG_SPP_HANDSHAKE_RESEND_COUNTDOWN, sppHandshakeResendCountdown);
+		sppHandshakeMaxResends = props.getInt(MachineIds.CFG_SPP_HANDSHAKE_MAX_RESENDS, sppHandshakeMaxResends);
+		sppResendDelay = props.getInt(MachineIds.CFG_SPP_RESEND_DELAY, sppResendDelay);
+		sppSendingTimeGap = props.getInt(MachineIds.CFG_SPP_SENDING_TIME_GAP, sppSendingTimeGap);
+		sppResendPacketCount = props.getInt(MachineIds.CFG_SPP_RESEND_PACKET_COUNT, sppResendPacketCount);
 		
 		// do verifications
 		boolean outcome = true;
 		
 		if (mId != null) {
-			String[] submacs = mId.split("-");
-			if (submacs.length != 6) {
-				System.err.printf("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): %s\n", mId);
-				outcome = false;
-			} else {
-				long macId = 0;
-				for (int i = 0; i < submacs.length; i++) {
-					macId = macId << 8;
-					try {
-						macId |= Integer.parseInt(submacs[i], 16) & 0xFF;
-					} catch (Exception e) {
-						System.err.printf("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): %s\n", mId); 
-						outcome = false;
-					}
-				}
-				machineId = macId;
-			}
+			machineId = MachineIds.resolve(mId);
 		}
 		
 		if (startChsAndAuth || fileServiceSpecs.size() > 0) {
@@ -227,13 +213,17 @@ public class DodoServer {
 	}
 
 	public static void main(String[] args) throws XnsException {
+		String machinesFile = null;
 		String baseCfgFile = null;
 		String cfgFile = null;
 		boolean dumpChs = false;
 
 		// get commandline args
 		for (String arg : args) {
-			if (arg.toLowerCase().startsWith("-basecfg:")) {
+			if (arg.toLowerCase().startsWith("-machinecfg:")) {
+				String[] parts = arg.split(":");
+				machinesFile = parts[1];
+			} else if (arg.toLowerCase().startsWith("-basecfg:")) {
 				String[] parts = arg.split(":");
 				baseCfgFile = parts[1];
 			} else if ("-dumpchs".equalsIgnoreCase(arg)) {
@@ -245,7 +235,12 @@ public class DodoServer {
 			}
 		}
 		
-		// load configuration
+		// load machines configuration
+		if (!MachineIds.loadDefinitions(machinesFile)) {
+			System.out.println("!! failed to load machines configuration");
+		}
+		
+		// load configuration(s)
 		if (baseCfgFile == null) {
 			File f = new File(DEFAULT_BASECONFIG_FILE);
 			if (f.exists() && f.canRead()) {
@@ -263,14 +258,47 @@ public class DodoServer {
 			return;
 		}
 		
-		// configure SPP resend / acknowledge technical parameters, if any
-		if (sppHandshakeCheckInterval > 0) { SppConnection.setHandshakeCheckInterval(sppHandshakeCheckInterval); }
-		if (sppHandshakeSendackCountdown > 0) { SppConnection.setHandshakeSendackCountdown(sppHandshakeSendackCountdown); };
-		if (sppHandshakeResendCountdown > 0) { SppConnection.setHandshakeResendCountdown(sppHandshakeResendCountdown); }
-		if (sppHandshakeMaxResends > 0) { SppConnection.setHandshakeMaxResends(sppHandshakeMaxResends); }
-		if (sppResendDelay >= 0) { SppConnection.setResendDelay(sppResendDelay); }
-		if (sppResendPacketCount >= 0) { SppConnection.setResendPacketCount(sppResendPacketCount); }
-		if (sppSendingTimeGap >= 0) { SppConnection.setSendingTimeGap(sppSendingTimeGap); }
+		// put parts of the configuration data as defaults for client machines
+		MachineIds.setDefault(MachineIds.CFG_AUTH_SKIP_TIMESTAMP_CHECKS, authSkipTimestampChecks);
+		
+		MachineIds.setDefault(MachineIds.CFG_BOOTSVC_SIMPLEDATA_SEND_INTERVAL, bootServiceSimpleDataSendInterval);
+		MachineIds.setDefault(MachineIds.CFG_BOOTSVC_SPPDATA_SEND_INTERVAL, bootServiceSppDataSendInterval);
+		
+		MachineIds.setDefault(MachineIds.CFG_SPP_HANDSHAKE_SENDACK_COUNTDOWN, sppHandshakeSendackCountdown);
+		MachineIds.setDefault(MachineIds.CFG_SPP_RESEND_DELAY, sppResendDelay);
+		MachineIds.setDefault(MachineIds.CFG_SPP_HANDSHAKE_RESEND_COUNTDOWN, sppHandshakeResendCountdown);
+		MachineIds.setDefault(MachineIds.CFG_SPP_HANDSHAKE_MAX_RESENDS, sppHandshakeMaxResends);
+		MachineIds.setDefault(MachineIds.CFG_SPP_RESEND_PACKET_COUNT, sppResendPacketCount);
+		MachineIds.setDefault(MachineIds.CFG_SPP_SENDING_TIME_GAP, sppSendingTimeGap);
+		
+		// this parameter is global to all SPP connections (cannot be specified at client machine level)
+		SppConnection.setHandshakeCheckInterval(sppHandshakeCheckInterval);
+		
+		// open CHS database if there are services requiring it
+		ChsDatabase chsDatabase = null;
+		if (startChsAndAuth || !fileServiceSpecs.isEmpty()) {
+			// create the clearinghouse database
+			chsDatabase = new ChsDatabase(networkNo, organizationName, domainName, chsDatabaseRoot, strongKeysAsSpecified);
+			
+			if (dumpChs) {
+				System.out.println("\n==\n== machine-id pre-definitions:\n==\n");
+				MachineIds.dump();
+				System.out.println("\n==\n== clearinghouse database dump: \n==\n");
+				chsDatabase.dump();
+				System.out.println("\n==\n== end of machine-id and clearinghouse database dumps\n==\n");
+			}
+		}
+		
+		// check if we have undefined machine names, aborting startup if any
+		List<String> undefinedMachineNames = MachineIds.getUndefinedMachineNames();
+		if (!undefinedMachineNames.isEmpty()) {
+			System.out.println("The following machine names or IDs are undefined or invalid:");
+			for (String name : undefinedMachineNames) {
+				System.out.printf(" -> name: %s\n", name);
+			}
+			System.out.printf("Aborting Dodo startup ... please correct or define the above names in '%s'\n", machinesFile);
+			System.exit(2);
+		}
 		
 		// configure and start the network engine
 		LocalSite.configureHub(netHubHost, netHubPort);
@@ -282,9 +310,6 @@ public class DodoServer {
 		
 		// boot service
 		if (startBootService) {
-			if (bootServiceSimpleDataSendInterval > 0) {
-				BootResponder.setSimpleDataSendInterval(bootServiceSimpleDataSendInterval);
-			}
 			BootResponder bootService = new BootResponder(bootServiceBasedir, bootServiceVerbose);
 			localSite.clientBindToSocket(
 					IDP.KnownSocket.BOOT.getSocket(),
@@ -310,20 +335,6 @@ public class DodoServer {
 		if (startRipService) {
 			ripResponder = new RipResponder();
 			localSite.clientBindToSocket(IDP.KnownSocket.ROUTING.getSocket(), ripResponder);
-		}
-		
-		// open CHS database if there are services requiring it
-		ChsDatabase chsDatabase = null;
-		if (startChsAndAuth || !fileServiceSpecs.isEmpty()) {
-			// create the clearinghouse database
-			chsDatabase = new ChsDatabase(localSite.getNetworkId(), organizationName, domainName, chsDatabaseRoot, strongKeysAsSpecified);
-			
-			if (dumpChs) {
-				chsDatabase.dump();
-			}
-		}
-		if (authSkipTimestampChecks) {
-			AuthChsCommon.skipTimestampChecks();
 		}
 		
 		// clearinghouse and authentication services

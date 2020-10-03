@@ -413,22 +413,22 @@ public class FilingImpl {
 	private static void logon4(Filing4or5LogonParams params, LogonResults results) {
 		logParams("Logon4", params);
 		
-		innerLogon(params.service, params.credentials, params.verifier, params.remoteHostId.get(), results, 4);
+		innerLogon(params.service, params.credentials, params.verifier, results, 4);
 	}
 	
 	private static void logon5(Filing4or5LogonParams params, LogonResults results) {
 		logParams("Logon5", params);
 		
-		innerLogon(params.service, params.credentials, params.verifier, params.remoteHostId.get(), results, 5);
+		innerLogon(params.service, params.credentials, params.verifier, results, 5);
 	}
 	
 	private static void logon6(Filing6LogonParams params, LogonResults results) {
 		logParams("Logon6", params);
 		
-		innerLogon(params.service, params.credentials.primary, params.verifier, params.remoteHostId.get(), results, 6);
+		innerLogon(params.service, params.credentials.primary, params.verifier, results, 6);
 	}
 	
-	private static void innerLogon(ThreePartName service, Credentials credentials, Verifier verifier, Long remoteHostId, LogonResults results, int filingVersion) {
+	private static void innerLogon(ThreePartName service, Credentials credentials, Verifier verifier, LogonResults results, int filingVersion) {
 		String svcName = chsDatabase.resolveName(service);
 		Service svc;
 		if (svcName.isEmpty() || "::".equals(svcName)) {
@@ -469,7 +469,7 @@ public class FilingImpl {
 		 */
 		
 		StrongVerifier decodedVerifier = StrongVerifier.make();
-		Session session = svc.createSession(credentials, verifier, remoteHostId, decodedVerifier, filingVersion);
+		Session session = svc.createSession(credentials, verifier, decodedVerifier, filingVersion);
 		addSession(session);
 		
 		results.session.token.set(session.getSessionId());

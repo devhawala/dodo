@@ -1630,34 +1630,10 @@ public abstract class FilingCommon extends CrProgram {
 	 * ** Logon is version specific to Filing4/5 and Filing6
 	 */
 	
-	// special Courier type for getting the remote host-id, but with no effects on the Courier communication
-	protected static class RemoteHostId implements iWireData {
-		
-		private Long hostId = null;
-		
-		public Long get() { return hostId; }
-
-		@Override
-		public void serialize(iWireStream ws) { return; }
-
-		@Override
-		public void deserialize(iWireStream ws) { this.hostId = ws.getPeerHostId(); }
-
-		@Override
-		public StringBuilder append(StringBuilder to, String indent, String fieldName) { return to; }
-		
-		private RemoteHostId() {}
-		public static RemoteHostId make() { return new RemoteHostId(); }
-		
-	}
-	
 	public static class Filing4or5LogonParams extends RECORD {
 		public AuthChsCommon.Name service = mkRECORD(AuthChsCommon.Name::make);
 		public AuthChsCommon.Credentials credentials = mkRECORD(AuthChsCommon.Credentials::make);
 		public AuthChsCommon.Verifier verifier = mkMember(AuthChsCommon.Verifier::make);
-		
-		// dummy to provide the invokers machineid
-		public RemoteHostId remoteHostId = mkMember(RemoteHostId::make);
 		
 		private Filing4or5LogonParams() {}
 		public static Filing4or5LogonParams make() { return new Filing4or5LogonParams(); }

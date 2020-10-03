@@ -222,9 +222,6 @@ public class Filing6 extends FilingCommon {
 		public Credentials credentials = mkRECORD(Credentials::make);
 		public AuthChsCommon.Verifier verifier = mkMember(AuthChsCommon.Verifier::make);
 		
-		// dummy to provide the invokers machineid
-		public RemoteHostId remoteHostId = mkMember(RemoteHostId::make);
-		
 		private Filing6LogonParams() {}
 		public static Filing6LogonParams make() { return new Filing6LogonParams(); }
 	}

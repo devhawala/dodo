@@ -36,6 +36,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import dev.hawala.xns.Log;
+import dev.hawala.xns.MachineIds;
 import dev.hawala.xns.PropertiesExt;
 import dev.hawala.xns.level3.courier.STRING;
 import dev.hawala.xns.level3.courier.iWireData;
@@ -100,7 +101,7 @@ public class ChsDatabase {
 	private final List<String> localAliases = new ArrayList<>();
 	
 	/**
-	 * Construction of a clearinghouse database from a set of propewrty files defining the
+	 * Construction of a clearinghouse database from a set of property files defining the
 	 * objects in this domain and organization.
 	 * 
 	 * @param networkId the network number for all machines registered in this clearinghouse database.
@@ -445,20 +446,7 @@ public class ChsDatabase {
 		if (mId == null) {
 			throw new IllegalStateException("No machineId defined for " + forKind + ": " + name);
 		}
-		String[] submacs = mId.split("-");
-		if (submacs.length != 6) {
-			throw new IllegalStateException("Invalid processor id format (not XX-XX-XX-XX-XX-XX): " + mId);
-		}
-		
-		long macId = 0;
-		for (int i = 0; i < submacs.length; i++) {
-			macId = macId << 8;
-			try {
-				macId |= Integer.parseInt(submacs[i], 16) & 0xFF;
-			} catch (Exception e) {
-				throw new IllegalStateException("Error: invalid processor id format (not XX-XX-XX-XX-XX-XX): " + mId);
-			}
-		}
+		long macId = MachineIds.resolve(mId);
 		return macId;
 	}
 	

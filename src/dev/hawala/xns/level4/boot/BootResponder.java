@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 
 import dev.hawala.xns.EndpointAddress;
+import dev.hawala.xns.MachineIds;
 import dev.hawala.xns.level1.IDP;
 import dev.hawala.xns.level1.IDP.PacketType;
 import dev.hawala.xns.level2.Error;
@@ -57,14 +58,7 @@ import dev.hawala.xns.network.iIDPSender;
  * @author Dr. Hans-Walter Latz / Berlin (2019)
  */
 public class BootResponder implements iIDPReceiver {
-	
-	// time interval in milliseconds between 2 'simpleData' packets
-	private static int simpleDataSendInterval = 40; // default: ~ 25 packets per second
-	
-	public static void setSimpleDataSendInterval(int msecs) {
-		simpleDataSendInterval = msecs;
-	}
-	
+		
 	// seed for local connection IDs
 	private int lastConnId = (int)(System.currentTimeMillis() & 0xFFFF);
 	
@@ -209,8 +203,42 @@ public class BootResponder implements iIDPReceiver {
 					File bootfile = this.bootFiles.get(bfn);
 					BufferedInputStream bis = new BufferedInputStream(new FileInputStream(bootfile));
 					int key = (otherConnectionID << 16) | myConnectionID;
-					this.requests.put(key,  new Request(bis));
+					Request request = new Request(bis);
+					this.requests.put(key, request);
 					this.logf("## bootSvc: created session key 0x%08X for request, providing boot file '%s'\n", key, bootfile.getName());
+					
+					// send SPP "connection opened" packet response
+					// with request to acknowledge for triggering the send mechanism 
+					SPP spp = new SPP();
+					spp.idp.asReplyTo(rcvIdp).withSource(this.localEndpoint);
+					spp.asSystemPacket()
+						.setDstConnectionId(otherConnectionID)
+						.setSrcConnectionId(myConnectionID)
+						.setSequenceNumber(0)
+						.setAllocationNumber(0)
+						.setAcknowledgeNumber(0)
+						.setDatastreamType(SST_DATA);
+					this.dumpSpp("## bootSvc - 1st reply SPP (connection open reply):", spp);
+					this.sender.send(spp.idp);
+					
+					try { Thread.sleep(10); } catch (InterruptedException e) { }
+					
+					// send the next reply packet *with* data, assuming the requestor now considers the connection already opened
+					SPP dataSpp = new SPP();
+					dataSpp.idp.asReplyTo(rcvIdp);
+					request.fillNextPacket(dataSpp);
+					dataSpp
+						.setDstConnectionId(otherConnectionID)
+						.setSrcConnectionId(myConnectionID)
+						.setAllocationNumber(0)
+						.setAcknowledgeNumber(0)
+						.asSendAcknowledge()
+						.setDatastreamType(SST_DATA)
+						.setSequenceNumber(0);
+					
+					this.dumpSpp("## bootSvc - reply SPP:", dataSpp);
+					this.sender.send(dataSpp.idp);
+					this.logf("## bootSvc - sent 2nd SPP reply as data packet (skipped connect handskake)\n");
 				} catch (FileNotFoundException e) {
 					this.logf(
 						"## bootSvc : ERROR -> failed to access bootfile boot-file-number 0x%012X: %s\n",
@@ -218,20 +246,20 @@ public class BootResponder implements iIDPReceiver {
 					return;
 				}
 				
-				// send SPP "connection opened" packet response
-				// with request to acknowledge for triggering the send mechanism 
-				SPP spp = new SPP();
-				spp.idp.asReplyTo(rcvIdp).withSource(this.localEndpoint);
-				spp.asSystemPacket()
-					.asSendAcknowledge()
-					.setDstConnectionId(otherConnectionID)
-					.setSrcConnectionId(myConnectionID)
-					.setSequenceNumber(0)
-					.setAllocationNumber(0)
-					.setAcknowledgeNumber(0)
-					.setDatastreamType(SST_DATA);
-				this.dumpSpp("## bootSvc - reply SPP:", spp);
-				this.sender.send(spp.idp);
+//				// send SPP "connection opened" packet response
+//				// with request to acknowledge for triggering the send mechanism 
+//				SPP spp = new SPP();
+//				spp.idp.asReplyTo(rcvIdp).withSource(this.localEndpoint);
+//				spp.asSystemPacket()
+//					.asSendAcknowledge()
+//					.setDstConnectionId(otherConnectionID)
+//					.setSrcConnectionId(myConnectionID)
+//					.setSequenceNumber(0)
+//					.setAllocationNumber(0)
+//					.setAcknowledgeNumber(0)
+//					.setDatastreamType(SST_DATA);
+//				this.dumpSpp("## bootSvc - reply SPP:", spp);
+//				this.sender.send(spp.idp);
 			} else {
 				this.logf("## bootSvc: unsupported request type %d, ignoring request\n", reqType);
 			}
@@ -318,7 +346,8 @@ public class BootResponder implements iIDPReceiver {
 	}
 	
 	private void sendIDP(SPP spp) {
-		try { Thread.sleep(simpleDataSendInterval); } catch (InterruptedException ie) { /* ignored */ };
+		int sendInterval = MachineIds.getCfgInt(spp.idp.getDstHost(), MachineIds.CFG_BOOTSVC_SPPDATA_SEND_INTERVAL, 20);
+		try { Thread.sleep(sendInterval); } catch (InterruptedException ie) { /* ignored */ };
 		this.dumpSpp("## bootSvc - reply SPP:", spp);
 		this.sender.send(spp.idp);
 	}
@@ -375,6 +404,7 @@ public class BootResponder implements iIDPReceiver {
 		private InputStream src;
 		private final iIDPSender sender;
 		private final boolean verbose;
+		private final int simpleDataSendInterval;
 		
 		private int nextPageNo = 1;
 		
@@ -383,6 +413,8 @@ public class BootResponder implements iIDPReceiver {
 			this.sender = sender;
 			this.src = src;
 			this.verbose = verbose;
+			
+			this.simpleDataSendInterval = MachineIds.getCfgInt(idp.getDstHost(), MachineIds.CFG_BOOTSVC_SIMPLEDATA_SEND_INTERVAL, 40);
 		}
 
 		@Override
@@ -391,7 +423,7 @@ public class BootResponder implements iIDPReceiver {
 			long startMs = System.currentTimeMillis();
 			try {
 				while(!done) {
-					Thread.sleep(simpleDataSendInterval);
+					Thread.sleep(this.simpleDataSendInterval);
 					int pageNo = this.nextPageNo++;
 					this.idp.wrCardinal(8, pageNo);
 					int packetLength = 10;

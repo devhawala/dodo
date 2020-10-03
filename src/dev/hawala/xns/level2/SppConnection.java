@@ -31,6 +31,7 @@ import java.util.List;
 
 import dev.hawala.xns.EndpointAddress;
 import dev.hawala.xns.Log;
+import dev.hawala.xns.MachineIds;
 import dev.hawala.xns.level1.IDP;
 import dev.hawala.xns.level2.Error.ErrorCode;
 import dev.hawala.xns.network.iIDPSender;
@@ -61,32 +62,34 @@ import dev.hawala.xns.network.iSocketUnbinder;
 public class SppConnection {
 	
 	/*
-	 * transmission throttling parameter
+	 * transmission throttling parameters specific to the other SPP channel end
+	 * or defaulted to global configuration values if not client side specific
 	 */
-	private static long SENDING_TIMEGAP = 5;
 	
-	/**
-	 * Milliseconds to wait for transmitting next packet after having sent
-	 * a packet.
-	 * <br/>Default is 5 msecs.
-	 * 
-	 * @param gapMs milliseconds between 2 packets sent
-	 */
-	public static void setSendingTimeGap(long gapMs) {
-		SENDING_TIMEGAP = gapMs;
+	private int sppSendingTimeGap = 5;
+	private int sppHandshakeSendackCountdown = 4;
+	private int sppResendDelay = 20;
+	private int sppHandshakeResendCountdown = 50;
+	private int sppHandshakeMaxResends = 5;
+	private int sppResendPacketCount = 2;
+	
+	// configure this connection with potentially specific value for the other side
+	private void initClientSpecifics() {
+		long machineId = othersEndpoint.host;
+		this.sppSendingTimeGap = MachineIds.getCfgInt(machineId, MachineIds.CFG_SPP_SENDING_TIME_GAP, this.sppSendingTimeGap);
+		this.sppHandshakeSendackCountdown = MachineIds.getCfgInt(machineId, MachineIds.CFG_SPP_HANDSHAKE_SENDACK_COUNTDOWN, this.sppHandshakeSendackCountdown);
+		this.sppResendDelay = MachineIds.getCfgInt(machineId, MachineIds.CFG_SPP_RESEND_DELAY, this.sppResendDelay);
+		this.sppHandshakeResendCountdown = MachineIds.getCfgInt(machineId, MachineIds.CFG_SPP_HANDSHAKE_RESEND_COUNTDOWN, this.sppHandshakeResendCountdown);
+		this.sppHandshakeMaxResends = MachineIds.getCfgInt(machineId, MachineIds.CFG_SPP_HANDSHAKE_MAX_RESENDS, this.sppHandshakeMaxResends);
+		this.sppResendPacketCount = MachineIds.getCfgInt(machineId, MachineIds.CFG_SPP_RESEND_PACKET_COUNT, this.sppResendPacketCount);
 	}
 	
 	/*
-	 * parameters for automatic re-sending unacknowledged packets mechanism
+	 * parameter for automatic re-sending unacknowledged packets mechanism
 	 * (externally customizable for all SPP connections)
 	 */
 	
 	private static int HANDSHAKE_CHECK_INTERVAL = 10;
-	private static int HANDSHAKE_SENDACK_COUNTDOWN = 4;
-	private static long RESEND_DELAY = 20;
-	private static int HANDSHAKE_RESEND_COUNTDOWN = 50;
-	private static int HANDSHAKE_MAX_RESENDS = 5;
-	private static int RESEND_PACKET_COUNT = 2; 
 	
 	/**
 	 * milliseconds, wake up interval of the common thread for checks
@@ -98,62 +101,6 @@ public class SppConnection {
 	 */
 	public static void setHandshakeCheckInterval(int intervalMs) {
 		HANDSHAKE_CHECK_INTERVAL = intervalMs;
-	}
-
-	/**
-	 * Number of check intervals after receiving the others send-ack before sending our ack packet.
-	 * <br/>Default is 4, giving the local service 30..40 ms processing time to react on the ingone
-	 * data and sending result data packets before the ack-packet from our side is sent.
-	 * 
-	 * @param count check interval count from ack-request to ack-send
-	 */
-	public static void setHandshakeSendackCountdown(int count) {
-		HANDSHAKE_SENDACK_COUNTDOWN = count;
-	}
-	
-	/**
-	 * Milliseconds after a packet send before sending the acknowledge-request on missing acknowledge,
-	 * initiating our resend standard procedure.
-	 * <br/>Default is 20 msecs.
-	 * 
-	 * @param delayMs milliseconds after a packet sent before requesting the acknowledge if none arrived.
-	 */
-	public static void setResendDelay(long delayMs) {
-		RESEND_DELAY = delayMs;
-	}
-	
-	/**
-	 * Number of check intervals after sending our request for acknowledgment before
-	 * starting resending our packets if no acknowledge arrives in the meantime.
-	 * <br/> Default is 50, giving the other side about 500 ms before we resend some
-	 * of the unacknowledged packets.
-	 * 
-	 * @param count check interval counts after our ack-request before starting the resend
-	 */
-	public static void setHandshakeResendCountdown(int count) {
-		HANDSHAKE_RESEND_COUNTDOWN = count;
-	}
-	
-	/**
-	 * Max. number of resend cycles without acknowledge from the other side before the
-	 * connection is considered dead and hard-closed from this side.
-	 * <br/>Default is 5.
-	 * 
-	 * @param count number of vain resend cycles before considering a connection dead.
-	 */
-	public static void setHandshakeMaxResends(int count) {
-		HANDSHAKE_MAX_RESENDS = count;
-	}
-	
-	/**
-	 * Max. number of packets (starting with the oldest i.e. lowest sequence number) in
-	 * one resend cycle.
-	 * <br/>Default is 2.
-	 * 
-	 * @param count
-	 */
-	public static void setResendPacketCount(int count) {
-		RESEND_PACKET_COUNT = count;
 	}
 	
 	/*
@@ -295,6 +242,8 @@ public class SppConnection {
 		this.myConnectionId = getConnectionId();
 		this.lastOthersActivity = 0;
 		
+		this.initClientSpecifics(); // set specific configuration for 'othersEndpoint'
+		
 		this.intro = "clnt";
 
 		/*this.state = State.NEW;*/
@@ -335,6 +284,8 @@ public class SppConnection {
 		this.myConnectionId = getConnectionId();
 		this.othersConnectionId = connectingPacket.getSrcConnectionId();
 		this.lastOthersActivity = System.currentTimeMillis();
+		
+		this.initClientSpecifics(); // set specific configuration for 'othersEndpoint'
 		
 		this.intro = "srvr";
 
@@ -506,7 +457,7 @@ public class SppConnection {
 				// interpret connection control flags
 				if (spp.isSendAcknowledge() && this.ackCountdown == 0) {
 					// enlist sending acknowledgment if not already pending
-					this.ackCountdown = HANDSHAKE_SENDACK_COUNTDOWN;
+					this.ackCountdown = this.sppHandshakeSendackCountdown;
 					doNotify = true;
 				}
 				if (spp.isAttention()) {
@@ -788,7 +739,7 @@ public class SppConnection {
 			if (isEndOfMessage) { spp.asEndOfMessage(); }
 			this.outgoingPackets[this.outCount++] = spp;
 			this.transmitPacket(spp.idp);
-			this.noResendBefore = System.currentTimeMillis() + RESEND_DELAY;
+			this.noResendBefore = System.currentTimeMillis() + this.sppResendDelay;
 			Log.L3.printf(this.intro, "enqueueOutgoingPacket(): ---------------- sent data packet - seqNo = %d\n", spp.getSequenceNumber());
 			String s = "enqueueOutgoingPacket(): outQueue = [ ";
 			for (int i = 0; i < this.outgoingPackets.length; i++) {
@@ -968,7 +919,7 @@ public class SppConnection {
 			now = System.currentTimeMillis();
 		}
 		this.idpSender.send(idp);
-		this.nextSendTS = now + SENDING_TIMEGAP;
+		this.nextSendTS = now + this.sppSendingTimeGap;
 	}
 	
 	public void requestAcknowledge() {
@@ -1007,7 +958,7 @@ public class SppConnection {
 		this.requestAcknowledge();
 		System.out.printf("!!!! resent un-acknowledged packets starting with seqNo = %d , count = %d (actor: %s)\n", othersAckNo, resentCount, actor);
 		
-		this.noResendBefore = now + RESEND_DELAY;
+		this.noResendBefore = now + this.sppResendDelay;
 		this.resendRetries++;
 	}
 	
@@ -1018,7 +969,7 @@ public class SppConnection {
 		if (othersAckNo >= this.myNextSeqNo) {
 			// all is acknowledged, so cancel any resend activity
 			this.resendCountdown = 0;
-			this.noResendBefore = now + RESEND_DELAY;
+			this.noResendBefore = now + this.sppResendDelay;
 			return;
 		}
 		
@@ -1027,7 +978,7 @@ public class SppConnection {
 			return;
 		}
 		
-		if (this.resendRetries >= HANDSHAKE_MAX_RESENDS) {
+		if (this.resendRetries >= this.sppHandshakeMaxResends) {
 			this.state = State.CLOSED;
 			removeActiveConnection(this);
 			this.socketUnbinder.unbind();
@@ -1037,11 +988,11 @@ public class SppConnection {
 		if (othersAckNo < this.myNextSeqNo && this.noResendBefore <= now) {
 			// time is come to initiate a resend if the other side does not soon acknowledge our sequenced packets
 			this.requestAcknowledge();
-			this.resendCountdown = HANDSHAKE_RESEND_COUNTDOWN;
+			this.resendCountdown = this.sppHandshakeResendCountdown;
 		}
 	}
 	
-	// must be call synchronized
+	// must be called synchronized
 	private void checkForResends(String actor, int maxResentPackets) {
 		this.checkForRequestAcknowledgment();
 		this.checkForResendUnacknowledgedPackets(actor, maxResentPackets);
@@ -1063,7 +1014,7 @@ public class SppConnection {
 		}
 		
 		// request acks (other -> here) & packet resends
-		this.checkForResends("handshake thread", RESEND_PACKET_COUNT);
+		this.checkForResends("handshake thread", this.sppResendPacketCount);
 	}
 	
 }
