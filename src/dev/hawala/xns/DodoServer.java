@@ -45,6 +45,8 @@ import dev.hawala.xns.level4.common.ChsDatabase;
 import dev.hawala.xns.level4.common.Time2;
 import dev.hawala.xns.level4.echo.EchoResponder;
 import dev.hawala.xns.level4.filing.FilingImpl;
+import dev.hawala.xns.level4.mailing.MailingExpeditedCourierResponder;
+import dev.hawala.xns.level4.mailing.MailingImpl;
 import dev.hawala.xns.level4.printing.Printing3Impl;
 import dev.hawala.xns.level4.rip.RipResponder;
 import dev.hawala.xns.level4.time.TimeServiceResponder;
@@ -59,7 +61,7 @@ import dev.hawala.xns.level4.time.TimeServiceResponder;
  * extinct Dodo bird came up).   
  *  </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019,2020)
  */
 public class DodoServer {
 
@@ -106,6 +108,8 @@ public class DodoServer {
 	private static boolean bootServiceVerbose = false;
 	private static int bootServiceSimpleDataSendInterval = 40; // default: ~ 25 packets per second
 	private static int bootServiceSppDataSendInterval = 20; // default: ~ 50 packets per second
+	
+	private static String mailServiceVolumePath = null;
 	
 	private static int sppHandshakeCheckInterval = 10;
 	private static int sppHandshakeSendackCountdown = 4;
@@ -167,6 +171,8 @@ public class DodoServer {
 		bootServiceVerbose = props.getBoolean("bootService.verbose", bootServiceVerbose);
 		bootServiceSimpleDataSendInterval = props.getInt(MachineIds.CFG_BOOTSVC_SIMPLEDATA_SEND_INTERVAL, bootServiceSimpleDataSendInterval);
 		bootServiceSppDataSendInterval = props.getInt(MachineIds.CFG_BOOTSVC_SPPDATA_SEND_INTERVAL, bootServiceSppDataSendInterval);
+		
+		mailServiceVolumePath = props.getString("mailService.volumePath", mailServiceVolumePath);
 		
 		int fileSvcIdx = 0;
 		String serviceName;
@@ -296,7 +302,7 @@ public class DodoServer {
 			for (String name : undefinedMachineNames) {
 				System.out.printf(" -> name: %s\n", name);
 			}
-			System.out.printf("Aborting Dodo startup ... please correct or define the above names in '%s'\n", machinesFile);
+			System.out.printf("Aborting Dodo startup ...\n... please correct the configuration or define the above names in the machine ids file (%s)\n", machinesFile);
 			System.exit(2);
 		}
 		
@@ -359,6 +365,13 @@ public class DodoServer {
 			// register clearinghouse and authentication courier programs in registry
 			Clearinghouse3Impl.register();
 			Authentication2Impl.register();
+			
+			// start the mailService always co-located with the clearinghouse
+			if (mailServiceVolumePath != null) {
+				MailingImpl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase, mailServiceVolumePath);
+				MailingImpl.register();
+				localSite.pexListen(0x001A, new MailingExpeditedCourierResponder());
+			}
 		}
 		
 		// print service

@@ -74,8 +74,9 @@ public class UninterpretedAttribute {
 		return this.value.size();
 	}
 	
-	public void clear() {
+	public UninterpretedAttribute clear() {
 		this.value.clear();
+		return this;
 	}
 	
 	public UninterpretedAttribute add(short v) {

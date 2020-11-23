@@ -26,6 +26,8 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.xns.level3.courier;
 
+import java.util.function.Supplier;
+
 /**
  * Implementation of the wire reading functionality used by Courier
  * deserialization from a SEQUENCE OF UNSPECIFIED.
@@ -48,6 +50,13 @@ public class WireSeqOfUnspecifiedReader implements iWireStream {
 		this.data = new SEQUENCE<UNSPECIFIED>(UNSPECIFIED::make);
 		for (int i = 0; i < data.length; i++) {
 			this.data.add().set(data[i]);
+		}
+	}
+	
+	public WireSeqOfUnspecifiedReader(int size, Supplier<Short> source) {
+		this.data = new SEQUENCE<UNSPECIFIED>(UNSPECIFIED::make);
+		for (int i = 0; i < size; i++) {
+			this.data.add().set(source.get() & 0xFFFF);
 		}
 	}
 	

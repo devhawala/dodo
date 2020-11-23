@@ -35,6 +35,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
@@ -886,6 +887,20 @@ public class Volume {
 			}
 		} finally {
 			contentSink.write(null,  0); // signal EOF and cleanup
+		}
+	}
+	
+	public void retrieveContent(long fileID, java.util.function.Consumer<InputStream> sink, String readingUser) throws IOException {
+		this.checkClosed();
+		
+		FileEntry fe = this.openByFileID(fileID, null, null, readingUser);
+		
+		File contentFile = this.getDataFile(fe.getFileID(), false);
+		if (contentFile == null) {
+			this.errorRaiser.fileContentDamaged("File content missing or lost");
+		}
+		try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(contentFile))) {
+			sink.accept(bis);
 		}
 	}
 	

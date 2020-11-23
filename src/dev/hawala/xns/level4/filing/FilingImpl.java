@@ -695,7 +695,7 @@ public class FilingImpl {
 	 *   = 4;
 	 */
 	private static void create(CreateParams params, FileHandleRecord results) {
-		logParams("store", params);
+		logParams("create", params);
 		
 		// check session
 		Session session = resolveSession(params.session);
@@ -717,7 +717,10 @@ public class FilingImpl {
 		// prepare results
 		Handle fileHandle = new Handle(session, fe);
 		fileHandle.setIdTo(results.file);
-		logResult("store", results);
+		logResult("create", results);
+		
+		// prolongate the sessions life
+		session.continueUse();
 	}
 	
 	/*
@@ -759,6 +762,9 @@ public class FilingImpl {
 			System.out.printf("!!! Exception: %s -- %s !!!\n", e.getClass().getName(), e.getMessage());
 			new SpaceErrorRecord(SpaceProblem.mediumFull).raise();
 		}
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	
 	/*
@@ -980,6 +986,9 @@ public class FilingImpl {
 		} catch (Exception e) {
 			new SpaceErrorRecord(SpaceProblem.mediumFull).raise();
 		}
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	
 	/*
@@ -1030,6 +1039,9 @@ public class FilingImpl {
 		} catch (Exception e) {
 			new SpaceErrorRecord(SpaceProblem.mediumFull).raise();
 		}
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	
 	/*
@@ -1073,6 +1085,9 @@ public class FilingImpl {
 		Handle fileHandle = new Handle(session, fe);
 		fileHandle.setIdTo(results.file);
 		logResult("store", results);
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	
 	/*
@@ -1106,6 +1121,9 @@ public class FilingImpl {
 			log("##  Filing.Retrieve() => %s : %s\n", e.getClass().getName(), e.getMessage());
 			new TransferErrorRecord(TransferProblem.aborted).raise();
 		}
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	
 	/*
@@ -1537,6 +1555,9 @@ public class FilingImpl {
 		}
 		Handle newHandle = new Handle(session, hits.get(0));
 		newHandle.setIdTo(results.file);
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	private static void find4(FindParams4 params, FileHandleRecord results) {
 		logParams("find4", params);
@@ -1557,6 +1578,9 @@ public class FilingImpl {
 		}
 		Handle newHandle = new Handle(session, hits.get(0));
 		newHandle.setIdTo(results.file);
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	
 	/*

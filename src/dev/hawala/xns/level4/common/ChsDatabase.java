@@ -70,18 +70,29 @@ public class ChsDatabase {
 	private final String domOrgPartLc;
 	private final String domainAndOrganization;
 	
-	// public name/password-items for enumerating the clearinghouse
+	// public name/password-items for accessing/enumerating the clearinghouse
 	private final String chsQueryUser = "Clearinghouse Service:CHServers:CHServers";
 	private final Name chsQueryName;
-	private final String chsQueryUserPwPlain = "chsp";
+	private final String chsQueryUserPwPlain = "chs-pw";
 	private final byte[] chsQueryUserPwStrong;
 	private final int chsQueryUserPwSimple;
+	
+	// public name/password-items for accessing the mailservice
+	private final String msQueryUser = "Mail Service:CHServers:CHServers";
+	private final Name msQueryName;
+	private final String msQueryUserPwPlain = "ms-pw";
+	private final byte[] msQueryUserPwStrong;
+	private final int msQueryUserPwSimple;
 	
 	public String getChsQueryUser() { return this.chsQueryUser; }
 	
 	public Name getChsQueryName() { return this.chsQueryName; }
 	
 	public byte[] getChsQueryUserPwStrong() { return this.chsQueryUserPwStrong; }
+	
+	// items for the unique mail service
+	private ChsMailSvc mailService = null;
+	private String mailServiceFqn = null;
 	
 	// naming:
 	//   fqn = full qualified name :: mixed case primary 3-part name (also called "distinguished name")
@@ -128,11 +139,17 @@ public class ChsDatabase {
 		this.domainAndOrganization = ":" + domain + ":" + organization;
 		this.produceStrongKeyAsSpecified = strongKeysAsSpecified;
 		
-		// create chs query user items
+		// create clearinghouse-service query user items
 		this.chsQueryName = Name.make();
 		this.chsQueryName.from(this.chsQueryUser);
 		this.chsQueryUserPwStrong = this.computePasswordStrongHash(this.chsQueryUserPwPlain);
 		this.chsQueryUserPwSimple = this.computePasswordSimpleHash(this.chsQueryUserPwPlain);
+		
+		// create mail-service query user items
+		this.msQueryName = Name.make();
+		this.msQueryName.from(this.msQueryUser);
+		this.msQueryUserPwStrong = this.computePasswordStrongHash(this.msQueryUserPwPlain);
+		this.msQueryUserPwSimple = this.computePasswordSimpleHash(this.msQueryUserPwPlain);
 		
 		// check for CHS database existence
 		// if none => allow any user with password = name-part of user
@@ -183,6 +200,11 @@ public class ChsDatabase {
 				continue;
 			}
 			
+			if (entry instanceof ChsMailSvc && this.mailService == null) {
+				this.mailService = (ChsMailSvc)entry;
+				this.mailServiceFqn = fqn;
+			}
+			
 			this.entries.put(fqn, entry);
 			
 			this.fqns.put(nqn, fqn);
@@ -197,6 +219,25 @@ public class ChsDatabase {
 							alias, fqn, this.fqns.get(alias));
 				}
 			}
+		}
+		
+		// check if a mail service is defined
+		if (this.mailService == null) {			
+			// create a dummy mailservice name to allow users to be created
+			String dummyMailSvcName = "fallback-mail-office";
+			String fqn = dummyMailSvcName + this.domainAndOrganization;
+			String lcFqn = fqn.toLowerCase();
+			int i = 0;
+			while(this.fqns.containsKey(lcFqn)) {
+				dummyMailSvcName = String.format("fallback-mail-office-%d", i++);
+				fqn = dummyMailSvcName + this.domainAndOrganization;
+				lcFqn = fqn.toLowerCase();
+			}
+			this.fqns.put(lcFqn, fqn);
+			this.mailServiceFqn = fqn;
+			
+			// but request an invalid address for it to ensure that startup will stop
+			MachineIds.resolve("missing mail service => " + dummyMailSvcName);
 		}
 		
 		// post process all database entries
@@ -316,6 +357,9 @@ public class ChsDatabase {
 				if (this.chsQueryUser.equalsIgnoreCase(fqn)) {
 					return this.chsQueryUserPwSimple;
 				}
+				if (this.msQueryUser.equalsIgnoreCase(fqn)) {
+					return this.msQueryUserPwSimple;
+				}
 				Log.AUTH.printf("ChsDb", "getSimplePassword(): forName '%s:%s:%s' does not exist\n",
 						forName.object.get(), forName.domain.get(), forName.organization.get());
 				throw new IllegalArgumentException("Object not found");
@@ -352,6 +396,9 @@ public class ChsDatabase {
 				if (this.chsQueryUser.equalsIgnoreCase(fqn)) {
 					return this.chsQueryUserPwStrong;
 				}
+				if (this.msQueryUser.equalsIgnoreCase(fqn)) {
+					return this.msQueryUserPwStrong;
+				}
 				Log.AUTH.printf("ChsDb", "getStrongPassword(): forName '%s:%s:%s' does not exist\n",
 						forName.object.get(), forName.domain.get(), forName.organization.get());
 				throw new IllegalArgumentException("Object not found");
@@ -373,6 +420,20 @@ public class ChsDatabase {
 					objectName, forName.domain.get(), forName.organization.get());
 			throw new IllegalArgumentException("Object not found");
 		}
+	}
+	
+	/**
+	 * return the FQN for the single mail service or {@code null} if no mail service is available.
+	 */
+	public String getMailServiceFqn() {
+		return this.mailServiceFqn;
+	}
+	
+	/**
+	 * return the generic mail service name used when "any" mail service is contacted by clients  
+	 */
+	public Name getGenericMailServiceName() {
+		return this.msQueryName;
 	}
 	
 	
@@ -669,7 +730,7 @@ public class ChsDatabase {
 		private final String username;
 		private final int lastnameIndex;
 		
-		private final String mailservice;
+		private final ThreePartName mailservice = ThreePartName.make();
 		private final long mailboxTimeMillisecs;
 		private final String fileservice;
 		
@@ -692,7 +753,7 @@ public class ChsDatabase {
 			}
 
 			this.fileservice = this.getLcObjName(this.props.getProperty("fileservice", "none")) + domOrgPartLc;
-			this.mailservice = this.getLcObjName(this.props.getProperty("mailservice", "none")) + domOrgPartLc;
+			this.mailservice.from(this.getLcObjName(this.props.getProperty("mailservice", "none")) + domOrgPartLc);
 			this.mailboxTimeMillisecs = propsFile.lastModified();
 		}
 		
@@ -700,13 +761,20 @@ public class ChsDatabase {
 		public void postpare(String fqn) {
 			super.postpare(fqn);
 			
+			String fsName = fqns.get(this.fileservice);
+			if (fsName == null) {
+				fsName = "undefined file service => " + this.fileservice;
+				MachineIds.resolve(fsName); // high probably resolves to an invalid address
+			}
+			
 			UserDataValue userDataValue = UserDataValue.make();
-			userDataValue.fileService.from(fqns.get(this.fileservice));
+			userDataValue.fileService.from(fsName);
 			userDataValue.lastNameIndex.set(this.lastnameIndex);
 			this.putItemProperty(CHEntries0.userData, userDataValue);
 			
+			this.mailservice.from(ChsDatabase.this.mailServiceFqn);
 			MailboxesValue mailboxesValue = MailboxesValue.make();
-			mailboxesValue.mailService.add().from(fqns.get(this.mailservice));
+			mailboxesValue.mailService.add().from(this.mailservice);
 			mailboxesValue.time.fromUnixMillisecs(this.mailboxTimeMillisecs);
 			this.putItemProperty(CHEntries0.mailboxes, mailboxesValue);
 		}
@@ -715,7 +783,7 @@ public class ChsDatabase {
 			super.dumpSpecifics();
 			System.out.printf("  username     : %s\n", this.username);
 			System.out.printf("  lastnameIndex: %d\n", this.lastnameIndex);
-			System.out.printf("  mailservice  : %s\n", this.mailservice);
+			System.out.printf("  mailservice  : %s\n", this.mailservice.getString());
 			System.out.printf("  fileservice  : %s\n", this.fileservice);
 		}
 
@@ -730,15 +798,15 @@ public class ChsDatabase {
 		}
 
 		public int getLastnameIndex() {
-			return lastnameIndex;
+			return this.lastnameIndex;
 		}
 
 		public String getMailserviceFqn() {
-			return mailservice;
+			return this.mailservice.getString();
 		}
 
 		public String getFileserviceFqn() {
-			return fileservice;
+			return this.fileservice;
 		}
 		
 	}
@@ -854,7 +922,7 @@ public class ChsDatabase {
 			super.postpare(fqn);
 			
 			MailboxesValue mailboxesValue = MailboxesValue.make();
-			mailboxesValue.mailService.add().from(fqns.get(this.mailservice));
+			mailboxesValue.mailService.add().from(ChsDatabase.this.mailServiceFqn);
 			mailboxesValue.time.fromUnixMillisecs(this.mailboxTimeMillisecs);
 			this.putItemProperty(CHEntries0.mailboxes, mailboxesValue);
 		}
@@ -1078,6 +1146,14 @@ public class ChsDatabase {
 		ChsEntry e = this.getEntryForName(name);
 		if (e == null) { return null; }
 		return e.fqn;
+	}
+	
+	public List<String> findFullQualifiedNames(String pattern, long reqProperty) {
+		List<String> results = new ArrayList<>();
+		for (String name : this.findObjectNames(this.localNames, pattern, reqProperty)) {
+			results.add(name + this.domainAndOrganization);
+		}
+		return results;
 	}
 	
 	public List<String> findNames(String pattern, long reqProperty) {

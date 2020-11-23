@@ -1,7 +1,7 @@
 ## Dodo Services - XNS with Java
 
 Dodo Services implement Xerox Network Services (XNS) protocols in Java, providing XNS
-services to existing emulated or real Xerox client machines running XDE or GlobalView.
+services to existing emulated or real Xerox client machines.
     
 Currently the following XNS services are provided by Dodo:
 - Time
@@ -11,9 +11,11 @@ Currently the following XNS services are provided by Dodo:
 - Boot
 - Printing
 - Filing
+- Mailing
 
 (although in most cases the implementation is incomplete regarding the specification,
-the services provide a working and useful subset for working "as usual" with XDE and GlobalView/ViewPoint)
+the services provide a working and useful subset for working "as usual" with XDE resp.
+StarOS, ViewPoint or GlobalView)
 
 In fact, Dodo is not a single Java program, but a set of programs creating a
 simple virtual network infrastructure, a kind of XNS-over-TCP/IP. This virtual
@@ -104,6 +106,12 @@ information
 	to access file drawers, folders and files on Dodo XNS File services from XDE
 	and Star/Viewpoint/GVWin. Although substantial functionality is missing (like access control
 	and access rights), Dodo file services are already usable in a mostly single-user environment.
+    - Mailing
+	(MailTransport: Courier program 17, version 4; Inbasket: Courier program 18, version 1)    
+	the subset of protocol procedures actively used by XDE and Star/Viewpoint for sending
+	and receiving mails is implemented;    
+	GlobalView is currently _not_ supported for sending or receiving mails, as newer versions of
+	the mentioned Courier protocols are required.
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -343,6 +351,10 @@ a set of these parameter pairs (with the numerical *NN* parts being a sequence s
 define the file services provided by this Dodo instance;    
 see [File service configuration](./filesvc-configuration.md) for details
 
+- `mailService.volumePath`    
+defining the mail storage filing volume with this parameter starts the mail service in this Dodo instance;    
+see [Mail service configuration](./mailsvc-configuration) for details
+
 The following parameters can be specified in the configuration file to control the communication
 at the packet level:
 
@@ -370,7 +382,7 @@ _optional_, default: `20`
 interval in milliseconds for the count down stepping in the SPP handshake check cycles;
 a SPP packet resend cycle or an acknowledge send is initiated when the corresponding counter of a
 specific connection reaches `0`.    
-_optional, default: `10`
+_optional_, default: `10`
 
 - `spp.handshakeSendackCountdown`    
 number of check intervals after receiving the others send-ack before sending the servers ack packet,
@@ -632,10 +644,11 @@ Using file services with Star OS 5.0 may be a bit unreliable, as some aspects of
 be reconstructed from courier data streams issued by Star OS (resp. guessed for response structures), because the `Filing4.cr`
 files found in the internet assume some structures to be same as in newer filing versions, which is clearly wrong
 in certain cases. Some operations still may not work, but important things do.    
-Remark: Darkstar version 1.1.0.0 seems to have a broken network support, as ethernet packets are sent over the network
+Remark: Darkstar version 1.1.0.0 initially had a broken network support, as ethernet packets are sent over the network
 but received packets are not relayed to the emulator (the necessary line appears to have been removed accidentally
 along with some logging line cleanups during commit "Small tweaks, updated readme"). Darkstar version 1.0.0.1
-has a working network interface, so this version should be used if networking is intended.
+as well as the updated version 1.1.0.0 (of 2020-11-18) have a working network interface, so these versions should be
+used if networking is intended.
 
 
 
@@ -662,6 +675,12 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2020-11-23    
+-- added first version of an XNS Mail service, allowing to exchange mails between StarOS, ViewPoint and XDE    
+&nbsp;&nbsp;&nbsp;&nbsp;(but: GlobalView is currently not supported by the Dodo Mail service)    
+-- reworked the sample environment (`dist.zip`) to provide mailing, have a `machine.cfg` file and additional scripts    
+-- added Filing session prologations for potentially long running operations (e.g. store or retrieve)
 
 - 2020-10-03    
 -- added machine ids file to simplify configuration and define machine specific configurations    

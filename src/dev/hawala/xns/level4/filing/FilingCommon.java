@@ -168,7 +168,7 @@ public abstract class FilingCommon extends CrProgram {
 		public long getAsFileID() { return this.as(FileID::make).get(); }
 		public String getAsChsName() { return this.as(ThreePartName::make).getString(); }
 		
-		private <T extends iWireData> void set(long type, iWireDynamic<T> maker, Consumer<T> setter) {
+		public <T extends iWireData> Attribute set(long type, iWireDynamic<T> maker, Consumer<T> setter) {
 			T data = maker.make();
 			setter.accept(data);
 			try {
@@ -177,23 +177,26 @@ public abstract class FilingCommon extends CrProgram {
 				new UndefinedErrorRecord(UNDEFINEDERROR_ENCODE_ERROR).raise();
 			}
 			this.type.set(type);
+			return this;
 		}
-		public void setAsString(long type, String value) { this.set(type, STRING::make, v -> v.set(value) ); }
-		public void setAsBoolean(long type, boolean value) { this.set(type, BOOLEAN::make, v -> v.set(value) ); }
-		public void setAsCardinal(long type, int value) { this.set(type, CARDINAL::make, v -> v.set(value) ); }
-		public void setAsLongCardinal(long type, long value) { this.set(type, LONG_CARDINAL::make, v -> v.set(value) ); }
-		public void setAsInteger(long type, int value) { this.set(type, INTEGER::make, v -> v.set(value) ); }
-		public void setAsLongInteger(long type, int value) { this.set(type, LONG_INTEGER::make, v -> v.set(value) ); }
-		public void setAsTime(long type, long value) { this.set(type, LONG_CARDINAL::make, v -> v.set(value) ); }
-		public void setAsFileID(long type, long value) { this.set(type, FileID::make, v -> v.set(value) ); }
-		public void setAsChsName(long type, String value) { this.set(type, ThreePartName::make, v -> v.from(value) ); }
+		public Attribute setAsString(long type, String value) { return this.set(type, STRING::make, v -> v.set(value) ); }
+		public Attribute setAsBoolean(long type, boolean value) { return this.set(type, BOOLEAN::make, v -> v.set(value) ); }
+		public Attribute setAsCardinal(long type, int value) { return this.set(type, CARDINAL::make, v -> v.set(value) ); }
+		public Attribute setAsLongCardinal(long type, long value) { return this.set(type, LONG_CARDINAL::make, v -> v.set(value) ); }
+		public Attribute setAsInteger(long type, int value) { return this.set(type, INTEGER::make, v -> v.set(value) ); }
+		public Attribute setAsLongInteger(long type, int value) { return this.set(type, LONG_INTEGER::make, v -> v.set(value) ); }
+		public Attribute setAsTime(long type, long value) { return this.set(type, LONG_CARDINAL::make, v -> v.set(value) ); }
+		public Attribute setAsFileID(long type, long value) { return this.set(type, FileID::make, v -> v.set(value) ); }
+		public Attribute setAsChsName(long type, String value) { return this.set(type, ThreePartName::make, v -> v.from(value) ); }
+		public Attribute setAsChsName(long type, ThreePartName value) { return this.set(type, ThreePartName::make, v -> v.from(value) ); }
 		
-		public void setAsNullValue(long type) {
+		public Attribute setAsNullValue(long type) {
 			this.type.set(type);
 			this.value.clear();
+			return this;
 		}
 		
-		public void setAsPosition(long position) {
+		public Attribute setAsPosition(long position) {
 			this.type.set(FilingCommon.atPosition);
 			
 			// manually emulate a SEQUENCE
@@ -207,6 +210,7 @@ public abstract class FilingCommon extends CrProgram {
 				this.value.add().set(posUpper);// SEQUENCE<UNSPECIFIED> :: element[0]
 				this.value.add().set(posLower);// SEQUENCE<UNSPECIFIED> :: element[1]
 			}
+			return this;
 		}
 		
 		public long getAsPosition() {
