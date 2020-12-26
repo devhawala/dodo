@@ -1394,16 +1394,15 @@ public class FilingImpl {
 			this.content = content;
 
 			this.wcount = this.content.data.size();
-			this.remainingBytes = 2 * wcount;
+			this.remainingBytes = 2 * this.wcount;
 			if (!this.content.lastByteSignificant.get() && this.wcount > 0) {
 				this.remainingBytes--;
 			}
 		}
 		
 		private byte getByte() {
-			if (this.wpos >= this.wcount) { return 0; }
 			if (this.atWordEnd) {
-				this.word = this.content.data.get(this.wpos++);
+				this.word = (this.wpos < this.wcount) ? this.content.data.get(this.wpos++) : 0;
 				this.atWordEnd = false;
 				return (byte)((this.word >>> 8) & 0xFF);
 			}

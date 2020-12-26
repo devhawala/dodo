@@ -289,7 +289,11 @@ public class FileEntry {
 		// uninterpreted attributes
 		int attrCount  = Integer.parseInt(parts[f++]);
 		for (int i = 0; i < attrCount; i++) {
-			this.uninterpretedAttributes.add(new UninterpretedAttribute(parts[f++]));
+			try {
+				this.uninterpretedAttributes.add(new UninterpretedAttribute(parts[f++]));
+			} catch (IllegalArgumentException iae) {
+				System.out.printf("## error internalizing file '%s', ignoring uninterpreted attribute, reason: %s\n", iae.getMessage());
+			}
 		}
 	}
 	

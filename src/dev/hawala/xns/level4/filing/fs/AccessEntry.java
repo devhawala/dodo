@@ -51,8 +51,11 @@ public class AccessEntry {
 	}
 	
 	public AccessEntry(String externalized) {
-		if (externalized == null || externalized.length() < 10 || externalized.charAt(4) != '~') {
-			throw new IllegalArgumentException("Invalid externalized AccessEntry");
+		if (externalized == null || externalized.length() < 7 || externalized.charAt(4) != '~') {
+			// throw new IllegalArgumentException("Invalid externalized AccessEntry");
+			this.access = 0; // no access
+			this.key = "none:$$:$$"; // invalid name
+			return;
 		}
 		this.access = Short.parseShort(externalized.substring(0, 4), 16);
 		this.key = externalized.substring(5);

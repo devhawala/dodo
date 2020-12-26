@@ -41,14 +41,18 @@ import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.OverlappingFileLockException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import dev.hawala.xns.level4.common.Time2;
 
@@ -274,10 +278,9 @@ public class Volume {
 		// create the current baseline metadata => reduce number of files to read in next time (if volumne is not closed normally)
 		vol.saveMetadataBaseline();
 		
-		// move now obsolete metadata file to old-metadata
-		for (File f : children) {
-			f.renameTo(new File(oldMetadataDir.getAbsolutePath() + "/" + f.getName()));
-		}
+		// backup the move now obsolete metadata file to a ZIP archive in 'old-metadata'
+		// and cleanup old metadata files
+		doOldMetadataHousekeeping(oldMetadataDir, children);
 		
 		// check in-memory file system
 		vol.checkConsistency();
@@ -285,6 +288,54 @@ public class Volume {
 		// done
 		System.out.printf("Volume '%s' opened\n", vol.volumeName);
 		return vol;
+	}
+	
+	private static final int MAX_METADATA_BACKUPS_AGE_IN_DAYS = 93; // 3 months
+	private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd_HH.mm.ss.SSS");
+	
+	private static void doOldMetadataHousekeeping(File oldMetadataDir, List<File> oldMetadataFiles) throws IOException {
+		// where are the backup files located?
+		if (!oldMetadataDir.exists()) { oldMetadataDir.mkdir(); }
+		String oldDataDir = oldMetadataDir.getAbsolutePath() + "/";
+		
+		// create the ZIP file with the old metatdata files
+		String zipName = oldDataDir + "old-metadata-" + sdf.format(new Date()) + ".zip";
+		try (FileOutputStream fos = new FileOutputStream(zipName); ZipOutputStream zos = new ZipOutputStream(fos)) {
+			for (File file : oldMetadataFiles) {
+				ZipEntry zipEntry = new ZipEntry(file.getName());
+				zos.putNextEntry(zipEntry);
+
+				try (FileInputStream fis = new FileInputStream(file)) {
+					byte[] buffer= new byte[1024];
+					int length = fis.read(buffer);
+					while (length >= 0) {
+						zos.write(buffer, 0, length);
+						length = fis.read(buffer);
+					}
+				}
+
+				zos.closeEntry();
+			}
+		}
+		
+		// delete the old metadata files
+		for (File file : oldMetadataFiles) {
+			file.delete();
+		}
+		
+		// cleanup old metadata backups
+		long maxFileDate = System.currentTimeMillis() - (MAX_METADATA_BACKUPS_AGE_IN_DAYS * 86400_000L);
+		File[] obsoleteFiles = oldMetadataDir.listFiles(new FilenameFilter() {
+			@Override
+			public boolean accept(File dir, String filename) {
+				File f = new File(oldDataDir + filename);
+				long lastTouchedTs = f.lastModified(); 
+				return lastTouchedTs < maxFileDate;
+			}
+		});
+		for (File file : obsoleteFiles) {
+			file.delete();
+		}
 	}
 	
 	public void close() throws IOException {
@@ -296,12 +347,10 @@ public class Volume {
 			// create the current baseline metadata
 			this.saveMetadataBaseline();
 			
-			// move now obsolete metadata file to old-metadata
+			// backup the move now obsolete metadata file to a ZIP archive in 'old-metadata'
+			// and cleanup old metadata files
 			File oldMetadataDir = new File(this.baseDir, OLDMETADATA_SUBDIR);
-			if (!oldMetadataDir.exists()) { oldMetadataDir.mkdir(); }
-			for (File f : metadataFiles) {
-				f.renameTo(new File(oldMetadataDir.getAbsolutePath() + "/" + f.getName()));
-			}
+			doOldMetadataHousekeeping(oldMetadataDir, Arrays.asList(metadataFiles));
 		}
 		
 		// shutdown the volume

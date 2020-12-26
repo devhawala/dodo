@@ -676,6 +676,10 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2020-12-26 - **Important corrections to File Service -- update Dodo ASAP**    
+-- FS: bugfix preventing data loss when storing VP documents (MP 0915 on re-opening document in VP)    
+-- FS: bugfix preventing losing files with strange VP access rights when opening volume on Dodo restart
+
 - 2020-11-23    
 -- added first version of an XNS Mail service, allowing to exchange mails between StarOS, ViewPoint and XDE    
 &nbsp;&nbsp;&nbsp;&nbsp;(but: GlobalView is currently not supported by the Dodo Mail service)    
