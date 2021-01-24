@@ -676,6 +676,9 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2021-01-24    
+-- PS: added support for Xerox PFB fonts from GlobalView 2.1 when generating PostScript for PDF
+
 - 2020-12-26 - **Important corrections to File Service -- update Dodo ASAP**    
 -- FS: bugfix preventing data loss when storing VP documents (MP 0915 on re-opening document in VP)    
 -- FS: bugfix preventing losing files with strange VP access rights when opening volume on Dodo restart

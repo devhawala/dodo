@@ -28,6 +28,8 @@ package dev.hawala.xns.level4.printing;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -99,8 +101,11 @@ public class Printing3Impl {
 	private static int[] printSvcId = new int[2];
 	private static String outputDirectoryName;
 	private static boolean disassembleIpFiles;
-	private static byte[] ip2psProc;
+	private static byte[] ip2psProc = null;
+	private static byte[] ip2psXcsProc = null;
 	private static String psPostprocessor;
+	
+	private static final String XEROX_PS_FONTS = "dev/hawala/xns/level4/printing/xerox-font-replacements.txt";
 	
 	// print job id generation
 	private static long lastPrintJobId = System.currentTimeMillis() & 0x0000_FFFF_FFFF_FFFFL;
@@ -158,6 +163,7 @@ public class Printing3Impl {
 		}
 		System.out.printf("####### Printing3, supported paperSizes: %s\n", sb.toString());
 
+		// load the ip-to-ps conversion module (Postscript) if specified 
 		ip2psProc = null;
 		if (ip2psProcFilename != null) {
 			File ip2psProcFile = new File(ip2psProcFilename);
@@ -175,6 +181,63 @@ public class Printing3Impl {
 			} catch(IOException e) {
 				System.out.printf("##\n##### Printing3, unable to read ip-to-ps proc: %s\n##\n", ip2psProcFilename);
 				return;
+			}
+		}
+		
+		// if possible: patch the ip-to-ps conversion module to implant/replace font mappings for Modern,
+		// Classic and Equation fonts (using Xerox PFB files)
+		if (ip2psProc != null) {
+			File ip2psProcFile = new File(ip2psProcFilename);
+			File pfbDir = new File(ip2psProcFile.getParentFile(), "pfb");
+			if (pfbDir.exists()
+				&& pfbDir.isDirectory()
+				&& pfbDir.canRead()
+				&& (new File(pfbDir, "XCM000.PFB").canRead())
+				&& (new File(pfbDir, "XMM000__.PFB").canRead())
+				&& (new File(pfbDir, "EQLARGE_.PFB").canRead())
+				) {
+				ByteArrayOutputStream bos = new ByteArrayOutputStream();
+				try (
+					 PrintStream ps = new PrintStream(bos);
+					 BufferedReader rdr = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(ip2psProc)));
+					 InputStream xFonts = (new InterpressUtils()).getClass().getClassLoader().getResourceAsStream(XEROX_PS_FONTS)
+					) {
+					boolean checkFonts = false;
+					boolean patched = false;
+					String line;
+					while ((line = rdr.readLine()) != null) {
+						if (line.startsWith("/XC1-1-1")) {
+							checkFonts = true;
+							ps.println(line);
+						} else if (checkFonts) {
+							if (line.startsWith("end ")) {
+								checkFonts = false;
+								ps.println(line);
+							} else if (line.startsWith("/Classic") || line.startsWith("/Modern") || line.startsWith("/Equation")) {
+								if (!patched) {
+									int b;
+									while((b = xFonts.read()) >= 0) {
+										ps.write(b);
+									}
+									patched = true;
+								}
+							} else {
+								ps.println(line);
+							}
+						} else {
+							ps.println(line);
+						}
+					}
+					ps.flush();
+					System.out.printf("####### Printing3, patched ip-to-ps proc for Xerox PS font usage\n");
+				} catch (IOException e) {
+					System.out.printf("#### error patching ip2psProc: %s\n", e.getMessage());
+				}
+
+				byte[] newIp2PsProc = bos.toByteArray();
+				if (newIp2PsProc.length > 0) {
+					ip2psXcsProc = newIp2PsProc;
+				}
 			}
 		}
 		
@@ -435,7 +498,7 @@ public class Printing3Impl {
 		
 		// TODO: check if we "can" process the master (e.g. do we support the requested page size, ...)
 		
-		new JobProcessor(jobName, ipFilename, filenameBase, printObjectName, senderName, paperKnownSize);
+		new JobProcessor(jobName, ipFilename, filenameBase, printObjectName, senderName, paperKnownSize, message);
 		System.out.printf("####### done printjob with requestId[ %04X %04X %04X %04X %04X ], background processing started\n",
 				requestId.get(0).get(),
 				requestId.get(1).get(),
@@ -552,6 +615,7 @@ public class Printing3Impl {
 		private final String printObjectName;
 		private final String senderName;
 		private final PaperKnownSize paperSize;
+		private final boolean useXcsPsFonts;
 		
 		private final Thread thread;
 		
@@ -561,13 +625,15 @@ public class Printing3Impl {
 					String filenameBase,
 					String printObjectName,
 					String senderName,
-					PaperKnownSize paperSize) {
+					PaperKnownSize paperSize,
+					String message) {
 			this.jobName = jobName;
 			this.ipFilename = ipFilename;
 			this.filenameBase = filenameBase;
 			this.printObjectName = (printObjectName != null) ? printObjectName : "(no print object name)";
 			this.senderName = (senderName != null) ? senderName : "(no sender name)";
 			this.paperSize = (paperSize != null) ? paperSize : supportedPaperSizes.get(0);
+			this.useXcsPsFonts = (ip2psXcsProc != null && !"!no-xerox-fonts!".equalsIgnoreCase(message));
 						
 			this.thread = new Thread(this);
 			this.thread.setDaemon(true);
@@ -604,7 +670,8 @@ public class Printing3Impl {
 						ipUtils.generatePostscript(
 								bis,
 								ps,
-								ip2psProc,
+								this.useXcsPsFonts ? ip2psXcsProc : ip2psProc,
+								this.useXcsPsFonts,
 								this.jobName,
 								this.printObjectName,
 								this.senderName);

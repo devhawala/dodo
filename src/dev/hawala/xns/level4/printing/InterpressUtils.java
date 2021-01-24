@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019, Dr. Hans-Walter Latz
+Copyright (c) 2019,2021, Dr. Hans-Walter Latz
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -27,12 +27,18 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns.level4.printing;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Stack;
@@ -42,6 +48,26 @@ import java.util.Stack;
  * Interpress version, similar to the Interpress example texts found in
  * Xerox documentation or specifications or into a PostScript stream if
  * a GVWin 2.1 ip-to-postscript conversion module is provided.
+ * <p>
+ * If the Postscript fonts provided by Xerox for Modern, Classic and Equation
+ * Viewpoint fonts are present, these fonts will be used for showing text by
+ * mapping the character sets to the font-variants (eg. charset 123 for Classic
+ * to font /Classic-123).
+ * <br>
+ * If these fonts are not present or if the printed document uses other fonts
+ * the Modern, Classic or Equation, some available Postscript font is used as
+ * defined by Xerox in GVWin 2.1 ip-to-postscript conversion module. In this
+ * case a bunch of 16-bit characters distributed over some charsets are mapped
+ * into the 8-bit character space in Postscript fonts, allowing to issue some
+ * european accented and some symbolic characters, but any character not available
+ * in the 8-bit space of Postscript fonts will be replaced by a bullet-char.
+ * <br/>
+ * Special handling is made for the font/charset (mis-?)usage by VP Equations, so
+ * far these patterns are recognized in the Interpress stream. This allows to
+ * show similar representations of formulas or the like, not identical but similar
+ * as the original Xerox Postscript font is missing (Classic-Thin-Bold, subsituted
+ * with Classic-Bold).
+ * </p>
  * <p>
  * This module provides both a library conversion method and the corresponding
  * command line utility for reading an IP file and dumping the disassembled
@@ -57,7 +83,7 @@ import java.util.Stack;
  * A Brady book, Simon & Schuster, 1988
  *  </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin 2019
+ * @author Dr. Hans-Walter Latz / Berlin 2019,2021
  */
 public class InterpressUtils {
 	
@@ -133,12 +159,6 @@ public class InterpressUtils {
 		public InterpressException(String msg) { super(msg); }
 	}
 	
-	private int getByte(InputStream ip) throws EOF, IOException {
-		int b = ip.read();
-		if (b < 0) { throw new EOF(); }
-		return b;
-	}
-	
 	private final String blanks = "                                                                                        ";
 
 	/**
@@ -152,7 +172,7 @@ public class InterpressUtils {
 	 * @throws IOException
 	 */
 	public void readableFromBinary(InputStream ip, PrintStream dest) throws InterpressException, IOException {
-		this.innerReadableFromBinary(ip, dest, false);
+		this.innerReadableFromBinary(ip, dest, false, false);
 	}
 	
 	/**
@@ -175,6 +195,7 @@ public class InterpressUtils {
 			InputStream ip,
 			PrintStream dest,
 			byte[] ip2psProc,
+			boolean useXcsPsFonts,
 			String jobName,
 			String title,
 			String creator
@@ -218,7 +239,7 @@ public class InterpressUtils {
 		dest.println("IPdict begin");
 		dest.println("SetIPMatrics");
 		
-		this.innerReadableFromBinary(ip, dest, true);
+		this.innerReadableFromBinary(ip, dest, true, useXcsPsFonts);
 	}
 
 	/**
@@ -236,12 +257,13 @@ public class InterpressUtils {
 	 * 		unsupported by this disassembler as PS conversion output
 	 * @throws IOException
 	 */
-	private void innerReadableFromBinary(InputStream ip, PrintStream dest, boolean forPsConv) throws InterpressException, IOException {
+	private void innerReadableFromBinary(InputStream ip, PrintStream destStream, boolean forPsConv, boolean useXcsPsFonts) throws InterpressException, IOException {
 		int level = 0;       // skeleton nesting level
 		int pageNo = -1;     // current page (-1 = before or in preamble, 0 = begin preamble)
 		String indent = "";  // current output indent
 		String sep = indent; // separator (indent at line start or single blank inside the line
 		int b = 0;
+		Writer dest = new Writer(destStream);
 		
 		// read prefix up to the first blank (binary data starts after the blank)
 		try {
@@ -251,7 +273,8 @@ public class InterpressUtils {
 				if (pos >= prefixBytes.length) {
 					throw new InterpressException("unplausible interpress prefix (> 256 bytes)");
 				}
-				b = this.getByte(ip);
+				b = ip.read();
+				if (b < 0) { throw new EOF(); }
 				prefixBytes[pos++] = (byte)b;
 			}
 			String prefix = new String(prefixBytes, 0, pos);
@@ -274,28 +297,20 @@ public class InterpressUtils {
 		boolean lastWasCorrect = false;
 		Stack<Integer> correctLevels = new Stack<>();
 		correctLevels.push(-1);
+		Stack<String> ivar12Stack = new Stack<>();
+		ivar12Stack.push(null);
 		String lastPackedPixelVector = null;
+		Map<Integer,String> xcFontTemplatesGlobal = new HashMap<>();
+		Map<Integer,String> xcFontTemplatesPage = new HashMap<>();
+		String xcFontTemplate = null;
+		String xcFGETFontTemplate = null;
 		try {
-			b = this.getByte(ip);
+			IpScanner ipScanner = new IpScanner(ip);
+			TokenType tokenType = ipScanner.next();
 			while(true) {
-				int opSelector = b & OPMASK;
-				if (opSelector == OPSHORT || opSelector == OPLONG) {
+				if (tokenType == TokenType.OP) {
 					// operator or skeleton
-					Op op = null;
-					int code = b & OPVALUE;
-					if (opSelector == OPLONG) {
-						code = (code << 8) | this.getByte(ip);
-						if (code >= longOps.length || longOps[code] == null) {
-							throw new InterpressException("Invalid long opcode: " + code);
-						}
-						op = longOps[code];
-					} else {
-						op = shortOps[code];
-						if (op == null) {
-							throw new InterpressException("Invalid short opcode: " + code);
-						}
-					}
-					
+					Op op = ipScanner.op();
 					String keyword = op.keyword;
 					
 					if (forPsConv) {
@@ -304,6 +319,13 @@ public class InterpressUtils {
 						 */
 						boolean isBraceOpen = "{".equals(keyword);
 						boolean isBraceClose = "}".equals(keyword);
+						
+						if (isBraceOpen) {
+							ivar12Stack.push(xcFontTemplate);
+						}
+						if (isBraceClose) {
+							xcFontTemplate = ivar12Stack.pop();
+						}
 						
 						// CORRECT { .. } -> { .. } CORRECT
 						if (isBraceOpen && lastWasCorrect) {
@@ -314,7 +336,8 @@ public class InterpressUtils {
 							correctLevels.push(level);
 							indent = blanks.substring(0, level * INDENT);
 							sep = indent;
-							b = this.getByte(ip);
+							lastWasCorrect = false;
+							tokenType = ipScanner.next();
 							continue;
 						}
 						if (isBraceClose && correctLevels.peek() == level) {
@@ -324,7 +347,7 @@ public class InterpressUtils {
 							sep = indent;
 							dest.printf("%s}\n", indent);
 							dest.printf("%sCORRECT\n", indent);
-							b = this.getByte(ip);
+							tokenType = ipScanner.next();
 							continue;
 						}
 						
@@ -337,7 +360,8 @@ public class InterpressUtils {
 							doSaveSimpleBodyLevels.push(level);
 							indent = blanks.substring(0, level * INDENT);
 							sep = indent;
-							b = this.getByte(ip);
+							lastWasDosaveSimpleBody = false;
+							tokenType = ipScanner.next();
 							continue;
 						}
 						if (isBraceClose && doSaveSimpleBodyLevels.peek() == level) {
@@ -346,7 +370,7 @@ public class InterpressUtils {
 							indent = blanks.substring(0, level * INDENT);
 							sep = indent;
 							dest.printf("%sDORESTORESIMPLEBODY\n", indent);
-							b = this.getByte(ip);
+							tokenType = ipScanner.next();
 							continue;
 						}
 
@@ -357,7 +381,7 @@ public class InterpressUtils {
 							dest.println(lastPackedPixelVector);
 							lastPackedPixelVector = null;
 							sep = indent;
-							b = this.getByte(ip);
+							tokenType = ipScanner.next();
 							continue;
 						}
 						
@@ -367,17 +391,27 @@ public class InterpressUtils {
 							dest.println("%BeginPreamble");
 							level = 2;
 							indent = blanks.substring(0, level * INDENT);
-							b = this.getByte(ip);
+							
+							dest = new InterceptingWriter(dest);
+							
+							tokenType = ipScanner.next();
 							continue;
 						}
 						if (isBraceClose && level == 2 && pageNo == -1) {
 							// end preamble
+							BufferedReader rdr = dest.close();
+							dest = dest.pop();
+							
+							// extract supported Xerox Codeset font templates
+							extractXcFontTemplates(rdr, xcFontTemplatesGlobal);
+							
 							dest.println("%EndPreamble");
 							dest.println("%%EndSetup");
 							level = 1;
 							indent = "";
 							pageNo = 0;
-							b = this.getByte(ip);
+							
+							tokenType = ipScanner.next();
 							continue;
 						}
 						
@@ -390,7 +424,7 @@ public class InterpressUtils {
 							dest.printf("%sPAGEBEGIN\n", indent);
 							level = 2;
 							indent = blanks.substring(0, level * INDENT);
-							b = this.getByte(ip);
+							tokenType = ipScanner.next();
 							continue;
 							
 						}
@@ -400,7 +434,20 @@ public class InterpressUtils {
 							dest.printf("%sPAGEEND\n", indent);
 							level = 1;
 							indent = "";
-							b = this.getByte(ip);
+							xcFontTemplatesPage.clear();
+							xcFontTemplate = null;
+							xcFGETFontTemplate = null;
+							tokenType = ipScanner.next();
+							continue;
+						}
+						
+						// in-page font definitions
+						if ("FSET".equals(keyword) && pageNo >= 0 && dest.mayClose()) {
+							dest.printf("%s%s\n", sep, keyword);
+							BufferedReader rdr = dest.close();
+							dest = dest.pop();
+							extractXcFontTemplates(rdr, xcFontTemplatesPage);
+							tokenType = ipScanner.next();
 							continue;
 						}
 						
@@ -444,32 +491,51 @@ public class InterpressUtils {
 					}
 					
 					sep = indent;
-				} else if (b <= SHORTNUM) {
+				} else if (tokenType == TokenType.SHORT) {
 					// short number
-					int biased = ((b & SHORTNUM) << 8) | this.getByte(ip);
-					dest.printf("%s%d", sep, biased - 4000);
+					int shortnum = ipScanner.shortnum();
+					dest.printf("%s%d", sep, shortnum);
 					sep = " ";
+					if (forPsConv) {
+						if (ipScanner.isNextOp("SETFONT")) {
+							xcFontTemplate = xcFontTemplatesPage.get(shortnum);
+							if (xcFontTemplate == null) {
+								xcFontTemplate = xcFontTemplatesGlobal.get(shortnum);
+							}
+						} else if (ipScanner.isNextOp("FGET")) {
+							xcFGETFontTemplate = xcFontTemplatesPage.get(shortnum);
+							if (xcFGETFontTemplate == null) {
+								xcFGETFontTemplate = xcFontTemplatesGlobal.get(shortnum);
+							}
+						} else if (ipScanner.isNextOp("ISET")) {
+							if (shortnum == 12) { // imager variable: font
+								// set the font last font pushed onto the stack with FGET
+								xcFontTemplate = xcFGETFontTemplate;
+							} else {
+								// the element on the stack was consumed for something else, so drop the font info
+								xcFGETFontTemplate = null;
+							}
+						}
+					}
 				} else {
 					// sequence (short or long)
-					int seqType = b & SEQMASK;
-					int seqLen = this.getByte(ip);
-					if (opSelector == OPLONGSEQ) {
-						seqLen = (seqLen << 16)
-							   | (this.getByte(ip) << 8)
-							   | this.getByte(ip);
-					}
-					
-					// load the sequence data
-					byte[] seqData = new byte[seqLen];
-					for (int i = 0; i < seqLen; i++) {
-						seqData[i] = (byte)this.getByte(ip);
-					}
+					int seqType = ipScanner.seqType();
+					int seqLen = ipScanner.seqLen();
+					byte[] seqData = ipScanner.seqData();
 					
 					// interpret the sequence type and read+interpret the bytes accordingly
 					switch(seqType) {
 					case SEQ_STRING: {
 							if (forPsConv) {
-								dest.printf("%s(%s)\n", sep, mapXString(seqData));
+								if ("PL/1 Erweiterungsskript, Seite 1".equals(new String(seqData))) {
+									System.out.printf("trigger string found\n");
+								}
+								if (useXcsPsFonts && xcFontTemplate != null && ipScanner.isNextOp("SHOW")) {
+									psShowXString(dest, indent, seqData, xcFontTemplate);
+									ipScanner.next(); // consume the SHOW token coming next
+								} else {
+									dest.printf("%s(%s)\n", sep, mapXString(seqData));
+								}
 								sep = indent;
 							} else {
 								sep = this.dumpString("String", sep, indent, seqData, dest);
@@ -531,6 +597,9 @@ public class InterpressUtils {
 								String identifier = new String(seqData);
 								if ("XC82-0-0".equals(identifier)) {
 									identifier = "XC1-1-1"; // map XDE's preferred charset to one known by the IP-to-PS processor
+								} else if ("XEROX".equals(identifier) && pageNo >= 0 && !dest.mayClose()) {
+									// possible begin in-page font definition, ends with FSET
+									dest = new InterceptingWriter(dest);
 								}
 								dest.printf("%s/%s\n", indent, identifier);
 								sep = indent;
@@ -664,7 +733,7 @@ public class InterpressUtils {
 						throw new InterpressException("invalid sequence type code: " + seqType);
 					}
 				}
-				b = this.getByte(ip);
+				tokenType = ipScanner.next();
 			}
 		} catch (EOF eof) {
 			// normal end of the ip file
@@ -677,7 +746,307 @@ public class InterpressUtils {
 		}
 	}
 	
-	private String dumpString(String typeName, String sep, String indent, byte[] seqData, PrintStream dest) {
+	// read some buffered lines, recognizing typical patterns for font definitions stored in a variable-frame
+	// and put a corresponding template in a cache allowing to show multi-characterset string with such a font
+	private static void extractXcFontTemplates(BufferedReader rdr, Map<Integer,String> xcFontTemplates) throws IOException {
+		List<String> fontDef = new ArrayList<>();
+		boolean inFontDef = false;
+		String line;
+		while((line = rdr.readLine()) != null) {
+			if (line.endsWith("/XEROX")) {
+				fontDef.clear();
+				fontDef.add(line.trim());
+				inFontDef = true;
+			} else if (inFontDef) {
+				if (line.endsWith("FSET")) {
+					if (fontDef.size() == 7
+						&& fontDef.get(1).equals("/XC1-1-1")
+						&& (fontDef.get(2).startsWith("/Modern")
+							|| fontDef.get(2).startsWith("/Classic")
+							|| fontDef.get(2).startsWith("/Equation"))) {
+						// usual font usage: one font name used for several charsets
+						try {
+							line = line.replace(" FSET", "").trim();
+							int fsetNo = Integer.parseInt(line);
+							String formatText = fontDef.get(2).startsWith("/Equation")
+									? "%%s%s %s %s %s %s %s %s 12 ISET"       // 1 embedded placeholder: indent
+									: "%%s%s %s %s-%%03o %s %s %s %s 12 ISET";// 2 embedded placeholders: indent and charset
+							String template = String.format(
+										formatText,
+										fontDef.get(0),
+										fontDef.get(1),
+										fontDef.get(2),
+										fontDef.get(3),
+										fontDef.get(4),
+										fontDef.get(5),
+										fontDef.get(6));
+							xcFontTemplates.put(fsetNo, template);
+						} catch(NumberFormatException nfe) {
+							// ignored, no template generated
+						}
+					} else if (fontDef.size() == 5 && fontDef.get(1).equals("/XC1-1-1") && (fontDef.get(2).equals("/Classic-Thin-Bold"))) {
+						// special font used in equations for multi-subplace-symbols like Sum, Integral
+						// (one font, all usages are expected in charset octal-357)
+						// (problem: there is no PS font provided by Xerox, so Classic-Bold is used, no "thin" so imaging is not correct, but similar)
+						// (problem: this font is not scaled in frame, but taken from frame, scaled and the directly set to imaging variable 12 = font)
+						try {
+							line = line.replace(" FSET", "").trim();
+							int fsetNo = Integer.parseInt(line);
+							String template = "%% usage of /Classic-Thin-Bold for equation"; // charset is ignored, so only a dummy here
+							xcFontTemplates.put(fsetNo, template);
+						} catch(NumberFormatException nfe) {
+							// ignored, no template generated
+						}
+					}		
+					inFontDef = false;
+				} else {
+					fontDef.add(line.trim());
+				}
+			}
+		}
+	}
+	
+	// wrapper around a PrintStream allowing to re-wrap it temporarily 
+	private static class Writer {
+		private final PrintStream ps;
+		
+		private Writer() {
+			this.ps = null;
+		}
+		
+		private Writer(PrintStream dest) {
+			this.ps = dest;
+		}
+		
+		public void println() { this.println(""); }
+		public void println(String line) { this.ps.println(line); }
+		public void printf(String format, Object... args) { this.ps.printf(format, args); }
+		public void printf(Locale locale, String format, Object... args) { this.ps.printf(locale, format, args); }
+		public void print(char c) { this.ps.print(c); }
+		
+		public boolean mayClose() { return false; }
+		public Writer pop() { throw new IllegalStateException("real Writer cannot pop()"); }
+		public BufferedReader close() { throw new IllegalStateException("real Writer cannot close()"); }
+	}
+	
+	// wrapper for a Writer for fetching the content written without interfering with the real writing
+	private static class InterceptingWriter extends Writer {
+		
+		private final Writer intercepted;
+		
+		private byte[] interceptedContent = null;
+		
+		private ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		private PrintStream ps = new PrintStream(this.bos);
+		
+		private InterceptingWriter(Writer intercepted) {
+			this.intercepted = intercepted;
+		}
+		
+		@Override
+		public void println(String line) {
+			if (this.interceptedContent != null) { throw new IllegalStateException("interceptor already closed"); }
+			this.ps.println(line);
+			this.intercepted.println(line);
+		}
+		
+		@Override
+		public void printf(String format, Object... args) {
+			if (this.interceptedContent != null) { throw new IllegalStateException("interceptor already closed"); }
+			this.ps.printf(format, args);
+			this.intercepted.printf(format, args);
+		}
+		
+		@Override
+		public void printf(Locale locale, String format, Object... args) {
+			if (this.interceptedContent != null) { throw new IllegalStateException("interceptor already closed"); }
+			this.ps.printf(locale, format, args);
+			this.intercepted.printf(locale, format, args);
+		}
+		
+		@Override
+		public void print(char c) {
+			if (this.interceptedContent != null) { throw new IllegalStateException("interceptor already closed"); }
+			this.ps.print(c);
+			this.intercepted.print(c);
+		}
+
+		@Override
+		public boolean mayClose() { return true; }
+		
+		@Override
+		public Writer pop() { this.innerClose(); return this.intercepted; }
+		
+		private void innerClose() {
+			if (this.interceptedContent == null) {
+				this.ps.flush();
+				this.ps.close();
+				this.interceptedContent = this.bos.toByteArray();
+				this.ps = null;
+				this.bos = null;
+			}
+		}
+		
+		@Override
+		public BufferedReader close() {
+			this.innerClose();
+			return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(this.interceptedContent)));
+		}
+	}
+	
+	/*
+	 * token scanner for binary Interpress streams, allowing to read ahead, i.e. to query the next token
+	 * while processing the current token
+	 */
+	
+	public enum TokenType { OP, SHORT, SEQUENCE, EOF };
+	
+	private static class IpScanner {
+		private final InputStream ip;
+		private boolean atEof = false;
+		
+		private TokenType currType;
+		private Op currOp;
+		private int currShort;
+		private int currSeqType;
+		private int currSeqLen;
+		private byte[] currSeqData;
+		
+		private TokenType nextType;
+		private Op nextOp;
+		private int nextShort;
+		private int nextSeqType;
+		private int nextSeqLen;
+		private byte[] nextSeqData;
+		
+		private IpScanner(InputStream ip) throws IOException, InterpressException, EOF {
+			this.ip = ip;
+			this.next(); // prepare the next-pipeline for 1st "client"-next() usage
+		}
+		
+		private int getByte() throws EOF, IOException {
+			int b = this.ip.read();
+			if (b < 0) { throw new EOF(); }
+			return b;
+		}
+		
+		public TokenType next() throws IOException, InterpressException, EOF {
+			this.currType = this.nextType;
+			this.currOp = this.nextOp;
+			this.currShort = this.nextShort;
+			this.currSeqType = this.nextSeqType;
+			this.currSeqLen = this.nextSeqLen;
+			this.currSeqData = this.nextSeqData;
+			
+			if (this.atEof) {
+				throw new EOF();
+			}
+			
+			try {
+				int b = this.getByte();
+				
+				int opSelector = b & OPMASK;
+				if (opSelector == OPSHORT || opSelector == OPLONG) {
+					// operator or skeleton token
+					Op op = null;
+					int code = b & OPVALUE;
+					if (opSelector == OPLONG) {
+						code = (code << 8) | this.getByte();
+						if (code >= longOps.length || longOps[code] == null) {
+							throw new InterpressException("Invalid long opcode: " + code);
+						}
+						op = longOps[code];
+					} else {
+						op = shortOps[code];
+						if (op == null) {
+							throw new InterpressException("Invalid short opcode: " + code);
+						}
+					}
+					
+					// set next token data
+					this.nextType = TokenType.OP;
+					this.nextOp = op;
+					this.nextShort = -999999;
+					this.nextSeqType = -3333333;
+					this.nextSeqLen = 0;
+					this.nextSeqData = null;
+				} else if (b <= SHORTNUM) {
+					// short number token
+					int biased = ((b & SHORTNUM) << 8) | this.getByte();
+					
+					// set next token data
+					this.nextType = TokenType.SHORT;
+					this.nextOp = null;
+					this.nextShort = biased - 4000;
+					this.nextSeqType = -3333333;
+					this.nextSeqLen = 0;
+					this.nextSeqData = null;
+				} else {
+					// sequence (short or long)
+					int seqType = b & SEQMASK;
+					int seqLen = this.getByte();
+					if (opSelector == OPLONGSEQ) {
+						seqLen = (seqLen << 16)
+							   | (this.getByte() << 8)
+							   | this.getByte();
+					}
+					
+					// load the sequence data
+					byte[] seqData = new byte[seqLen];
+					for (int i = 0; i < seqLen; i++) {
+						seqData[i] = (byte)this.getByte();
+					}
+					
+					// set next token data
+					this.nextType = TokenType.SEQUENCE;
+					this.nextOp = null;
+					this.nextShort = -999999;
+					this.nextSeqType = seqType;
+					this.nextSeqLen = seqLen;
+					this.nextSeqData = seqData;
+				}
+				
+			} catch (EOF e) {
+				this.atEof = true;
+				this.nextType = TokenType.EOF;
+				this.nextOp = null;
+				this.nextShort = -999999;
+				this.nextSeqType = -3333333;
+				this.nextSeqLen = 0;
+				this.nextSeqData = null;
+				return this.next();
+			}
+			
+			return this.currType;
+		}
+
+		public TokenType type() {return this.currType; }
+
+		public Op op() { return this.currOp; }
+
+		public int shortnum() { return this.currShort; }
+
+		public int seqType() { return this.currSeqType; }
+
+		public int seqLen() {return this.currSeqLen; }
+
+		public byte[] seqData() { return this.currSeqData;}
+		
+		public boolean isNextOp(String opName) {
+			return this.nextType == TokenType.OP && opName.equals(this.nextOp.keyword);
+		}
+		
+		public boolean isNextIdentifier(String symbol) {
+			if (this.nextType != TokenType.SEQUENCE || this.nextSeqType != SEQ_IDENTIFIER) {
+				return false;
+			}
+			String identifier = new String(this.nextSeqData);
+			return symbol.equals(identifier);
+		}
+		
+	}
+	
+	private String dumpString(String typeName, String sep, String indent, byte[] seqData, Writer dest) {
 		if (sep.length() == 1) { dest.println(); }
 		dest.printf("%s%s \"", indent, typeName);
 		for (int i = 0; i < seqData.length; i++) {
@@ -693,11 +1062,11 @@ public class InterpressUtils {
 				dest.printf("\\x%02X", b);
 			}
 		}
-		dest.print("\"\n");
+		dest.println("\"");
 		return indent;
 	}
 	
-	private String dumpSequence(String typeName, String sep, String indent, byte[] seqData, PrintStream dest) {
+	private String dumpSequence(String typeName, String sep, String indent, byte[] seqData, Writer dest) {
 		if (sep.length() == 1) { dest.println(); }
 		
 		if (seqData.length == 0) {
@@ -753,9 +1122,9 @@ public class InterpressUtils {
 		InputStream ip = new BufferedInputStream(new FileInputStream(args[reqArgs - 1]));
 		
 		if (ip2ps != null) {
-			utils.generatePostscript(ip, System.out, ip2ps, "The-Print-Job-Name", "The-Title", "The-Creator");
+			utils.generatePostscript(ip, System.out, ip2ps, false, "The-Print-Job-Name", "The-Title", "The-Creator");
 		} else {
-			utils.innerReadableFromBinary(ip, System.out, false);
+			utils.innerReadableFromBinary(ip, System.out, false, false);
 		}
 	}
 	
@@ -763,14 +1132,13 @@ public class InterpressUtils {
 	 * definitions for interpress and xerox extended strings
 	 */
 	
-	// map {xerox-charset,xerox-char} -> representation as single char in postscript
-	private static final Map<Integer,Integer> xcharmap = new HashMap<>();
+	@FunctionalInterface
+	private static interface XCharConsumer {
+		void process(int charset, int charcode);
+	}
 	
-	// map an string from interpress to ps string with octal encoding,
-	// based on the xchar encoding schema and the xchar-mapping hard-coded here
-	private static String mapXString(byte[] xs) {
-		StringBuilder sb = new StringBuilder();
-		
+	// scan an XString and invoke the callback for each XChar, given as {charset,charcode}-tuple
+	private static void scanXString(byte[] xs, XCharConsumer consumer) {
 		int currCharset = 0;
 		boolean lastWasFF = false;
 		boolean twoByteMode = false;
@@ -783,7 +1151,7 @@ public class InterpressUtils {
 			} else if (twoByteMode && twoByteFirstByte) {
 				currCharset = b;
 			} else if (twoByteMode && !twoByteFirstByte) {
-				sb.append(mapXChar(currCharset, b));
+				consumer.process(currCharset, b);
 			} else if (b == 0xFF && lastWasFF) {
 				lastWasFF = false;
 				twoByteMode = true;
@@ -794,11 +1162,46 @@ public class InterpressUtils {
 			} else if (b == 0xFF) {
 				lastWasFF = true;
 			} else {
-				sb.append(mapXChar(currCharset, b));
+				consumer.process(currCharset, b);
 				lastWasFF = false;
 			}
 		}
+	}
+	
+	// map an interpress 16-bit string to a sequence of 8-bit strings each in the same
+	// charset, where the charset number is used to incarnate the font-template to get
+	// the real font to use for rendering the corresponding string; so one string may
+	// showed as sequence of font-change/string/show postscript tokens
+	private void psShowXString(Writer dest, String indent, byte[] xs, String xcFontTemplate) {
+		int[] currCharset = { 0 };
+		StringBuilder currFragment = new StringBuilder();
 		
+		scanXString(xs, (charset,charcode) -> {
+			if (currCharset[0] != charset && currFragment.length() > 0) {
+				dest.printf(xcFontTemplate, indent, currCharset[0]);
+				dest.printf("\n%s(%s)\n", indent, currFragment.toString());
+				dest.printf("%s0 setcs SHOW\n", indent);
+				currFragment.setLength(0);
+			}
+			currCharset[0] = charset;
+			currFragment.append(getSingleCharPsString(charcode));
+		});
+		
+		if (currFragment.length() > 0) {
+			dest.printf(xcFontTemplate, indent, currCharset[0]);
+			dest.printf("\n%s(%s)\n", indent, currFragment.toString());
+			dest.printf("%s0 setcs SHOW\n", indent);
+		}
+	}
+	
+	// map {xerox-charset,xerox-char} -> representation as single char in postscript
+	private static final Map<Integer,Integer> xcharmap = new HashMap<>();
+	
+	// map a string from interpress 16-bit to a postscript 8-bit string with standard ps-font char-mapping and octal encoding,
+	// based on the xchar encoding schema and the xchar-mapping hard-coded here
+	private static String mapXString(byte[] xs) {
+		StringBuilder sb = new StringBuilder();
+		scanXString(xs, (charset,charcode) -> sb.append(mapXChar(charset, charcode)) );
 		return sb.toString();
 	}
 	

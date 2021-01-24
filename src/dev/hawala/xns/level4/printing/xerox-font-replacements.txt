@@ -1,0 +1,187 @@
+
+% Xerox font for generic equation
+/Equation              {/EquationLarge findfont} def
+/Equation-Italic       {/EquationLarge findfont} def
+/Equation-Bold         {/EquationLarge findfont} def
+/Equation-Bold-Italic  {/EquationLarge findfont} def
+
+%
+% Xerox PFB fonts: Classic
+%
+
+/Classic                 {sten /NewFont /XeroxClassic-000             ReMap /NewFont findfont} def
+/Classic-Bold            {sten /NewFont /XeroxClassic-Bold-000        ReMap /NewFont findfont} def
+/Classic-Italic          {sten /NewFont /XeroxClassic-Italic-000      ReMap /NewFont findfont} def
+/Classic-Bold-Italic     {sten /NewFont /XeroxClassic-Bold-Italic-000 ReMap /NewFont findfont} def
+
+% o000: Latin alphabet & punctuation
+/Classic-000             {/XeroxClassic-000             findfont} def
+/Classic-Bold-000        {/XeroxClassic-Bold-000        findfont} def
+/Classic-Italic-000      {/XeroxClassic-Italic-000      findfont} def
+/Classic-Bold-Italic-000 {/XeroxClassic-Bold-Italic-000 findfont} def
+
+% o041: JIS Symbols 1  -  Punctuation & Symbols not in Set 0
+/Classic-041             {/XeroxClassic-041             findfont} def
+/Classic-Bold-041        {/XeroxClassic-Bold-041        findfont} def
+/Classic-Italic-041      {/XeroxClassic-Italic-041      findfont} def
+/Classic-Bold-Italic-041 {/XeroxClassic-Bold-Italic-041 findfont} def
+
+% o042: JIS Symbols 3  -  Punctuation & Symbols no in Set 0
+/Classic-042             {/XeroxClassic-042             findfont} def
+/Classic-Bold-042        {/XeroxClassic-Bold-042        findfont} def
+/Classic-Italic-042      {/XeroxClassic-Italic-042      findfont} def
+/Classic-Bold-Italic-042 {/XeroxClassic-Bold-Italic-042 findfont} def
+
+% o043: Extended Latin Alphabet
+/Classic-043             {/XeroxClassic-043             findfont} def
+/Classic-Bold-043        {/XeroxClassic-Bold-043        findfont} def
+/Classic-Italic-043      {/XeroxClassic-Italic-043      findfont} def
+/Classic-Bold-Italic-043 {/XeroxClassic-Bold-Italic-043 findfont} def
+
+% o046: Greek Alphabet
+/Classic-046             {/XeroxClassic-046             findfont} def
+/Classic-Bold-046        {/XeroxClassic-Bold-046        findfont} def
+/Classic-Italic-046      {/XeroxClassic-Italic-046      findfont} def
+/Classic-Bold-Italic-046 {/XeroxClassic-Bold-Italic-046 findfont} def
+
+% o047: Cyrillic Alphabet
+/Classic-047             {/XeroxClassic-047             findfont} def
+/Classic-Bold-047        {/XeroxClassic-Bold-047        findfont} def
+/Classic-Italic-047      {/XeroxClassic-Italic-047      findfont} def
+/Classic-Bold-Italic-047 {/XeroxClassic-Bold-Italic-047 findfont} def
+
+% o356: General & Technical Symbols 2
+/Classic-356             {/XeroxClassic-356             findfont} def
+/Classic-Bold-356        {/XeroxClassic-Bold-356        findfont} def
+/Classic-Italic-356      {/XeroxClassic-Italic-356      findfont} def
+/Classic-Bold-Italic-356 {/XeroxClassic-Bold-Italic-356 findfont} def
+
+% o357: General & Technical Symbols 1
+/Classic-357             {/XeroxClassic-357             findfont} def
+/Classic-Bold-357        {/XeroxClassic-Bold-357        findfont} def
+/Classic-Italic-357      {/XeroxClassic-Italic-357      findfont} def
+/Classic-Bold-Italic-357 {/XeroxClassic-Bold-Italic-357 findfont} def
+
+% o360: printingLigatures
+/Classic-360             {/XeroxClassic-360             findfont} def
+/Classic-Bold-360        {/XeroxClassic-Bold-360        findfont} def
+/Classic-Italic-360      {/XeroxClassic-Italic-360      findfont} def
+/Classic-Bold-Italic-360 {/XeroxClassic-Bold-Italic-360 findfont} def
+
+% o361: accentedLatin
+/Classic-361             {/XeroxClassic-361             findfont} def
+/Classic-Bold-361        {/XeroxClassic-Bold-361        findfont} def
+/Classic-Italic-361      {/XeroxClassic-Italic-361      findfont} def
+/Classic-Bold-Italic-361 {/XeroxClassic-Bold-Italic-361 findfont} def
+
+%
+% Xerox PFB fonts: Modern
+%
+
+/Modern                  {sten /NewFont /XeroxModern-000              ReMap /NewFont findfont} def
+/Modern-Bold             {sten /NewFont /XeroxModern-Bold-000         ReMap /NewFont findfont} def
+/Modern-Italic           {sten /NewFont /XeroxModern-Italic-000       ReMap /NewFont findfont} def
+/Modern-Bold-Italic      {sten /NewFont /XeroxModern-Bold-Italic-000  ReMap /NewFont findfont} def
+
+% o000: Latin alphabet & punctuation
+/Modern-000              {/XeroxModern-000              findfont} def
+/Modern-Bold-000         {/XeroxModern-Bold-000         findfont} def
+/Modern-Italic-000       {/XeroxModern-Italic-000       findfont} def
+/Modern-Bold-Italic-000  {/XeroxModern-Bold-Italic-000  findfont} def
+
+% o041: JIS Symbols 1  -  Punctuation & Symbols not in Set 0
+/Modern-041              {/XeroxModern-041              findfont} def
+/Modern-Bold-041         {/XeroxModern-Bold-041         findfont} def
+/Modern-Italic-041       {/XeroxModern-Italic-041       findfont} def
+/Modern-Bold-Italic-041  {/XeroxModern-Bold-Italic-041  findfont} def
+
+% o042: JIS Symbols 3  -  Punctuation & Symbols no in Set 0
+/Modern-042              {/XeroxModern-042              findfont} def
+/Modern-Bold-042         {/XeroxModern-Bold-042         findfont} def
+/Modern-Italic-042       {/XeroxModern-Italic-042       findfont} def
+/Modern-Bold-Italic-042  {/XeroxModern-Bold-Italic-042  findfont} def
+
+% o043: Extended Latin Alphabet
+/Modern-043              {/XeroxModern-043              findfont} def
+/Modern-Bold-043         {/XeroxModern-Bold-043         findfont} def
+/Modern-Italic-043       {/XeroxModern-Italic-043       findfont} def
+/Modern-Bold-Italic-043  {/XeroxModern-Bold-Italic-043  findfont} def
+
+% o046: Greek Alphabet
+/Modern-046              {/XeroxModern-046              findfont} def
+/Modern-Bold-046         {/XeroxModern-Bold-046         findfont} def
+/Modern-Italic-046       {/XeroxModern-Italic-046       findfont} def
+/Modern-Bold-Italic-046  {/XeroxModern-Bold-Italic-046  findfont} def
+
+% o047: Cyrillic Alphabet
+/Modern-047              {/XeroxModern-047              findfont} def
+/Modern-Bold-047         {/XeroxModern-Bold-047         findfont} def
+/Modern-Italic-047       {/XeroxModern-Italic-047       findfont} def
+/Modern-Bold-Italic-047  {/XeroxModern-Bold-Italic-047  findfont} def
+
+% o356: General & Technical Symbols 2
+/Modern-356              {/XeroxModern-356              findfont} def
+/Modern-Bold-356         {/XeroxModern-Bold-356         findfont} def
+/Modern-Italic-356       {/XeroxModern-Italic-356       findfont} def
+/Modern-Bold-Italic-356  {/XeroxModern-Bold-Italic-356  findfont} def
+
+% o357: General & Technical Symbols 1
+/Modern-357              {/XeroxModern-357              findfont} def
+/Modern-Bold-357         {/XeroxModern-Bold-357         findfont} def
+/Modern-Italic-357       {/XeroxModern-Italic-357       findfont} def
+/Modern-Bold-Italic-357  {/XeroxModern-Bold-Italic-357  findfont} def
+
+% o360: printingLigatures
+/Modern-360              {/XeroxModern-360              findfont} def
+/Modern-Bold-360         {/XeroxModern-Bold-360         findfont} def
+/Modern-Italic-360       {/XeroxModern-Italic-360       findfont} def
+/Modern-Bold-Italic-360  {/XeroxModern-Bold-Italic-360  findfont} def
+
+% o361: accentedLatin
+/Modern-361              {/XeroxModern-361              findfont} def
+/Modern-Bold-361         {/XeroxModern-Bold-361         findfont} def
+/Modern-Italic-361       {/XeroxModern-Italic-361       findfont} def
+/Modern-Bold-Italic-361  {/XeroxModern-Bold-Italic-361  findfont} def
+
+
+%
+% Xerox PFB fonts: Equation*
+%
+
+/Classic-Thin-Bold                   {/XeroxClassic-Bold-357        findfont} def
+/Classic-Thin                        {/XeroxClassic-000             findfont} def
+
+/EquationBracket-12pt                {/EquationBracket-12 findfont} def
+/EquationBracket-12pt-Bold           {/EquationBracket-12 findfont} def
+/EquationBracket-12pt-Italic         {/EquationBracket-12 findfont} def
+/EquationBracket-12pt-Bold-Italic    {/EquationBracket-12 findfont} def
+
+/EquationBracket-20pt                {/EquationBracket-20 findfont} def
+/EquationBracket-20pt-Bold           {/EquationBracket-20 findfont} def
+/EquationBracket-20pt-Italic         {/EquationBracket-20 findfont} def
+/EquationBracket-20pt-Bold-Italic    {/EquationBracket-20 findfont} def
+
+/EquationBracket-28pt                {/EquationBracket-28 findfont} def
+/EquationBracket-28pt-Bold           {/EquationBracket-28 findfont} def
+/EquationBracket-28pt-Italic         {/EquationBracket-28 findfont} def
+/EquationBracket-28pt-Bold-Italic    {/EquationBracket-28 findfont} def
+
+/EquationBracket-36pt                {/EquationBracket-36 findfont} def
+/EquationBracket-36pt-Bold           {/EquationBracket-36 findfont} def
+/EquationBracket-36pt-Italic         {/EquationBracket-36 findfont} def
+/EquationBracket-36pt-Bold-Italic    {/EquationBracket-36 findfont} def
+
+/EquationLarge                       {/EquationLarge findfont} def
+/EquationLarge-Bold                  {/EquationLarge findfont} def
+/EquationLarge-Italic                {/EquationLarge findfont} def
+/EquationLarge-Bold-Italic           {/EquationLarge findfont} def
+
+/EquationLarger                      {/EquationLarger findfont} def
+/EquationLarger-Bold                 {/EquationLarger findfont} def
+/EquationLarger-Italic               {/EquationLarger findfont} def
+/EquationLarger-Bold-Italic          {/EquationLarger findfont} def
+
+
+%
+% End Xerox PFB fonts
+%
