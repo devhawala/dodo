@@ -188,6 +188,7 @@ public class FsUtil {
 				.replace(File.pathSeparatorChar, '_')
 				.replace('/', '_')
 				.replace('\\', '_')
+				.replace(':', '_')
 				.replace('<', '_')
 				.replace('>', '_')
 				.replace('?', '_')
@@ -211,7 +212,7 @@ public class FsUtil {
 				}
 			} else {
 				if (!newDir.mkdirs()) {
-					log("% ## error creating new directory: %s\n", effectiveIndent, newDir.getAbsolutePath());
+					log("%s ## error creating new directory: %s\n", effectiveIndent, newDir.getAbsolutePath());
 					return;
 				}
 			}

@@ -676,6 +676,10 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2021-04-19    
+-- FsUtil: fixed unmapped colon in document names on export
+-- FsUtil: fixed wrong printf-format 
+
 - 2021-01-24    
 -- PS: added support for Xerox PFB fonts from GlobalView 2.1 when generating PostScript for PDF
 
