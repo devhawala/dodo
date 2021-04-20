@@ -676,8 +676,8 @@ still missing, like Mail protocols)
 
 ### Development history
 
-- 2021-04-19    
--- FsUtil: fixed unmapped colon in document names on export
+- 2021-04-19, 2021-04-19    
+-- FsUtil: added several character substitutions in document names on export    
 -- FsUtil: fixed wrong printf-format 
 
 - 2021-01-24    

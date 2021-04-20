@@ -189,10 +189,14 @@ public class FsUtil {
 				.replace('/', '_')
 				.replace('\\', '_')
 				.replace(':', '_')
+				.replace('*', '_')
+				.replace('|', '_')
+				.replace('"', '_')
 				.replace('<', '_')
 				.replace('>', '_')
 				.replace('?', '_')
 				.replace('&', '_')
+				.replace('\u0000', '_')
 				;
 		
 		if (fe.isDirectory()) {
