@@ -50,7 +50,7 @@ public class NetHub {
 	
 	private static final int PACKET_LENGTH = 1024;
 	
-	private static final int MAX_CONNECTIONS = 16;
+	private static final int MAX_CONNECTIONS = 256;
 
 	private static void log(String txt) {
 		System.out.println(txt);
@@ -65,7 +65,45 @@ public class NetHub {
 		public int packetLen; // net value = length of the content (payload)
 	}
 	
-	private static final List<Line> lines = new ArrayList<Line>();
+	/**
+	 * Interface for connections to a NetHub.
+	 */
+	public interface iLine {
+		
+		/**
+		 * Transmit a packet ingone from some other machine to the
+		 * machine connected to this line (remote to local transmission).
+		 * 
+		 * @param p packet to be transmitted.
+		 */
+		void send(Packet p);
+		
+		/**
+		 * Put a packet into the queue of packets to be sent to
+		 * the machine connected to this line.
+		 * 
+		 * @param p the packet to be forwarded.
+		 */
+		void enqueueOutPacket(Packet p);
+		
+		/**
+		 * Get the next packet from the packet queue to be transmitted
+		 * to the machine connected to this line, possibly waiting for
+		 * a packet to be enqueued.
+		 * 
+		 * @return the next packet to be transmitted.
+		 * @throws InterruptedException
+		 */
+		Packet dequeuePacket() throws InterruptedException;
+		
+		/**
+		 * end all transmissions.
+		 */
+		void stop();
+		
+	}
+	
+	private static final List<iLine> lines = new ArrayList<>();
 	private static int connNo = 0;
 	
 	private static void addLine(Socket s) throws IOException {
@@ -79,15 +117,15 @@ public class NetHub {
 		}
 	}
 	
-	private static void dropLine(Line f) {
+	private static void dropLine(iLine f) {
 		synchronized(lines) {
 			lines.remove(f);
 		}
 	}
 	
-	private static List<Line> getLinesExcept(Line exception) {
+	private static List<iLine> getLinesExcept(iLine exception) {
 		synchronized(lines) {
-			List<Line> otherLines = new ArrayList<Line>(lines);
+			List<iLine> otherLines = new ArrayList<>(lines);
 			otherLines.remove(exception);
 			return otherLines;
 		}
@@ -95,9 +133,9 @@ public class NetHub {
 	
 	private static class Forwarder implements Runnable {
 		
-		private final Line line;
+		private final iLine line;
 		
-		public Forwarder(Line line) {
+		public Forwarder(iLine line) {
 			this.line = line;
 		}
 
@@ -117,16 +155,16 @@ public class NetHub {
 		
 	}
 	
-	private static void distribute(Packet p, Line ingoingLine) {
-		List<Line> targets = getLinesExcept(ingoingLine);
-		for(Line t : targets) {
+	private static void distribute(Packet p, iLine ingoingLine) {
+		List<iLine> targets = getLinesExcept(ingoingLine);
+		for(iLine t : targets) {
 			if (t != ingoingLine) {
 				t.enqueueOutPacket(p);
 			}
 		}
 	}
 	
-	private static class Line implements Runnable {
+	private static class Line implements iLine, Runnable {
 		
 		private final Socket socket;
 		private final int connNo;
@@ -158,6 +196,7 @@ public class NetHub {
 			this.forwarder.start();
 		}
 		
+		@Override
 		public void stop() {
 			synchronized(this) {
 				this.stop = true;
@@ -181,6 +220,7 @@ public class NetHub {
 			}
 		}
 		
+		@Override
 		public void send(Packet p) {
 			try {
 				log("Distribute: connection #" + this.connNo + " => sending packet with net size: " + p.packetLen);
@@ -208,6 +248,7 @@ public class NetHub {
 			}
 		}
 		
+		@Override
 		public void enqueueOutPacket(Packet p) {
 			synchronized(this.outPackets) {
 				this.outPackets.add(p);
@@ -215,6 +256,7 @@ public class NetHub {
 			}
 		}
 		
+		@Override
 		public Packet dequeuePacket() throws InterruptedException {
 			synchronized(this.outPackets) {
 				while(this.outPackets.isEmpty()) {

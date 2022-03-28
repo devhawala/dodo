@@ -39,7 +39,7 @@ import dev.hawala.xns.level4.common.BulkData1;
 
 /**
  * Definition of the subset for the MailTransport Courier program
- * used by ViewPoint and XDE for sending mails.
+ * version 4 used by ViewPoint and XDE for sending mails.
  * <p>
  * The missing (unknown) Courier items for MailTransport seem to be used
  * only for the inter-mail-service communication (mail forwarding or the
@@ -49,7 +49,7 @@ import dev.hawala.xns.level4.common.BulkData1;
  * 
  * @author Dr. Hans-Walter Latz / Berlin (2020)
  */
-public class MailTransport extends MailingCommon {
+public class MailTransport4 extends MailingCommon {
 
 	public static final int PROGRAM = 17;
 	public static final int VERSION = 4;

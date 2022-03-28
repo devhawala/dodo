@@ -2017,6 +2017,11 @@ public class FilingImpl {
 		public boolean isAtEnd() {
 			return this.ws.isAtEnd();
 		}
+		
+		@Override
+		public boolean checkIfAtEnd() {
+			return this.ws.checkIfAtEnd();
+		}
 
 		@Override
 		public void dropToEOM(byte reqDatastreamType) throws EndOfMessageException {

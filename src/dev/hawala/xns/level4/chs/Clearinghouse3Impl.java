@@ -339,7 +339,7 @@ public class Clearinghouse3Impl {
 		Log.C.printf("CHS3", "Clearinghouse3Impl.LookupObject() for name: %s \n", params.name.getString());
 		
 		// authentication
-		checkCredentials("lookupObject", params.agent);
+		checkCredentials("lookupObject", params.agent, true);
 		
 		// lookup the name(pattern) and raise an error if not found
 		if (!chsDatabase.findDistinguishedName(params.name, results.distinguishedObject)) {
@@ -365,7 +365,7 @@ public class Clearinghouse3Impl {
 		Log.C.printf("CHS3", "Clearinghouse3.listOrganizations( name = '%s' )\n", params.name);
 		
 		// authentication
-		checkCredentials("listOrganizations", params.agent);
+		checkCredentials("listOrganizations", params.agent, true);
 		
 		// prepare the stream...
 		// but unclear stream of what: STRING?, ThreePartName? (seems to be STRING)
@@ -396,7 +396,7 @@ public class Clearinghouse3Impl {
 				params.pattern.domain.get(), params.pattern.organization.get());
 		
 		// authentication
-		checkCredentials("listDomain", params.agent);
+		checkCredentials("listDomain", params.agent, true);
 		
 		// prepare the stream...
 		// but unclear stream of what: Domain(=STRING)?, DomainName(=TwoPartname)?, ThreePartName? (seems to be STRING)
@@ -453,7 +453,7 @@ public class Clearinghouse3Impl {
 				property);
 		
 		// authentication
-		checkCredentials(procName, agent);
+		checkCredentials(procName, agent, true);
 		
 		// prepare the stream...
 		// but unclear stream of what: Object(=STRING)?, ThreePartName? (seems to be STRING)
@@ -493,7 +493,7 @@ public class Clearinghouse3Impl {
 		Log.C.printf("CHS3", "Clearinghouse3Impl.listAliasesOf(), %s \n", paramsString);
 		
 		// authentication
-		checkCredentials("lookupObject", params.agent);
+		checkCredentials("lookupObject", params.agent, true);
 		
 		// lookup the name(pattern) and raise an error if not found
 		if (!chsDatabase.findDistinguishedName(params.pattern, results.distinguishedObject)) {
@@ -606,7 +606,7 @@ public class Clearinghouse3Impl {
 				params.pattern.object.get(), params.pattern.domain.get(), params.pattern.organization.get());
 		
 		// authentication
-		checkCredentials("listProperties", params.agent);
+		checkCredentials("listProperties", params.agent, true);
 		
 		// check existence and fill result data if found
 		if (!chsDatabase.getPropertyList(params.pattern, results.distinguishedObject, results.properties)) {
@@ -630,7 +630,7 @@ public class Clearinghouse3Impl {
 				params.property.get());
 		
 		// authentication
-		checkCredentials("retrieveItem", params.agent);
+		checkCredentials("retrieveItem", params.agent, true);
 		
 		// lookup the database and check the outcome
 		int result = chsDatabase.getEntryProperty(
@@ -685,7 +685,7 @@ public class Clearinghouse3Impl {
 				params.property.get());
 		
 		// authentication
-		checkCredentials("retrieveMembers", params.agent);
+		checkCredentials("retrieveMembers", params.agent, true);
 		
 		// get the members and if available stream them back
 		try {
@@ -784,7 +784,7 @@ public class Clearinghouse3Impl {
 				params.name.object.get(), params.name.domain.get(), params.name.organization.get());
 		
 		// authentication
-		checkCredentials("isMembers", params.agent);
+		checkCredentials("isMembers", params.agent, true);
 		
 		// get the members of the top-level and scan those and possibly recursively
 		try {
@@ -855,10 +855,12 @@ public class Clearinghouse3Impl {
 	
 	/* internal functionality */
 	
-	private static void checkCredentials(String procName, Authenticator agent) {
+	private static void checkCredentials(String procName, Authenticator agent, boolean allowEmptyCredentials) {
 		boolean credentialsOk = false;
 		try {
-			if (agent.credentials.type.get() == CredentialsType.simple) {
+			if (agent.credentials.value.size() == 0) {
+				credentialsOk = allowEmptyCredentials;
+			} else if (agent.credentials.type.get() == CredentialsType.simple) {
 				credentialsOk = AuthChsCommon.simpleCheckPasswordForSimpleCredentials(
 									chsDatabase,
 									agent.credentials,

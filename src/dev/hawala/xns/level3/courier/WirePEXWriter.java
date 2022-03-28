@@ -85,6 +85,11 @@ public class WirePEXWriter extends WireBaseStream {
 	public boolean isAtEnd() {
 		return true;
 	}
+	
+	@Override
+	public boolean checkIfAtEnd() {
+		return true;
+	}
 
 	@Override
 	public byte getStreamType() {

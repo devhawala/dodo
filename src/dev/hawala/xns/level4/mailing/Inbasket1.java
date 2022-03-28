@@ -40,12 +40,12 @@ import dev.hawala.xns.level4.common.AuthChsCommon.Verifier;
 import dev.hawala.xns.level4.common.BulkData1;
 
 /**
- * Definition of the Inbasket Courier program for accessing user
+ * Definition of the Inbasket Courier program version 1 for accessing user
  * mailboxes by mail agents, defining the subset used by ViewPoint/XDE.
  * 
  * @author Dr. Hans-Walter Latz / Berlin (2020)
  */
-public class Inbasket extends MailingCommon {
+public class Inbasket1 extends MailingCommon {
 
 	public static final int PROGRAM = 18;
 	public static final int VERSION = 1;

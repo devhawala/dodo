@@ -33,7 +33,6 @@ import dev.hawala.xns.iSppInputStream;
 import dev.hawala.xns.iSppInputStream.iSppReadResult;
 import dev.hawala.xns.iSppOutputStream;
 import dev.hawala.xns.level2.SPP;
-import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 
 /**
  * Implementation of the wire functionality used by Courier (de)serialization
@@ -73,7 +72,6 @@ public class WireSPPStream extends WireBaseStream {
 	private void writeBuf(boolean isEom) throws NoMoreWriteSpaceException {
 		try {
 			this.sppOut.write(this.outBuf, 0, this.outIdx, this.outSst, isEom);
-			this.outIdx = 0;
 			if (this.sppOut.checkForInterrupt() != null) {
 				throw new NoMoreWriteSpaceException();
 			}
@@ -83,6 +81,8 @@ public class WireSPPStream extends WireBaseStream {
 					e.getMessage(),
 					e.getStackTrace().toString());
 			throw new NoMoreWriteSpaceException();
+		} finally {
+			this.outIdx = 0;
 		}
 	}
 
@@ -137,6 +137,11 @@ public class WireSPPStream extends WireBaseStream {
 		}
 		this.inEomPending = false;
 		return true;
+	}
+	
+	@Override
+	public boolean checkIfAtEnd() {
+		return !(this.inIdx < this.inMax || !this.inEomPending);
 	}
 
 	@Override

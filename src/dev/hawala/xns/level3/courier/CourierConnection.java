@@ -82,6 +82,9 @@ public class CourierConnection {
 			// use the max. possible common version
 			this.courierVersion = Math.min(othersHigh,  COURIER_VERSION_MAX);
 			this.needVersions = false;
+			
+			// skip EOM sent by Interlisp-D systems
+			this.wireStream.isAtEnd();
 		}
 		if (this.sendVersions) { 
 			Log.C.printf(this.connId, "CourierConnection - sendVersions: low = high = %d\n", this.courierVersion);

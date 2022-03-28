@@ -26,6 +26,9 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.xns.level4.mailing;
 
+import dev.hawala.xns.level3.courier.CrProgram;
+import dev.hawala.xns.level3.courier.CrProgram.PROC;
+import dev.hawala.xns.level3.courier.RECORD;
 import dev.hawala.xns.level3.courier.WirePEXRequestResponse;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
@@ -44,17 +47,30 @@ import dev.hawala.xns.level4.common.AbstractBfsResponder;
  * <li>MailTransport.ServerPoll (program 17, version 4, procedure 0)</li>
  * <li>Inbasket.MailCheck (program 18, version 1, procedure 6)</li>
  * </ul>
+ * <p>
+ * The following procedures are known to be called through expedited Courier
+ * by GlobalView:
+ * </p>
+ * <ul>
+ * <li>MailTransport5.ServerPoll (program 17, version 5, procedure 0)</li>
+ * <li>Inbasket2.InbasketPoll (program 18, version 2, procedure 7)</li>
+ * </ul>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2020)
+ * @author Dr. Hans-Walter Latz / Berlin (2020/2022)
  */
 public class MailingExpeditedCourierResponder extends AbstractBfsResponder {
 	
-	private final MailTransport mailTransport;
-	private final Inbasket      inbasket;
+	private final MailTransport4 mailTransport;
+	private final Inbasket1      inbasket;
+	
+	private final MailTransport5 mailTransport5;
+	private final Inbasket2      inbasket2;
 	
 	public MailingExpeditedCourierResponder() {
-		this.mailTransport = MailingImpl.getMailTransportImpl();
-		this.inbasket = MailingImpl.getInbasketImpl();
+		this.mailTransport = MailingOldImpl.getMailTransportImpl();
+		this.inbasket = MailingOldImpl.getInbasketImpl();
+		this.mailTransport5 = MailingNewImpl.getMailTransport5Impl();
+		this.inbasket2 = MailingNewImpl.getInbasket2Impl();
 	}
 
 	@Override
@@ -92,11 +108,36 @@ public class MailingExpeditedCourierResponder extends AbstractBfsResponder {
 			// others called by VP/XDE?
 		}
 		
+		// check if it is for MailTransport5.ServerPoll
+		if (isDoneBy(this.mailTransport5, this.mailTransport5.ServerPoll, programNo, versionNo, procNo, transaction, wire)) {
+			return;
+		}
+		
+		// check if it is for Inbasket2.inbasketPoll
+		if (isDoneBy(this.inbasket2, this.inbasket2.InbasketPoll, programNo, versionNo, procNo, transaction, wire)) {
+			return;
+		}
+		
 		// not a procedure allowed for expedited Courier, so abort...
 		wire.writeI16(transaction);
 		wire.writeI16(1); // MessageType.reject(1)
 		wire.writeI16(2); // RejectCode.noSuchProcedureValue(2)
 		wire.writeEOM();
+	}
+	
+	private <P extends RECORD,R extends RECORD>
+			boolean isDoneBy(
+				CrProgram crProgram, PROC<P,R> crProc,
+				int programNo, int versionNo, int procNo,
+				int transaction, WirePEXRequestResponse wire
+			) throws NoMoreWriteSpaceException, EndOfMessageException {
+		if (programNo  == crProgram.getProgramNumber() && versionNo == crProgram.getVersionNumber()) {
+			if (procNo == crProc.getProcNumber()) {
+				crProc.process(transaction, wire);
+				return true;
+			}
+		}
+		return false;
 	}
 
 }

@@ -1093,7 +1093,7 @@ public abstract class FilingCommon extends CrProgram {
 	}
 	
 	/**
-	 * Definition of a metho ocject that can be given when constructing
+	 * Definition of a method object that can be given when constructing
 	 * a serialized file instance, allowing to wrap the plain courier wire-stream
 	 * with a wrapper, for example {@code iWireStreamForSerializedTree} which
 	 * can receive the lifecycle events during (de)serialization of the tree.
@@ -1204,7 +1204,7 @@ public abstract class FilingCommon extends CrProgram {
 			this.streamMapper = mapper;
 			this.version.set(forFiling4 ? 2 : 3);
 		}
-		public SerializedFile make() { return new SerializedFile(null, false); }
+		public static SerializedFile make() { return new SerializedFile(null, false); }
 	}
 	
 	/*

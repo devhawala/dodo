@@ -49,6 +49,23 @@ public class WireWriter extends WireBaseStream {
 	}
 	
 	/**
+	 * Get the bytes for the serialized object, skipping the given number of bytes.
+	 * 
+	 * @param fromOffset byte-offset to deliver the serialized object from
+	 * @return the serialized object as byte array
+	 */
+	public byte[] getBytes(int fromOffset) {
+		this.done = true;
+		fromOffset = Math.max(0,  fromOffset);
+		if (fromOffset >= this.currPos) {
+			return new byte[0];
+		}
+		byte[] result = new byte[this.currPos - fromOffset];
+		System.arraycopy(this.bytes, fromOffset, result, 0, result.length);
+		return result;
+	}
+	
+	/**
 	 * @return the serialized object as word array
 	 */
 	public int[] getWords() {
@@ -105,6 +122,11 @@ public class WireWriter extends WireBaseStream {
 
 	@Override
 	public boolean isAtEnd() {
+		return true;
+	}
+	
+	@Override
+	public boolean checkIfAtEnd() {
 		return true;
 	}
 

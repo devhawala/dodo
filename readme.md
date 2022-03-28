@@ -1,6 +1,6 @@
 ## Dodo Services - XNS with Java
 
-Dodo Services implement Xerox Network Services (XNS) protocols in Java, providing XNS
+Dodo Services implement **Xerox Network Services** (XNS) protocols in Java, providing XNS
 services to existing emulated or real Xerox client machines.
     
 Currently the following XNS services are provided by Dodo:
@@ -79,18 +79,18 @@ information
 	responder providing boot-files (microcode, germ, boot-file) to a requesting
 	machine, supporting both the SimpleRequest/SimpleData and SPP variants of the
 	boot protocol
-    - Clearinghouse (CHS)
+    - Clearinghouse (CHS)    
 	(Courier program 2, versions 2 and 3)    
 	all protocol procedures are implemented for a *read-only* clearinghouse
 	database, allowing to log in to XDE and Star/Viewpoint/GVWin, to navigate the network
 	directory in GlobalView as well to query clearinghouse entries with `Maintain.bcd`
 	in XDE; however changes to the	database are rejected
-    - Authentication (Auth)
+    - Authentication (Auth)    
 	(Courier program 14, version 2)    
 	all protocol procedures are implemented for a *read-only* clearinghouse
 	database, allowing to log in to XDE and Star/Viewpoint/GVWin; however changes to the
 	database are rejected
-    - Printing
+    - Printing    
 	(Courier program 4, version 3)    
 	all protocol procedures are implemented, allowing to print from XDE and Star/Viewpoint/GVWin,
 	to query a print job status, the printer properties and the printer status.    
@@ -100,18 +100,17 @@ information
 	The PostScript generation provides a basic support for western-european
 	character sets as well as simple graphics (vector and uncompressed bitmaps),
 	giving usable but far from perfect results.
-    - Filing
+    - Filing    
 	(Courier program 10, versions 4,5,6)    
 	a large subset of the protocol procedures is implemented, allowing
 	to access file drawers, folders and files on Dodo XNS File services from XDE
 	and Star/Viewpoint/GVWin. Although substantial functionality is missing (like access control
 	and access rights), Dodo file services are already usable in a mostly single-user environment.
-    - Mailing
-	(MailTransport: Courier program 17, version 4; Inbasket: Courier program 18, version 1)    
-	the subset of protocol procedures actively used by XDE and Star/Viewpoint for sending
-	and receiving mails is implemented;    
-	GlobalView is currently _not_ supported for sending or receiving mails, as newer versions of
-	the mentioned Courier protocols are required.
+    - Mailing    
+	(MailTransport: Courier program 17, version 4 and 5)    
+	(Inbasket: Courier program 18, version 1 and 2)    
+	the subset of protocol procedures actively used by XDE and Star/Viewpoint/GlobalView
+	for sending and receiving mails is implemented.
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -353,7 +352,7 @@ see [File service configuration](./filesvc-configuration.md) for details
 
 - `mailService.volumePath`    
 defining the mail storage filing volume with this parameter starts the mail service in this Dodo instance;    
-see [Mail service configuration](./mailsvc-configuration) for details
+see [Mail service configuration](./mailsvc-configuration.md) for details
 
 The following parameters can be specified in the configuration file to control the communication
 at the packet level:
@@ -675,6 +674,10 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2022-03-28    
+-- MS: added support for GlobalView-Mailing (restricted to pre-GlobalView functionality)    
+-- Courier: skip the End-of-Message in version exchange sent by Interlisp-D during connection initialization 
 
 - 2021-04-19, 2021-04-19    
 -- FsUtil: added several character substitutions in document names on export    

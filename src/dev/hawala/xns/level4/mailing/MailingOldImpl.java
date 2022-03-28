@@ -52,30 +52,30 @@ import dev.hawala.xns.level4.filing.ByteContentSink;
 import dev.hawala.xns.level4.filing.ByteContentSource;
 import dev.hawala.xns.level4.filing.fs.Volume;
 import dev.hawala.xns.level4.filing.fs.iErrorRaiser;
-import dev.hawala.xns.level4.mailing.Inbasket.CacheStatus;
-import dev.hawala.xns.level4.mailing.Inbasket.DeleteParams;
-import dev.hawala.xns.level4.mailing.Inbasket.InbasketPollParams;
-import dev.hawala.xns.level4.mailing.Inbasket.InbasketPollResults;
-import dev.hawala.xns.level4.mailing.Inbasket.IndexErrorRecord;
-import dev.hawala.xns.level4.mailing.Inbasket.ListParams;
-import dev.hawala.xns.level4.mailing.Inbasket.LocateParams;
-import dev.hawala.xns.level4.mailing.Inbasket.LocateResults;
-import dev.hawala.xns.level4.mailing.Inbasket.LogoffParams;
-import dev.hawala.xns.level4.mailing.Inbasket.LogoffResults;
-import dev.hawala.xns.level4.mailing.Inbasket.LogonParams;
-import dev.hawala.xns.level4.mailing.Inbasket.LogonResults;
-import dev.hawala.xns.level4.mailing.Inbasket.MailCheckParams;
-import dev.hawala.xns.level4.mailing.Inbasket.MailCheckResults;
-import dev.hawala.xns.level4.mailing.Inbasket.RetrieveParams;
-import dev.hawala.xns.level4.mailing.Inbasket.RetrieveResults;
-import dev.hawala.xns.level4.mailing.Inbasket.SessionErrorRecord;
-import dev.hawala.xns.level4.mailing.Inbasket.TransferErrorRecord;
-import dev.hawala.xns.level4.mailing.MailTransport.InvalidRecipientsErrorRecord;
-import dev.hawala.xns.level4.mailing.MailTransport.PostParams;
-import dev.hawala.xns.level4.mailing.MailTransport.PostResults;
-import dev.hawala.xns.level4.mailing.MailTransport.ServerPollParams;
-import dev.hawala.xns.level4.mailing.MailTransport.ServerPollResults;
-import dev.hawala.xns.level4.mailing.MailTransport.ServiceErrorRecord;
+import dev.hawala.xns.level4.mailing.Inbasket1.CacheStatus;
+import dev.hawala.xns.level4.mailing.Inbasket1.DeleteParams;
+import dev.hawala.xns.level4.mailing.Inbasket1.InbasketPollParams;
+import dev.hawala.xns.level4.mailing.Inbasket1.InbasketPollResults;
+import dev.hawala.xns.level4.mailing.Inbasket1.IndexErrorRecord;
+import dev.hawala.xns.level4.mailing.Inbasket1.ListParams;
+import dev.hawala.xns.level4.mailing.Inbasket1.LocateParams;
+import dev.hawala.xns.level4.mailing.Inbasket1.LocateResults;
+import dev.hawala.xns.level4.mailing.Inbasket1.LogoffParams;
+import dev.hawala.xns.level4.mailing.Inbasket1.LogoffResults;
+import dev.hawala.xns.level4.mailing.Inbasket1.LogonParams;
+import dev.hawala.xns.level4.mailing.Inbasket1.LogonResults;
+import dev.hawala.xns.level4.mailing.Inbasket1.MailCheckParams;
+import dev.hawala.xns.level4.mailing.Inbasket1.MailCheckResults;
+import dev.hawala.xns.level4.mailing.Inbasket1.RetrieveParams;
+import dev.hawala.xns.level4.mailing.Inbasket1.RetrieveResults;
+import dev.hawala.xns.level4.mailing.Inbasket1.SessionErrorRecord;
+import dev.hawala.xns.level4.mailing.Inbasket1.TransferErrorRecord;
+import dev.hawala.xns.level4.mailing.MailTransport4.InvalidRecipientsErrorRecord;
+import dev.hawala.xns.level4.mailing.MailTransport4.PostParams;
+import dev.hawala.xns.level4.mailing.MailTransport4.PostResults;
+import dev.hawala.xns.level4.mailing.MailTransport4.ServerPollParams;
+import dev.hawala.xns.level4.mailing.MailTransport4.ServerPollResults;
+import dev.hawala.xns.level4.mailing.MailTransport4.ServiceErrorRecord;
 import dev.hawala.xns.level4.mailing.MailingCommon.AccessErrorRecord;
 import dev.hawala.xns.level4.mailing.MailingCommon.AccessProblem;
 import dev.hawala.xns.level4.mailing.MailingCommon.ConnectionErrorRecord;
@@ -90,17 +90,17 @@ import dev.hawala.xns.level4.mailing.MailingCommon.UndeliveredName;
 import dev.hawala.xns.level4.mailing.MailingCommon.UndeliveredNameType;
 
 /**
- * Implementation of the Courier programs MailTransport and
- * Inbasket.
+ * Implementation of the Courier programs MailTransport4 and
+ * Inbasket1, providing mailing support for Viewpoint and XDE.
  * <p>
- * This module initialized the unique mail service instance and
+ * This module also initializes the unique mail service instance and
  * forwards the Courier calls to the mentioned Courier programs
  * to the mail service. 
  * </p>
  * 
  * @author Dr. Hans-Walter Latz / Berlin (2020)
  */
-public class MailingImpl {
+public class MailingOldImpl {
 	
 	/*
 	 * local logging
@@ -183,8 +183,8 @@ public class MailingImpl {
 	 */
 	
 	// the instances for the 2 Courier programs for the XNS mail service
-	private static MailTransport progMailTransport;
-	private static Inbasket      progInbasket;
+	private static MailTransport4 progMailTransport;
+	private static Inbasket1      progInbasket;
 	
 	/**
 	 * Register the Courier programs MailTransport and Inbasket.
@@ -194,46 +194,54 @@ public class MailingImpl {
 			throw new IllegalStateException("MailingImpl not correctly initialized (no MailService instance created)");
 		}
 		
-		// create the MailTransport Courier program
-		progMailTransport = new MailTransport().setLogParamsAndResults(false);
-		progMailTransport.ServerPoll.use(MailingImpl::transport_serverPoll);
-		progMailTransport.Post.use(MailingImpl::transport_post);
+		// create the MailTransport version 4 Courier program
+		progMailTransport = new MailTransport4().setLogParamsAndResults(false);
+		progMailTransport.ServerPoll.use(MailingOldImpl::transport_serverPoll);
+		progMailTransport.Post.use(MailingOldImpl::transport_post);
 		
-		// create the Inbasket Courier program
-		progInbasket = new Inbasket().setLogParamsAndResults(false);
-		progInbasket.Logon.use(MailingImpl::inbasket_logon);
-		progInbasket.Logoff.use(MailingImpl::inbasket_logoff);
-		progInbasket.MailCheck.use(MailingImpl::inbasket_mailCheck);
-		progInbasket.Retrieve.use(MailingImpl::inbasket_retrieve);
-		progInbasket.Delete.use(MailingImpl::inbasket_delete);
-		progInbasket.InbasketPoll.use(MailingImpl::inbasket_inbasketPoll);
-		progInbasket.Locate.use(MailingImpl::inbasket_locate);
-		progInbasket.List.use(MailingImpl::inbasket_list);
+		// create the Inbasket version 1 Courier program
+		progInbasket = new Inbasket1().setLogParamsAndResults(false);
+		progInbasket.Logon.use(MailingOldImpl::inbasket_logon);
+		progInbasket.Logoff.use(MailingOldImpl::inbasket_logoff);
+		progInbasket.MailCheck.use(MailingOldImpl::inbasket_mailCheck);
+		progInbasket.Retrieve.use(MailingOldImpl::inbasket_retrieve);
+		progInbasket.Delete.use(MailingOldImpl::inbasket_delete);
+		progInbasket.InbasketPoll.use(MailingOldImpl::inbasket_inbasketPoll);
+		progInbasket.Locate.use(MailingOldImpl::inbasket_locate);
+		progInbasket.List.use(MailingOldImpl::inbasket_list);
 		
 		// register the programs with the Courier dispatcher
 		CourierRegistry.register(progMailTransport);
-		CourierRegistry.register(progInbasket);}
+		CourierRegistry.register(progInbasket);
+	}
 	
 	/**
 	 * Deregister the Courier programs MailTransport and Inbasket.
 	 */
 	public static void unregister() {
-		CourierRegistry.unregister(MailTransport.PROGRAM, MailTransport.VERSION);
-		CourierRegistry.unregister(Inbasket.PROGRAM, Inbasket.VERSION);
+		CourierRegistry.unregister(MailTransport4.PROGRAM, MailTransport4.VERSION);
+		CourierRegistry.unregister(Inbasket1.PROGRAM, Inbasket1.VERSION);
 	}
 	
 	/**
 	 * @return the MailTransport Courier program instance.
 	 */
-	public static MailTransport getMailTransportImpl() {
+	public static MailTransport4 getMailTransportImpl() {
 		return progMailTransport;
 	}
 	
 	/**
 	 * @return the Inbasket Courier program instance.
 	 */
-	public static Inbasket getInbasketImpl() {
+	public static Inbasket1 getInbasketImpl() {
 		return progInbasket;
+	}
+	
+	/**
+	 * @return the mail service instance.
+	 */
+	public static MailService getMailService() {
+		return mailService;
 	}
 	
 	/*
@@ -270,7 +278,7 @@ public class MailingImpl {
 				decodedVerifier);
 		
 		// if we are here, the credentials are valid, so inform the caller of us
-		results.willingness.set(MailTransport.mostWilling);
+		results.willingness.set(MailTransport4.mostWilling);
 		results.address.add(mailService.getServiceAddress());
 		results.returnVerifier.clear();
 		results.serverName.from(mailService.getServiceName());
@@ -386,7 +394,7 @@ public class MailingImpl {
 	 * @return the expanded mailbox list for the group and (possibly
 	 *   recursively) sub-groups.
 	 */
-	private static List<Name> getUserGroupMembersLcFqns(String grpFqn) {
+	public static List<Name> getUserGroupMembersLcFqns(String grpFqn) {
 		ThreePartName grpName = Name.make().from(grpFqn);
 		try {
 			// get the group members from the chs database
@@ -621,7 +629,7 @@ public class MailingImpl {
 			new SessionErrorRecord(SessionProblem.handleInvalid).raise();
 		}
 		
-		// delete the inbasket mailsin the specified range
+		// delete the inbasket mails in the specified range
 		int firstIndex = Math.max(0, params.range.first.get() - 1);
 		int limitIndex = Math.min(session.getMailCount(), params.range.last.get());
 		for (int i = firstIndex; i < limitIndex; i++) {

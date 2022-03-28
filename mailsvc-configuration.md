@@ -38,9 +38,8 @@ _optional_, _default_: (none, the Mail service will not start if not specified)
 
 
 ### Usage notes and restrictions
-**Important restriction**: GlobalView (GVWin 2.1) is currently not supported by the Dodo Mail service, as
-GlobalView uses newer versions of the Courier mail protocols than those provided by Dodo and does not fall
-back to previous protocol versions.  
+
+#### General  
 
 Mails can be sent and received with the standard functionality of the Xerox operating systems used, i.e.
 the MailTool on XDE and the Outbasket resp. Inbasket icons on Star or ViewPoint.
@@ -60,16 +59,29 @@ The file-object sent with or as mail will be delivered unmodified to the recipie
 ignores the content type of the attachment and only extracts the envelope data prepended by the sending
 system.
 
-While the mail itself as the textual mail notice can be received by any of XDE, StarOS or ViewPoint,
+While the mail itself as the textual mail notice can be received by any of XDE, StarOS ViewPoint or GlobalView,
 this may not be true for the attachment of the mail. Whereas folders and simple text files can also be
 used on any target, special considerations apply to Documents sent by mail, as the functionality and the
 internal file format for Documents evolved over the versions:
 - older operating systems cannot open Documents created on newer systems, e.g. StarOS cannot open a
-ViewPoint document received by mail
+ViewPoint or GlobalView document received by mail
 - newer operating systems _may_ open Document received from an older system, provided the necessary
 "Document Upgrader" application is installed and running; this allows ViewPoint 2.0 to open Documents from
-StarOS 5.0 onwards.
+StarOS 5.0 onwards resp. GlobalView to open ViewPoint 2.0 documents.
 
+#### GlobalView Restrictions
+
+GlobalView uses newer versions of the Courier mail protocols (MailTransport version 5 resp. Inbasket version 2),
+for which no documentation or Courier definitions could be found in the vast internet (unlike the older protocols
+used by XDE/Star/ViewPoint, for which hints are available through a programmer's manual and Mesa files at Bitsavers).
+So most structures and procedures defined in the implementation of the newer mail protocols used by GlobalView (and
+possibly by ViewPoint 3.0) are highly speculative.
+
+Furthermore the implementation of the newer mailing protocols uses the internal mail service used for the initial
+(older) mailing protocol implementation, so mails are always stored by the mail service with the old (VP 2.0 / XDE)
+compatible feature set, so newer mail features (like "importance" or all the mail properties available when switching
+to "Show fields: ALL" in GlobalView) are discarded when a mail is sent from GlobalView and will not be present (i.e.
+have default values) when receiving mails in GlobalView.
 
 ### Mail volume organization
 The Filing volume used to store mails and mailboxes is fully managed by the Mail service. There is no need

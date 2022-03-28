@@ -229,6 +229,7 @@ public abstract class MailingCommon extends CrProgram {
 	public static final int bodySize         = 16;   // from Filing: dataSize
 	public static final int bodyType         = 17;   // from Filing: type
 	public static final int filedEnvelope    = 4281; // ??
+	public static final int coversheetOn     = 4362; // boolean
 	
 	/*
 	 * other constants

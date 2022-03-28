@@ -68,9 +68,9 @@ import dev.hawala.xns.level4.filing.fs.Volume;
 import dev.hawala.xns.level4.filing.fs.Volume.Session;
 import dev.hawala.xns.level4.filing.fs.iContentSink;
 import dev.hawala.xns.level4.filing.fs.iContentSource;
-import dev.hawala.xns.level4.mailing.Inbasket.State;
-import dev.hawala.xns.level4.mailing.Inbasket.TransferErrorRecord;
-import dev.hawala.xns.level4.mailing.MailTransport.ServiceErrorRecord;
+import dev.hawala.xns.level4.mailing.Inbasket1.State;
+import dev.hawala.xns.level4.mailing.Inbasket1.TransferErrorRecord;
+import dev.hawala.xns.level4.mailing.MailTransport4.ServiceErrorRecord;
 import dev.hawala.xns.level4.mailing.MailingCommon.AuthenticationErrorRecord;
 import dev.hawala.xns.level4.mailing.MailingCommon.AuthenticationProblem;
 import dev.hawala.xns.level4.mailing.MailingCommon.EncodedList;
@@ -697,6 +697,10 @@ public class MailService {
 						return false;
 					}
 					@Override
+					public boolean checkIfAtEnd() {
+						return false;
+					}
+					@Override
 					public byte getStreamType() {
 						return 0;
 					}	
@@ -941,11 +945,11 @@ public class MailService {
 	
 	/**
 	 * Helper class for writing a Courier type instance as content into a Filing file,
-	 * the source object is given at contruction and the serialized representation
+	 * the source object is given at construction and the serialized representation
 	 * as byte stream can be read by a Filing file system through the {@code iContentSource}
 	 * interface.
 	 */
-	private static class ValueContentSource implements iContentSource {
+	public static class ValueContentSource implements iContentSource {
 		
 		private final byte[] bytes;
 		
@@ -986,7 +990,7 @@ public class MailService {
 	 * {@code iContentSink} and deserializing the byte stream into an
 	 * existing Courier type instance.
 	 */
-	private static class ValueContentSink implements iContentSink {
+	public static class ValueContentSink implements iContentSink {
 		
 		private final iWireData target;
 		

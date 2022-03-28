@@ -266,6 +266,18 @@ public class MailboxEntry {
 	}
 	
 	/**
+	 * Pass an {@code InputStream} on the mail envelope to the given consumer.
+	 * 
+	 * @param to the consumer to pass the stream to
+	 * @return this instance for method chaining (fluent-API)
+	 * @throws IOException
+	 */
+	public MailboxEntry transferPostboxEnvelope(Consumer<InputStream> to) throws IOException {
+		this.postboxEnvelope.retrieveContent(to);
+		return this;
+	}
+	
+	/**
 	 * Extract the status from the inbox mail file.
 	 * 
 	 * @param inboxFe the inbox mail file to check

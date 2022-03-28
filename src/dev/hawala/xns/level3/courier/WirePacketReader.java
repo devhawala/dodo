@@ -54,6 +54,11 @@ public class WirePacketReader extends WireBaseStream {
 	public boolean isAtEnd() {
 		return (this.currIdx >= this.limitIdx);
 	}
+	
+	@Override
+	public boolean checkIfAtEnd() {
+		return (this.currIdx >= this.limitIdx);
+	}
 
 	@Override
 	public byte getStreamType() {

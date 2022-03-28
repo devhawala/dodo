@@ -62,7 +62,16 @@ public class STRING implements iWireData {
 
 	public STRING set(String value) {
 		// TODO: transform non-7bit-ascii chars into our specific reversible obfuscated encoding
-		this.str = (value != null && value.length() > this.maxLength) ? value.substring(0, this.maxLength) :value;
+		this.str = (value != null && value.length() > this.maxLength) ? value.substring(0, this.maxLength) : value;
+		return this;
+	}
+	
+	public STRING set(STRING source) {
+		if (source == null) {
+			this.str = "";
+		} else {
+			this.str = (source.str.length() > this.maxLength) ? source.str.substring(0, this.maxLength) : source.str;
+		}
 		return this;
 	}
 	

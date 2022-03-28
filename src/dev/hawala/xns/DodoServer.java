@@ -46,7 +46,8 @@ import dev.hawala.xns.level4.common.Time2;
 import dev.hawala.xns.level4.echo.EchoResponder;
 import dev.hawala.xns.level4.filing.FilingImpl;
 import dev.hawala.xns.level4.mailing.MailingExpeditedCourierResponder;
-import dev.hawala.xns.level4.mailing.MailingImpl;
+import dev.hawala.xns.level4.mailing.MailingOldImpl;
+import dev.hawala.xns.level4.mailing.MailingNewImpl;
 import dev.hawala.xns.level4.printing.Printing3Impl;
 import dev.hawala.xns.level4.rip.RipResponder;
 import dev.hawala.xns.level4.time.TimeServiceResponder;
@@ -368,8 +369,10 @@ public class DodoServer {
 			
 			// start the mailService always co-located with the clearinghouse
 			if (mailServiceVolumePath != null) {
-				MailingImpl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase, mailServiceVolumePath);
-				MailingImpl.register();
+				MailingOldImpl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase, mailServiceVolumePath);
+				MailingOldImpl.register();
+				MailingNewImpl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase, MailingOldImpl.getMailService());
+				MailingNewImpl.register();
 				localSite.pexListen(0x001A, new MailingExpeditedCourierResponder());
 			}
 		}

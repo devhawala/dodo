@@ -217,6 +217,15 @@ public class MockWireStream implements iWireStream {
 		}
 		return false;
 	}
+	
+	@Override
+	public boolean checkIfAtEnd() {
+		if (this.rdPos >= this.wrPos) { return true; }
+		if (this.content[this.rdPos] == EOM) {
+			return true;
+		}
+		return false;
+	}
 
 	@Override
 	public void dropToEOM(byte reqDatastreamType) {

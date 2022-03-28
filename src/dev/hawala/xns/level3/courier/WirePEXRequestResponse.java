@@ -142,6 +142,11 @@ public class WirePEXRequestResponse implements iWireStream {
 	public boolean isAtEnd() {
 		return this.rdPex.isAtEnd();
 	}
+	
+	@Override
+	public boolean checkIfAtEnd() {
+		return this.rdPex.checkIfAtEnd();
+	}
 
 	@Override
 	public void dropToEOM(byte reqDatastreamType) throws EndOfMessageException {

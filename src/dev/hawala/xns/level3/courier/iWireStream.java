@@ -189,6 +189,15 @@ public interface iWireStream {
 	boolean isAtEnd();
 	
 	/**
+	 * Did the last read operation reach an end-of-message mark? Even if
+	 * at end, the mark is not consumed, allowing it to be rechecked
+	 * elsewhere if necessary.
+	 * @return {@code true} if the last read operation ended just before an
+	 *    end-of-message.
+	 */
+	boolean checkIfAtEnd();
+	
+	/**
 	 * Consume all data until the next EOM is received in the required byte datastreamType.
 	 * 
 	 *  @param reqDatastreamType the byte datastreamType in which the EOM must arrive.

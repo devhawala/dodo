@@ -70,6 +70,8 @@ public class MailSession {
 	
 	private final List<MailboxEntry> inboxMails;
 	
+	private Object clientData = null;
+	
 	private static final long SESSION_TIME_TO_LIVE_MS = 1200_000L; // 1200 seconds = 20 minutes ; is that long enough?
 	private long timeout = System.currentTimeMillis() + SESSION_TIME_TO_LIVE_MS;
 	
@@ -186,6 +188,22 @@ public class MailSession {
 		if (index >= 0 || index < this.inboxMails.size()) {
 			this.inboxMails.set(index, null);
 		}
+	}
+	
+	/**
+	 * @return the current client specific data in the session
+	 */
+	@SuppressWarnings("unchecked")
+	public <T> T getClientData() {
+		return (T)this.clientData;
+	}
+	
+	/**
+	 * Set the client specific data in the session
+	 * @param data
+	 */
+	public void setClientData(Object data) {
+		this.clientData = data;
 	}
 	
 }
