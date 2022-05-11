@@ -297,9 +297,9 @@ public class MailingNewImpl {
 		return currentTransactions.get(id);
 	}
 	
-//	private static synchronized void dropMailTransaction(PostMailTransaction t) {
-//		currentTransactions.remove(t.transactionId);
-//	}
+	private static synchronized void dropMailTransaction(PostMailTransaction t) {
+		currentTransactions.remove(t.transactionId);
+	}
 	
 	/*
 	 *  serverPoll
@@ -753,6 +753,9 @@ public class MailingNewImpl {
 		for(int i = 0; i < mailId.length; i++) {
 			results.messageId.get(i).set(mailId[i]);
 		}
+		
+		// we're done with this mail, so forget the mail transaction
+		dropMailTransaction(mt);
 		
 		// log outgoing data
 		if (logParamsAndResults) {

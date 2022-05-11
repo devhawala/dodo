@@ -58,11 +58,11 @@ import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
  * Clearinghouse database, supporting exactly one domain and
  * initialized from property files holding the entry data.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019,2022)
  */
 public class ChsDatabase {
 	
-	private final boolean produceStrongKeyAsSpecified;
+	private final boolean allowBlanksInObjectNames;
 
 	private final int networkId;
 	private final String organizationName;
@@ -120,24 +120,17 @@ public class ChsDatabase {
 	 * @param domain the domain handled by this clearinghouse database.
 	 * @param chsDatabaseRoot the name of the directory where the property files
 	 * 		defining the objects in this domain are located.
-	 * @param strongKeysAsSpecified how to handle the contradiction in the specification
-	 * 		(Authentication Protocol, XSIS 098404, April 1984), where the data used in the
-	 * 		example does not match the specification for the strong key generation (section 5.3):
-	 * 		<br/>
-	 * 		if {@code true} encode each 4 char-block with the password to produce the next
-	 * 		password (as specified, but this does match <i>not</i> the data in the example), else (if
-	 * 		{@code false}) exchange the encryption parameters, i.e. use each 4 char-block to
-	 * 		encrypt the password of the last iteration to produce the new password (this
-	 * 		contradicts the specification, but creates the data in the example...)
+	 * @param allowBlanksInObjectNames allow blanks in object names created from the chs database
+	 * 		.properties file or remove the blanks?
 	 */
-	public ChsDatabase(long networkId, String organization, String domain, String chsDatabaseRoot, boolean strongKeysAsSpecified) {
+	public ChsDatabase(long networkId, String organization, String domain, String chsDatabaseRoot, boolean allowBlanksInObjectNames) {
 		// save configuration data
 		this.networkId = (int)(networkId & 0xFFFFFFFFL);
 		this.organizationName = organization;
 		this.domainName = domain;
 		this.domOrgPartLc = ":" + domain.toLowerCase() + ":" + organization.toLowerCase();
 		this.domainAndOrganization = ":" + domain + ":" + organization;
-		this.produceStrongKeyAsSpecified = strongKeysAsSpecified;
+		this.allowBlanksInObjectNames = allowBlanksInObjectNames;
 		
 		// create clearinghouse-service query user items
 		this.chsQueryName = Name.make();
@@ -412,7 +405,7 @@ public class ChsDatabase {
 		// fallback if no database present
 		String objectName = forName.object.get();
 		try {
-			byte[] keyBytes = StrongAuthUtils.getStrongKey(objectName, this.produceStrongKeyAsSpecified);
+			byte[] keyBytes = StrongAuthUtils.getStrongKey(objectName, true);
 			return keyBytes;
 		} catch (Exception e) {
 			// let's pretend that the user does not exist if no password can be generated
@@ -484,7 +477,7 @@ public class ChsDatabase {
 	
 	private byte[] computePasswordStrongHash(String password) {
 		try {
-			byte[] keyBytes = StrongAuthUtils.getStrongKey(password, this.produceStrongKeyAsSpecified);
+			byte[] keyBytes = StrongAuthUtils.getStrongKey(password, true);
 			return keyBytes;
 		} catch (Exception e) {
 			throw new IllegalArgumentException("Unable to create strong password for '" + password + "'");
@@ -538,7 +531,10 @@ public class ChsDatabase {
 			
 			// extract the name component from the filename
 			String filename = propsFile.getName();
-			String basename = filename.substring(0, filename.length() - 11).replace(" ", ""); // remove .properties and blanks
+			String basename = filename.substring(0, filename.length() - 11); // remove .properties
+			if (!allowBlanksInObjectNames) {
+				basename = basename.replace(" ", ""); // remove blanks if not requested to keep them
+			}
 			if (basename.contains(":")) {
 				basename = basename.split(":")[0];
 			}

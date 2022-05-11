@@ -429,7 +429,7 @@ public class FilingImpl {
 	}
 	
 	private static void innerLogon(ThreePartName service, Credentials credentials, Verifier verifier, LogonResults results, int filingVersion) {
-		String svcName = chsDatabase.resolveName(service);
+		String svcName = chsDatabase.resolveName(service).toLowerCase();
 		Service svc;
 		if (svcName.isEmpty() || "::".equals(svcName)) {
 			svc = defaultService;

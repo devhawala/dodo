@@ -321,7 +321,7 @@ _optional_, _default_: `0` (i.e. no date change)
 - `organization`    
 `domain`    
 `chsDatabaseRoot`    
-`strongKeysAsSpecified`    
+`allowBlanksInObjectNames`    
 `authSkipTimestampChecks`    
 these 5 properties define the Clearinghouse service provided by this
 Dodo instance;    
@@ -675,9 +675,16 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2022-05-11    
+-- removed option `strongKeysAsSpecified`    
+-- added option `allowBlanksInObjectNames` for clearinghouse object names    
+-- FS: (bugfix) file service names with uppercase letters no longer result in "serviceUnavailable"    
+-- MS: (bugfix) session data for GVWin mailing is now dropped after mail was posted    
+-- `dist.zip`: added pre-configured bootservice and fileservice allowing to install from floppy with Draco
+
 - 2022-03-28    
 -- MS: added support for GlobalView-Mailing (restricted to pre-GlobalView functionality)    
--- Courier: skip the End-of-Message in version exchange sent by Interlisp-D during connection initialization 
+-- Courier: skip the End-of-Message in version exchange sent by Interlisp-D during connection initialization
 
 - 2021-04-19, 2021-04-19    
 -- FsUtil: added several character substitutions in document names on export    

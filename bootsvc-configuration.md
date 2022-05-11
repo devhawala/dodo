@@ -11,6 +11,10 @@ The setup involves:
 - setting up an installation drawer for allowing network-based workstation installations,
 - configuring Dodo for running the service.
 
+As an example, the Dodo distribution comes with a preconfigured minimal boot service
+intended to help installing software from floppy disks with Draco, see section
+[sample boot service setup](#sample-boot-service-setup).
+
 ### Boot service files
 
 The microcode, germ and boot files to be delivered by the boot service must be
@@ -48,12 +52,12 @@ After choosing the Dodo file service that will provide the installation scripts 
 files, the following configuration steps are necessary:
 
 - Dodo clearinghouse database    
-add the alias `Installation Drawer` to the file service (i.e. extend or add
+add the alias `Installation Server` to the file service (i.e. extend or add
 the property `aliases` with this name to the `fs~name.properties` file of
 the file service).
 
 - Dodo file service    
-add a line for the file drawer `Installation Server` to the file `root-folder.lst`
+add a line for the file drawer `Installation Drawer` to the file `root-folder.lst`
 of the file service to ensure that the file drawer will exist after the next restart
 of the service.
 
@@ -88,3 +92,38 @@ interval in milliseconds before sending the next data packet (after receiving th
 for the last packet) when using the spp boot protocol,
 so this parameter controls the packet transmission rate for boot files    
 _optional_, _default_: `20` (meaning max. 50 packets/second)
+
+
+### Sample boot service setup
+
+The sample environment for Dodo in the file `dist.zip` contains a minimal boot service
+setup, consisting of:
+
+- the sub-directory `bootsvc` holding the germ, the boot files and a reduced `BootService.profile`
+  for net booting the Draco emulator
+- the sub-directory `vol-installation` for a file service named `installation`
+  with the file drawer `Installation Drawer` containing 2 installation scripts, the standard
+  *HOW TO USE THE INSTALLER* script and the new *Switch to floppy installation* scripts
+- the definition file for the `installation` file service in the clearinghouse database, also
+  defining the required alias `Installation Server`
+- the entries in the `dodo.properties` file for starting the boot service and the file service
+  `installation`    
+  (the automatic start of these services can be suppressed by commenting out the corresponding lines)  
+
+To install software from floppy on a Draco machine:
+
+- first locate the setup floppy containing the installation scripts, usually the last floppy
+  having "installer" in the floppy label
+- then perform a network boot of the Draco machine using the `-netinstall` command line switch
+- when the network installer is booted, it first asks for a user to logon (necessary to access the
+  `installation` file service), any user defined in the clearinghouse database will do
+- after login, a menu list with 2 entries will be displayed:    
+  &nbsp;&nbsp;1. HOW TO USE THE INSTALLER    
+  &nbsp;&nbsp;2. Switch to floppy installation
+- mount the floppy image with the installation scripts on the Draco emulator and choose the 2nd
+  menu entry by entering 2 (and return)
+- in the next menu list, choose the first entry *Switch to floppy installation menu* and confirm
+  with *yes* when asked
+- a new menu list for the scripts on the floppy should now be displayed, so the appropriate
+  installation option from the floppy set can be selected
+

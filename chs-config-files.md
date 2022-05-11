@@ -28,16 +28,11 @@ defined, but all user names are accepted, with the password being the user name
 (case-insensitive) given for login    
 _optional_ (no default)
 
-- `strongKeysAsSpecified`    
-how to handle the contradiction in the specification _Authentication Protocol_
-(XSIS 098404, April 1984), where the data used in the example does not match the
-specification for the strong key generation (section 5.3):    
-if `true` encode each 4 char-block with the password to produce the next password
-(as specified, but this does match <i>not</i> the data in the example),    
-else (if `false`) swap the encryption parameters, i.e. use each 4 char-block to
-encrypt the password of the last iteration to produce the new password (this
-contradicts the specification, but creates the data in the example...)    
-_optional_, _default_: `true`
+- `allowBlanksInObjectNames`    
+when producing the clearinghouse object name from the filename of the object's `.properties`
+file, blanks are removed by default from the object name; setting this property to `true`
+will preserve the blanks    
+_optional_, _default_: `false`
 
 - `authSkipTimestampChecks`    
 setting this parameter to `true` will suppress the timestamp verification steps

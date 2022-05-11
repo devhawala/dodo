@@ -93,7 +93,7 @@ public class DodoServer {
 	
 	private static String organizationName = "hawala";
 	private static String domainName = "dev";
-	private static boolean strongKeysAsSpecified = true;
+	private static boolean allowBlanksInObjectNames = false;
 	private static boolean authSkipTimestampChecks = false;
 	private static String chsDatabaseRoot = null;
 	
@@ -155,7 +155,7 @@ public class DodoServer {
 		startRipService = props.getBoolean("startRipService", startRipService);
 		startBootService = props.getBoolean("startBootService", startBootService);
 		
-		strongKeysAsSpecified = props.getBoolean("strongKeysAsSpecified", strongKeysAsSpecified);
+		allowBlanksInObjectNames = props.getBoolean("allowBlanksInObjectNames", allowBlanksInObjectNames);
 		authSkipTimestampChecks = props.getBoolean(MachineIds.CFG_AUTH_SKIP_TIMESTAMP_CHECKS, authSkipTimestampChecks);
 		organizationName = props.getString("organizationName", organizationName);
 		domainName = props.getString("domainName", domainName);
@@ -285,7 +285,7 @@ public class DodoServer {
 		ChsDatabase chsDatabase = null;
 		if (startChsAndAuth || !fileServiceSpecs.isEmpty()) {
 			// create the clearinghouse database
-			chsDatabase = new ChsDatabase(networkNo, organizationName, domainName, chsDatabaseRoot, strongKeysAsSpecified);
+			chsDatabase = new ChsDatabase(networkNo, organizationName, domainName, chsDatabaseRoot, allowBlanksInObjectNames);
 			
 			if (dumpChs) {
 				System.out.println("\n==\n== machine-id pre-definitions:\n==\n");
