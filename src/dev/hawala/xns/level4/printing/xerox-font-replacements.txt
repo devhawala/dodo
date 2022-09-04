@@ -14,6 +14,11 @@
 /Classic-Italic          {sten /NewFont /XeroxClassic-Italic-000      ReMap /NewFont findfont} def
 /Classic-Bold-Italic     {sten /NewFont /XeroxClassic-Bold-Italic-000 ReMap /NewFont findfont} def
 
+/CLASSIC                 {sten /NewFont /XeroxClassic-000             ReMap /NewFont findfont} def
+/CLASSIC-Bold            {sten /NewFont /XeroxClassic-Bold-000        ReMap /NewFont findfont} def
+/CLASSIC-Italic          {sten /NewFont /XeroxClassic-Italic-000      ReMap /NewFont findfont} def
+/CLASSIC-Bold-Italic     {sten /NewFont /XeroxClassic-Bold-Italic-000 ReMap /NewFont findfont} def
+
 % o000: Latin alphabet & punctuation
 /Classic-000             {/XeroxClassic-000             findfont} def
 /Classic-Bold-000        {/XeroxClassic-Bold-000        findfont} def
@@ -82,6 +87,11 @@
 /Modern-Bold             {sten /NewFont /XeroxModern-Bold-000         ReMap /NewFont findfont} def
 /Modern-Italic           {sten /NewFont /XeroxModern-Italic-000       ReMap /NewFont findfont} def
 /Modern-Bold-Italic      {sten /NewFont /XeroxModern-Bold-Italic-000  ReMap /NewFont findfont} def
+
+/MODERN                  {sten /NewFont /XeroxModern-000              ReMap /NewFont findfont} def
+/MODERN-Bold             {sten /NewFont /XeroxModern-Bold-000         ReMap /NewFont findfont} def
+/MODERN-Italic           {sten /NewFont /XeroxModern-Italic-000       ReMap /NewFont findfont} def
+/MODERN-Bold-Italic      {sten /NewFont /XeroxModern-Bold-Italic-000  ReMap /NewFont findfont} def
 
 % o000: Latin alphabet & punctuation
 /Modern-000              {/XeroxModern-000              findfont} def

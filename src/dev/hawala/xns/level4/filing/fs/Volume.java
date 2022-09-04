@@ -939,6 +939,47 @@ public class Volume {
 		}
 	}
 	
+	public int retrieveContentRange(long fileID, iContentSink contentSink, long firstByte, long byteCount, String readingUser) throws IOException {
+		this.checkClosed();
+		
+		FileEntry fe = this.openByFileID(fileID, null, null, readingUser);
+		
+		if (!fe.getHasContent()) {
+			contentSink.write(null,  0); // attempt to get content where there is none => signal EOF
+			return 0;
+		}
+		
+		File contentFile = this.getDataFile(fe.getFileID(), false);
+		if (contentFile == null) {
+			this.errorRaiser.fileContentDamaged("File content missing or lost");
+		}
+		
+		long fileLen = contentFile.length();
+		if (firstByte >= fileLen) {
+			contentSink.write(null,  0); // attempt to read beyond the file content => signal EOF
+			return -1;
+		}
+		int remaining = (int)Math.min(fileLen - firstByte, byteCount);
+		
+		try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(contentFile))) {
+			bis.skip(firstByte);
+			
+			byte[] buffer = new byte[512];
+			int bytesTransferred;
+			int bytesSent = 0;
+			while(remaining > 0 && (bytesTransferred = bis.read(buffer, 0, Math.min(remaining, buffer.length))) > 0) {
+				if (contentSink.write(buffer, bytesTransferred) < bytesTransferred) {
+					throw new IOException("BulkTransfer aborted by other end (NoMoreWriteSpaceException)");
+				}
+				remaining -= bytesTransferred;
+				bytesSent += bytesTransferred;
+			}
+			return bytesSent;
+		} finally {
+			contentSink.write(null,  0); // signal EOF and cleanup
+		}
+	}
+	
 	public void retrieveContent(long fileID, java.util.function.Consumer<InputStream> sink, String readingUser) throws IOException {
 		this.checkClosed();
 		

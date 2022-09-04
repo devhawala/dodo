@@ -292,6 +292,9 @@ public class InterpressUtils {
 		
 		// disassemble the binary interpress stream
 		boolean lastWasDosaveSimpleBody = false;
+		boolean awaitTRANS = false;
+		boolean fixNextTRANSLATE = false;
+		boolean fixNextCONCAT = false;
 		Stack<Integer> doSaveSimpleBodyLevels = new Stack<>();
 		doSaveSimpleBodyLevels.push(-1);
 		boolean lastWasCorrect = false;
@@ -351,6 +354,49 @@ public class InterpressUtils {
 							continue;
 						}
 						
+						// Interlisp-D specific (Medley 1.0)
+						// fix the bitmap transformation inside a DOSAVESIMPLEBODY to be compatible with the IP2PS interpreter
+						// e.g.
+						//   DOSAVESIMPLEBODY
+						//     TRANS                         % <- trigger
+						//     369 736 1 1 1
+						//     -369 0 TRANSLATE              % <- may not be concat-ed with next scale-ing, but/and is wrong x-direction when alone
+						//     8877943 524288 DIV SCALE      % IP2PS does not like this scale ...
+						//     CONCAT
+						// becomes (effectively)
+						//   DOSAVESIMPLEBODY
+						//     TRANS
+						//     369 736 1 1 1
+						//     -369 0 TRANSLATE
+						//     369 2 MUL 0 TRANSLATE CONCAT  % fix wrong translation by translating twice in the other direction, by:
+						//                                   %   6 1 ROLL -- bring 369 to top
+						//                                   %   DUP      -- duplicate 369
+						//                                   %   7 6 ROLL -- bring duplicate in front again
+						//                                   %   2 MUL 0 TRANSLATE CONCAT -- double x, create translation and combine with original
+						//     8877943 524288 DIV SCALE
+						//     CONCATT                       % instead of changing the bitmap transformation: change the imaging transformation
+						if (fixNextCONCAT && "CONCAT".equals(keyword)) {
+							dest.printf("%sCONCATT\n", sep);
+							sep = indent;
+							fixNextCONCAT = false;
+							tokenType = ipScanner.next();
+							continue;
+						}
+						if (fixNextTRANSLATE && "TRANSLATE".equals(keyword)) {
+							dest.printf("%sTRANSLATE 6 1 ROLL DUP 7 6 ROLL 2 MUL 0 TRANSLATE CONCAT\n", sep);
+							sep = indent;
+							fixNextCONCAT = true;
+							fixNextTRANSLATE = false;
+							tokenType = ipScanner.next();
+							continue;
+						}
+						if (awaitTRANS) {
+							if ("TRANS".equals(keyword)) { // hoping that only InterlispD uses this as first token after DOSAVESIMPLEBODY
+								fixNextTRANSLATE = true;
+							}
+							awaitTRANS = false;
+						}
+						
 						
 						// DOSAVESIMPLEBODY { .. } -> DOSAVESIMPLEBODY .. DORESTORESIMPLEBODY
 						if (isBraceOpen && lastWasDosaveSimpleBody) {
@@ -361,6 +407,7 @@ public class InterpressUtils {
 							indent = blanks.substring(0, level * INDENT);
 							sep = indent;
 							lastWasDosaveSimpleBody = false;
+							awaitTRANS = true;
 							tokenType = ipScanner.next();
 							continue;
 						}
@@ -371,6 +418,9 @@ public class InterpressUtils {
 							sep = indent;
 							dest.printf("%sDORESTORESIMPLEBODY\n", indent);
 							tokenType = ipScanner.next();
+							awaitTRANS = false;
+							fixNextTRANSLATE = false;
+							fixNextCONCAT = false;
 							continue;
 						}
 
@@ -959,6 +1009,20 @@ public class InterpressUtils {
 					} else {
 						op = shortOps[code];
 						if (op == null) {
+							if (this.currType == TokenType.OP && "END".equals(currOp.keyword)) {
+								// if at toplevel again (after a BEGIN ... END block):
+								// - assume that the ip producer always creates valid ip
+								// - so handle invalid data at top level as junk to fill up a buffer (or to a worb boundary)
+								// (added for Interlisp-D/Medley)
+								this.atEof = true;
+								this.nextType = TokenType.EOF;
+								this.nextOp = null;
+								this.nextShort = -999999;
+								this.nextSeqType = -3333333;
+								this.nextSeqLen = 0;
+								this.nextSeqData = null;
+								return this.currType;
+							}
 							throw new InterpressException("Invalid short opcode: " + code);
 						}
 					}
@@ -1014,7 +1078,7 @@ public class InterpressUtils {
 				this.nextSeqType = -3333333;
 				this.nextSeqLen = 0;
 				this.nextSeqData = null;
-				return this.next();
+//				return this.next();
 			}
 			
 			return this.currType;

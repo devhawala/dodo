@@ -95,6 +95,7 @@ import dev.hawala.xns.level4.filing.FilingCommon.LogoffOrContinueParams;
 import dev.hawala.xns.level4.filing.FilingCommon.LogonResults;
 import dev.hawala.xns.level4.filing.FilingCommon.MoveParams;
 import dev.hawala.xns.level4.filing.FilingCommon.OpenParams;
+import dev.hawala.xns.level4.filing.FilingCommon.RangeErrorRecord;
 import dev.hawala.xns.level4.filing.FilingCommon.ReplaceBytesParams;
 import dev.hawala.xns.level4.filing.FilingCommon.ReplaceParams;
 import dev.hawala.xns.level4.filing.FilingCommon.RetrieveBytesParams;
@@ -839,7 +840,7 @@ public class FilingImpl {
 	 *   = 7;
 	 */
 	private static void changeControls(ChangeControlsParams params, RECORD results) {
-		notImplemented("changeControls", params);
+		// (ignore it for Interlisp-D) notImplemented("changeControls", params);
 	}
 	
 	/*
@@ -1511,7 +1512,43 @@ public class FilingImpl {
 	 *   = 22;
 	 */
 	private static void retrieveBytes(RetrieveBytesParams params, RECORD results) {
-		notImplemented("retrieveBytes", params);
+		logParams("retrieveBytes", params);
+		
+		// check session
+		Session session = resolveSession(params.session);
+		Volume vol = session.getService().getVolume();
+		
+		// check specified file handle
+		Handle fileHandle = Handle.get(params.file);
+		if (fileHandle == null || fileHandle.isNullHandle()) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		FileEntry fe = fileHandle.getFe();
+		if (fe == null) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		
+		// get the byte range
+		long firstByte = params.range.firstByte.get();
+		long byteCount = params.range.count.get();
+		
+		// transfer file content
+		try {
+			ByteContentSink sink = new ByteContentSink(params.sink);
+			int bytesTransferred = vol.retrieveContentRange(fe.getFileID(), sink, firstByte, byteCount, session.getUsername());
+			if (bytesTransferred < 0) {
+				new RangeErrorRecord(ArgumentProblem.unreasonable).raise();
+			}
+			if (logParamsAndResults) {
+				log("##  Filing.RetrieveBytes() => bytesTransferred = %d\n\n##\n", bytesTransferred);
+			}
+		} catch (NoMoreWriteSpaceException | IOException e) {
+			log("##  Filing.RetrieveBytes() => %s : %s\n", e.getClass().getName(), e.getMessage());
+			new TransferErrorRecord(TransferProblem.aborted).raise();
+		}
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	
 	/*
