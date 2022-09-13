@@ -844,9 +844,20 @@ public class SppConnection {
 				err.getErrorCode(),
 				err.getOffendingIdpPaket().toString());
 		
-		// ?? any more differenciated & meaningful error handling regarding this SPP connection ??
-		// let's abandon this connection
 		synchronized(this) {
+			
+			// if the other end signals overload, give it time to recover
+			if (err.getErrorCode() == ErrorCode.RESOURCE_LIMIT && this.state != State.CLOSED) {
+				System.err.printf("SppConnection -> keeping connection, but delaying next resend\n");
+				this.noResendBefore = System.currentTimeMillis() + (2 * this.sppResendDelay);
+				this.resendCountdown = (2 * this.sppHandshakeResendCountdown);
+				return;
+			}
+			
+			// ... other special cases?
+
+			// so let's abandon this connection
+			
 			this.state = State.CLOSED;
 			
 			removeActiveConnection(this);

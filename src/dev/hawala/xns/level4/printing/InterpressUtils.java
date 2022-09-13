@@ -665,14 +665,44 @@ public class InterpressUtils {
 						}
 						break;
 					case SEQ_CONTINUED: {
-						if (forPsConv) {
-							throw new InterpressException("PS conversion: unsupported sequence-type 'Continued'");
-						}
+							if (forPsConv) {
+								throw new InterpressException("PS conversion: unsupported sequence-type 'Continued'");
+							}
 							sep = this.dumpSequence("Continued", sep, indent, seqData, dest);
 						}
 						break;
 					case SEQ_LARGEVECTOR: {
 							if (forPsConv) {
+								// special case:
+								// Interpisp-D uses large vector instead of packed pixel vector for fill bitmap pattern,
+								// so treat an exactly 256 items large vector like a 16x16 b/w packet pixel vector 
+								if (seqLen == 257 && seqData[0] == 1) { // elem-length == 1 and 256 elements 
+									// output the ps replacement for PacketPixelVector
+									dest.printf("%s[%d %d [<> () ] ]\n", sep, 1, 16);
+									sep = indent;
+									
+									// create and buffer the pixel string for later usage
+									StringBuilder sb = new StringBuilder();
+									sb.append("\n");
+									int wordIdx = 1; // skip elem-length field
+									for (int byteIdx = 0; byteIdx < 32; byteIdx++) {
+										int byteValue = 0;
+										int bit = 0x01;
+										for (int bitIdx = 0; bitIdx < 8; bitIdx++) {
+											int bitValue = seqData[wordIdx++];
+											if (bitValue != 0) {
+												byteValue |= bit;
+											}
+											bit <<= 1;
+										}
+										sb.append(String.format("%02X", byteValue));
+									}
+									lastPackedPixelVector = sb.toString();
+									
+									// proceed with next token 
+									tokenType = ipScanner.next();
+									continue;
+								}
 								throw new InterpressException("PS conversion: unsupported sequence-type 'LargeVector'");
 							}
 						
