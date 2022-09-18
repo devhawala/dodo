@@ -15,7 +15,7 @@ Currently the following XNS services are provided by Dodo:
 
 (although in most cases the implementation is incomplete regarding the specification,
 the services provide a working and useful subset for working "as usual" with XDE resp.
-StarOS, ViewPoint or GlobalView)
+StarOS, ViewPoint or GlobalView resp. Interlisp-D.
 
 In fact, Dodo is not a single Java program, but a set of programs creating a
 simple virtual network infrastructure, a kind of XNS-over-TCP/IP. This virtual
@@ -82,18 +82,18 @@ information
     - Clearinghouse (CHS)    
 	(Courier program 2, versions 2 and 3)    
 	all protocol procedures are implemented for a *read-only* clearinghouse
-	database, allowing to log in to XDE and Star/Viewpoint/GVWin, to navigate the network
+	database, allowing to log in to XDE, Star/Viewpoint/GVWin and Interlisp-D, to navigate the network
 	directory in GlobalView as well to query clearinghouse entries with `Maintain.bcd`
 	in XDE; however changes to the	database are rejected
     - Authentication (Auth)    
 	(Courier program 14, version 2)    
 	all protocol procedures are implemented for a *read-only* clearinghouse
-	database, allowing to log in to XDE and Star/Viewpoint/GVWin; however changes to the
+	database, allowing to log in to XDE, Star/Viewpoint/GVWin and Interlisp-D; however changes to the
 	database are rejected
     - Printing    
 	(Courier program 4, version 3)    
-	all protocol procedures are implemented, allowing to print from XDE and Star/Viewpoint/GVWin,
-	to query a print job status, the printer properties and the printer status.    
+	all protocol procedures are implemented, allowing to print from XDE, Star/Viewpoint/GVWin and
+	Interlisp-D as well as to query a print job status, the printer properties and the printer status.    
 	The interpress files are received and collected in the output directory,
 	a PostScript file can optionally be generated for the interpress master.
 	and possibly post-processed.    
@@ -103,8 +103,8 @@ information
     - Filing    
 	(Courier program 10, versions 4,5,6)    
 	a large subset of the protocol procedures is implemented, allowing
-	to access file drawers, folders and files on Dodo XNS File services from XDE
-	and Star/Viewpoint/GVWin. Although substantial functionality is missing (like access control
+	to access file drawers, folders and files on Dodo XNS File services from XDE, Star/Viewpoint/GVWin
+	and Interlisp-D. Although substantial functionality is missing (like access control
 	and access rights), Dodo file services are already usable in a mostly single-user environment.
     - Mailing    
 	(MailTransport: Courier program 17, version 4 and 5)    
@@ -117,10 +117,25 @@ can be configured through a property file specified when starting the Dodo progr
 	
 ### Topology
 
+The following network example from the "old days" can be used for discussing the Dodo
+components:
+
+![example real network to be emulated](network-sample.png)
+
+In a more contemporary environment of emulated Xerox machines, the original Star 8010 workstation
+could be subtituted by the Darkstar emulator, the Dwarf emulator could replace the PC with GlobalView.    
+But the are still functioning Xerox workstations that may require XNS services, so the 6085 machine will
+be assumed to be such a machine.
+
+The above network could be reproduced as follows with the XNS emulation provided by the Dodo
+components:
+
+![possible emulated equivalent network](network-emulated.png)
+
 Besides the XNS client systems, at least 2 components need to run as independent programs
 for using Dodo services:
 
-- NetHub    
+- **NetHub**    
 this is the backbone of the virtual network, to which all other components connect
 with a TCP connection. The NetHub forwards each packet received from one attached
 component to the other connected components.    
@@ -132,24 +147,36 @@ length information. This protocol is simple enough to be easily implemented in
 emulators.    
 NetHub listens on port 3333 for client connections (currently hard-coded).
 
-- Dodo server    
-this is the program providing the XNS services.
+- **Dodo server**    
+this is the program providing the XNS services. All supported services (clearinghouse, authentication,
+filing, printing etc.) can be provided by a single Dodo server instance, i.e. a single running Dodo server
+process, which connects to the NetHub.    
+The only exception is printing, as the Courier protocol for printing only supports one printer service
+for a server machine, so each *additional* emulated print service therefore requires another Dodo process
+(using an own machine-id).    
+It is however possible to distribute the provided XNS services over several Dodo server processes connected
+to the same NetHub, for example one Dodo server for the clearinghouse, authentication and mail services as
+well as the filing volume for desktops and user file drawers, a second for printing and a third for some data
+filing volumes. In such a distributed case all Dodo server instances must use the same clearinghouse database
+files (shared or identical copies).
 
-3 additional program components of Dodo services can be used if required:
-- NetHubGateway    
+Besides programs (emulators and Dodo server) connecting directly to the NetHub, other XNS clients can also use
+the Dodo XNS services through the **NetHubGateway**:
 this is a NetHub client program that connects to a local PCap network device, implementing
 a gateway for XNS packets between a (more or less) real network and NetHub, allowing
 to attach emulators or potentially real machines that do not directly implement the
 NetHub protocol.
 
-- NetSpy    
+Two additional program components of Dodo services can be used if required:
+
+- **NetSpy**    
 this is a "read-only program" connecting to the NetHub with the only purpose to
 receive all packets traveling in the virtual network and to dump the packet
 content to `stdout`; in addition to the raw packet content, it issues the recognized
 packet type specific structural data at the different layers (ethernet, IDP, PEX,
 SPP etc. headers, type specific payload).
 
-- FsUtil    
+- **FsUtil**    
 this file service utility allows to list folders in a Dodo file service folder, as well as
 importing or exporting files from/to the local file system. 
 
@@ -429,7 +456,7 @@ introduced with a `+`, for example:
 
 ```
 #
-# slow down for the Darkstar machine (running XDE, StarOS or ViewPoint)
+# slow down for a Darkstar machine running a Pilot-OS (XDE, StarOS or ViewPoint)
 #
 darkstar-1 = 10-00-AA-10-00-11
 + authSkipTimestampChecks = true
@@ -626,8 +653,8 @@ request.
 Other XNS programs in BSD 4.3 were not tested so far.
 
 - [Darkstar](https://github.com/livingcomputermuseum/Darkstar) (8010 emulator version 1.0.0.1 by Josh Dersch / Living Computer Museum)    
-Tested under Windows-10, configuration: NetHub with NetHubGateway and Dodo server, Darkstar
-running Viewpoint 2.0.6 or Star OS 5.0.    
+Tested under Windows-10, Darkstar running Viewpoint 2.0.6, Star OS 5.0 or Interlisp-D (Harmony, Lyric or Medley 1.0 releases),
+connected either with NetHubGateway (for Darkstar 1.0.0.1) or directly (since Darkstar 1.1.9.0).    
 The network speed is comparable with real 8010's for workstations and servers (i.e. slow as in the 80's)
 (Darkstar running in average at 100~130% speed according to the status line). For reliable network connections,
 the option `ether.useDarkstarWorkaround` should be set to `true` (see above) and the (internal
@@ -636,19 +663,21 @@ be set to a value between 50 to 75 for throttling Dodo's transmission rate, depe
 Setting time from network at 0937 does not work for unknown reasons,
 so setting Dodo's `authSkipTimestampChecks` configuration parameter to `true` is
 required for authentication with CHS/Auth and accessing the XNS network.    
-Besides this, using Dodo file and print services with Darkstar works for Viewpoint 2.0.6 and Star OS 5.0. (Star OS 5.0
+Besides this, using Dodo file and print services with Darkstar works for Viewpoint 2.0.6, Star OS 5.0 and Interlisp-D (Star OS 5.0
 can be installed on Darkstar from the floppy set [Star-4.3.zip](http://bitsavers.org/bits/Xerox/8010/Star-4.3.zip) at
 Bitsavers, which contains version 5.0 despite the name)    
 Using file services with Star OS 5.0 may be a bit unreliable, as some aspects of version 4 for the Filing protocol had to
 be reconstructed from courier data streams issued by Star OS (resp. guessed for response structures), because the `Filing4.cr`
 files found in the internet assume some structures to be same as in newer filing versions, which is clearly wrong
 in certain cases. Some operations still may not work, but important things do.    
+Using Interlisp-D with Darkstar requires further low-level tweaks to the SPP configuration (see the sample `machine.cfg`
+in the file `dist.zip`).     
 Remark: Darkstar version 1.1.0.0 initially had a broken network support, as ethernet packets are sent over the network
 but received packets are not relayed to the emulator (the necessary line appears to have been removed accidentally
 along with some logging line cleanups during commit "Small tweaks, updated readme"). Darkstar version 1.0.0.1
 as well as the updated version 1.1.0.0 (of 2020-11-18) have a working network interface, so these versions should be
-used if networking is intended.
-
+used if networking is intended. Using Darkstar version 1.1.9.0 is however recommended, as it allows direct connections
+to the NetHub (instead of going through the NetHubGateway).
 
 
 ### Bibliography
@@ -674,6 +703,12 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2022-09-18 - Support for Interlisp-D    
+-- FS: Courier procs 'retrieveBytes' (impl.) and 'changeControls' (dummy)    
+-- PS: extended IP-to-PS transformation for Interlisp-D-style IP usage    
+-- PS: escape cmd/shell-relevant chars when calling PS postprocessor    
+-- SPP: prevent ingoing 'resource-limit' error packets from closing SPP connections
 
 - 2022-05-11    
 -- removed option `strongKeysAsSpecified`    
