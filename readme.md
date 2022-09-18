@@ -653,7 +653,7 @@ request.
 Other XNS programs in BSD 4.3 were not tested so far.
 
 - [Darkstar](https://github.com/livingcomputermuseum/Darkstar) (8010 emulator version 1.0.0.1 by Josh Dersch / Living Computer Museum)    
-Tested under Windows-10, Darkstar running Viewpoint 2.0.6, Star OS 5.0 or Interlisp-D (Harmony, Lyric or Medley 1.0 releases),
+Tested under Windows-10, Darkstar running Viewpoint 2.0.6, Star OS 5.0 or Interlisp-D (Lyric or Medley 1.0 releases),
 connected either with NetHubGateway (for Darkstar 1.0.0.1) or directly (since Darkstar 1.1.9.0).    
 The network speed is comparable with real 8010's for workstations and servers (i.e. slow as in the 80's)
 (Darkstar running in average at 100~130% speed according to the status line). For reliable network connections,
