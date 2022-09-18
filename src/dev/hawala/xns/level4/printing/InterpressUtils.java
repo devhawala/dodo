@@ -294,7 +294,7 @@ public class InterpressUtils {
 		boolean lastWasDosaveSimpleBody = false;
 		boolean awaitTRANS = false;
 		boolean fixNextTRANSLATE = false;
-		boolean fixNextCONCAT = false;
+		boolean fixNextCONCATs = false;
 		Stack<Integer> doSaveSimpleBodyLevels = new Stack<>();
 		doSaveSimpleBodyLevels.push(-1);
 		boolean lastWasCorrect = false;
@@ -375,17 +375,19 @@ public class InterpressUtils {
 						//                                   %   2 MUL 0 TRANSLATE CONCAT -- double x, create translation and combine with original
 						//     8877943 524288 DIV SCALE
 						//     CONCATT                       % instead of changing the bitmap transformation: change the imaging transformation
-						if (fixNextCONCAT && "CONCAT".equals(keyword)) {
+						if (fixNextCONCATs && "CONCAT".equals(keyword)) {
 							dest.printf("%sCONCATT\n", sep);
 							sep = indent;
-							fixNextCONCAT = false;
+							// more CONCAT may come before the pixel map
+							// but/and these also lead to misunderstanding between Interlisp-D and IP2PS:
+							//fixNextCONCATs = false;
 							tokenType = ipScanner.next();
 							continue;
 						}
 						if (fixNextTRANSLATE && "TRANSLATE".equals(keyword)) {
 							dest.printf("%sTRANSLATE 6 1 ROLL DUP 7 6 ROLL 2 MUL 0 TRANSLATE CONCAT\n", sep);
 							sep = indent;
-							fixNextCONCAT = true;
+							fixNextCONCATs = true;
 							fixNextTRANSLATE = false;
 							tokenType = ipScanner.next();
 							continue;
@@ -420,7 +422,7 @@ public class InterpressUtils {
 							tokenType = ipScanner.next();
 							awaitTRANS = false;
 							fixNextTRANSLATE = false;
-							fixNextCONCAT = false;
+							fixNextCONCATs = false;
 							continue;
 						}
 
@@ -680,6 +682,7 @@ public class InterpressUtils {
 									// output the ps replacement for PacketPixelVector
 									dest.printf("%s[%d %d [<> () ] ]\n", sep, 1, 16);
 									sep = indent;
+									fixNextCONCATs = false;
 									
 									// create and buffer the pixel string for later usage
 									StringBuilder sb = new StringBuilder();
@@ -699,7 +702,7 @@ public class InterpressUtils {
 									}
 									lastPackedPixelVector = sb.toString();
 									
-									// proceed with next token 
+									// proceed with next token
 									tokenType = ipScanner.next();
 									continue;
 								}
@@ -746,6 +749,7 @@ public class InterpressUtils {
 								// output the ps replacement for PacketPixelVector
 								dest.printf("%s[%d %d [<> () ] ]\n", sep, bitsPerPixel, pixelsPerLine);
 								sep = indent;
+								fixNextCONCATs = false;
 								
 								// create and buffer the pixel string for later usage
 								StringBuilder sb = new StringBuilder();

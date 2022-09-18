@@ -608,6 +608,41 @@ public class Printing3Impl {
 		}
 	}
 	
+	private static String escapeForCommandline(String txt) {
+		return txt
+				.replaceAll("!",   "!ex") // EXclamation mark
+				
+				.replaceAll("\"",  "!qd") // Quote Double
+				.replaceAll("'",   "!qs") // Quote Single
+				
+				.replaceAll("<",   "!lt") // Less Than
+				.replaceAll(">",   "!gt") // Greater Than
+				
+				.replaceAll("\\{", "!cl") // Curly Left
+				.replaceAll("}",   "!cr") // Curly Right
+				
+				.replaceAll("\\[", "!sl") // Square Left
+				.replaceAll("]",   "!sr") // Square right
+				
+				.replaceAll("\\(", "!pl") // Paren Left
+				.replaceAll("\\)", "!pr") // Paren Right
+				
+				.replaceAll("/",   "!sf") // Slash Forward
+				.replaceAll("\\\\","!sb") // Slash Backward
+				
+				.replaceAll(":",   "!cf") // Colon Full
+				.replaceAll(";",   "!cs") // Colon Semi
+
+				.replaceAll("\\*", "!st") // STar
+				.replaceAll("\\$", "!dl") // DoLlar
+				.replaceAll("&",   "!am") // AMpersand
+				.replaceAll("\\?", "!qm") // Question Mark
+				.replaceAll("#",   "!hm") // Hash Mark
+				.replaceAll("\\|", "!pp") // PiPe
+				.replaceAll("%",   "!pt") // Percent
+				;
+	}
+	
 	private static class JobProcessor implements Runnable {
 		private final String jobName;
 		private final String ipFilename;
@@ -686,8 +721,8 @@ public class Printing3Impl {
 								psTextFilename,
 								this.paperSize.toString(),
 								this.jobName,
-								this.printObjectName,
-								this.senderName)
+								escapeForCommandline(this.printObjectName),
+								escapeForCommandline(this.senderName))
 							.redirectErrorStream(true);
 						Process p = pb.start();
 						String psTextFilenameProcessLog = filenameBase + ".ps.log";
