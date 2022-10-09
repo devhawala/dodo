@@ -65,7 +65,7 @@ public class EchoResponder implements iIDPReceiver {
 		for (int i = 2; i < contentLen; i++) {
 			response.wrByte(i, idp.rdByte(i));
 		}
-		response.setPayloadLength(Math.min(2, contentLen));
+		response.setPayloadLength(Math.max(2, contentLen));
 		this.sender.send(response);
 		
 	}

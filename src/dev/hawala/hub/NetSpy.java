@@ -26,8 +26,11 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.hub;
 
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.net.UnknownHostException;
 
@@ -63,6 +66,26 @@ public class NetSpy {
 	 * @throws UnknownHostException 
 	 */
 	public static void main(String[] args) throws UnknownHostException, IOException {
+		OutputStream pcapDump = null;
+		if (args.length > 0) {
+			String pcapDumpFilename = args[0];
+			try {
+				pcapDump = new FileOutputStream(pcapDumpFilename);
+				logf("\n++\n++ logging packets in PCap format to: %s\n++\n", pcapDumpFilename);
+				
+				pcapWrUInt32(pcapDump, 0xA1B2C3D4);    // magic number
+				pcapWrUInt16(pcapDump, 2);             // major version number
+				pcapWrUInt16(pcapDump, 4);             // minor version number
+				pcapWrUInt32(pcapDump, 0);             // GMT to local correction
+				pcapWrUInt32(pcapDump, 0);             // accuracy of timestamps
+				pcapWrUInt32(pcapDump, buffer.length); // max length of captured packets, in octets
+				pcapWrUInt32(pcapDump, 1);             // data link type (1 == ethernet)
+			} catch (FileNotFoundException e) {
+				logf("invalid PCap dump filename given: '" + pcapDumpFilename + "'\n");
+			}
+			
+		}
+		
 		Socket s = new Socket("localhost", HUB_SOCKET);
 		s.setTcpNoDelay(true);
 		
@@ -95,6 +118,16 @@ public class NetSpy {
 			long nanoTs = System.nanoTime();
 			logf("\n[%d] => packet length: %d -- at %9d.%06d ms\n", pNum, bufLen, nanoTs / 1000000, nanoTs % 1000000);
 			dumpPacket();
+			
+			if (pcapDump != null) {
+				long milliTs = System.currentTimeMillis();
+				pcapWrUInt32(pcapDump, (int)((milliTs / 1000) & 0xFFFFFFFF)); // timestamp seconds
+				pcapWrUInt32(pcapDump, (int)((nanoTs / 1000) % 1_000_000));   // timestamp microseconds
+				pcapWrUInt32(pcapDump, bufLen);                               // number off octets of packet data saved
+				pcapWrUInt32(pcapDump, bufLen);                               // actual length of packet
+				pcapWrPacket(pcapDump);
+				pcapDump.flush();
+			}
 		}
 		
 		is.close();
@@ -300,5 +333,27 @@ public class NetSpy {
 		String filler = (gap == 0) ? "" : blanks.substring(0, (16 - gap) * 3);
 		logf("%s%s\n", filler, sb.toString());
 		return isTimeReq;
+	}
+	
+	private static void pcapWrByte(OutputStream os, int value) throws IOException {
+		os.write((byte)value);
+	}
+	
+	private static void pcapWrUInt16(OutputStream os, int value) throws IOException {
+		pcapWrByte(os, (value >> 8) & 0xFF);
+		pcapWrByte(os, value & 0xFF);
+	}
+	
+	private static void pcapWrUInt32(OutputStream os, int value) throws IOException {
+		pcapWrByte(os, (value >> 24) & 0xFF);
+		pcapWrByte(os, (value >> 16) & 0xFF);
+		pcapWrByte(os, (value >> 8) & 0xFF);
+		pcapWrByte(os, value & 0xFF);
+	}
+	
+	private static void pcapWrPacket(OutputStream os) throws IOException {
+		for (int i = 0; i < bufLen; i++) {
+			pcapWrByte(os, buffer[i]);
+		}
 	}
 }

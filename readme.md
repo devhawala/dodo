@@ -526,11 +526,18 @@ The `main`-class for NetSpy is:
 	
 and is started with:
 
-`java -cp dodoserver-and-nethub.jar dev.hawala.hub.NetSpy` 	
+`java -cp dodoserver-and-nethub.jar dev.hawala.hub.NetSpy` [pcap-logfile]
 
 The sample Windows batch file is: `run-netspy.cmd`
 
-This program has no command line parameters and connects to port 3333 on `localhost`.
+This program always connects to port 3333 on `localhost`.
+
+If the optional commandline parameter is given, it specifies the target filename where to additionally
+log all packets in the LibPCap format. This output file can be used for further offline analysis.    
+For example creating such a dump and writing the content can for example be done with:
+
+	java -cp dodoserver-and-nethub.jar dev.hawala.hub.NetSpy netspy-pcap.dump
+	tcpdump -ttttnn -r netspy-pcap.dump
 
 #### FsUtil
 
@@ -703,6 +710,10 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2022-10-09    
+-- Echo: bugfix (echo-ed packets now contain the content of the request packet)    
+-- NetSpy: now optionally also log packets into a file in LibPCap format
 
 - 2022-09-18 - Support for Interlisp-D    
 -- FS: Courier procs 'retrieveBytes' (impl.) and 'changeControls' (dummy)    
