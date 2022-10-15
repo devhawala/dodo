@@ -711,6 +711,9 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2022-10-15    
+-- FS: implemented Courier proc 'replaceBytes' (for Interlisp-D/Medley)
+
 - 2022-10-09    
 -- Echo: bugfix (echo-ed packets now contain the content of the request packet)    
 -- NetSpy: now optionally also log packets into a file in LibPCap format

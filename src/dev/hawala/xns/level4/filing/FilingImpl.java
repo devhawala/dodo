@@ -1559,7 +1559,118 @@ public class FilingImpl {
 	 *   = 23;
 	 */
 	private static void replaceBytes(ReplaceBytesParams params, RECORD results) {
-		notImplemented("replaceBytes", params);
+		logParams("replaceBytes", params);
+		
+		// check session
+		Session session = resolveSession(params.session);
+		Volume vol = session.getService().getVolume();
+		
+		// check specified file handle
+		Handle fileHandle = Handle.get(params.file);
+		if (fileHandle == null || fileHandle.isNullHandle()) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		FileEntry fe = fileHandle.getFe();
+		if (fe == null) {
+			new HandleErrorRecord(HandleProblem.nullDisallowed).raise();
+		}
+		
+		// get the byte range
+		long firstByte = params.range.firstByte.get();
+		long byteCount = params.range.count.get();
+		
+		// get the new size of the file => buffer size
+		long fileSize = fe.getDataSize();
+		if (firstByte == fileSize) {
+			firstByte = FilingCommon.END_OF_FILE;
+		}
+		if (firstByte == FilingCommon.END_OF_FILE) {
+			// append at end
+			fileSize += byteCount;
+		} else if (firstByte >= fileSize || (firstByte + byteCount) >= fileSize) {
+			// overwrite an area => range must be inside the file  
+			new RangeErrorRecord(ArgumentProblem.unreasonable).raise();
+		}
+		if (fileSize > (4*1024*2024)) {
+			new UndefinedErrorRecord(FilingCommon.UNDEFINEDERROR_FILE_TOO_LARGE).raise();
+		}
+		
+		// get the current file content
+		byte[] fileContent = new byte[(int)fileSize];
+		if (fe.getDataSize() > 0) {
+			try {
+				vol.retrieveContent(fe.getFileID(), stream -> {
+					int readPos = 0;
+					int readCount = Math.min(1024, fileContent.length - readPos);
+					int bytesRead;
+					try {
+						while(readCount > 0 && (bytesRead = stream.read(fileContent, readPos, readCount)) > 0) {
+							readPos += bytesRead;
+							readCount = Math.min(1024, fileContent.length - readPos);
+						}
+					} catch (IOException e) {
+						log("##  Filing.replaceBytes(), oldfile.read() => %s : %s\n", e.getClass().getName(), e.getMessage());
+						new TransferErrorRecord(TransferProblem.aborted).raise();
+					}
+				}, session.getUsername());
+			} catch (IOException e) {
+				log("##  Filing.replaceBytes(), vol.retrieveContent() => %s : %s\n", e.getClass().getName(), e.getMessage());
+				new TransferErrorRecord(TransferProblem.aborted).raise();
+			}
+		}
+		
+		// append/overwrite range in content buffer
+		try {
+			ByteContentSource source = new ByteContentSource(params.source);
+			int writePos = (firstByte == FilingCommon.END_OF_FILE) ? (int)fe.getDataSize() : (int)firstByte;
+			int remaining = (int)byteCount;
+			byte[] buffer = new byte[1024];
+			int bytesTransferred;
+			while((bytesTransferred = source.read(buffer)) > 0) {
+				for (int i = 0; i < bytesTransferred; i++) {
+					fileContent[writePos++] = buffer[i];
+					remaining--;
+				}
+			}
+			source.read(null); // terminate bulk transfer = release courier connection
+			if (remaining != 0) {
+				new RangeErrorRecord(ArgumentProblem.unreasonable).raise();
+			}
+		} catch (EndOfMessageException e) {
+			new ConnectionErrorRecord(ConnectionProblem.otherCallProblem).raise();
+			return;
+		}
+		
+		// write new file content
+		try {
+			iContentSource contentSource = new iContentSource() {
+				int readPos = 0;
+				@Override
+				public int read(byte[] buffer) {
+					if (buffer == null || readPos >= fileContent.length) {
+						readPos = fileContent.length;
+						return 0;
+					}
+					int bytesTransferred = 0;
+					while (bytesTransferred < buffer.length && readPos < fileContent.length) {
+						buffer[bytesTransferred++] = fileContent[readPos++];
+					}
+					return bytesTransferred;
+				}
+			};
+			Volume.Session modSession = vol.startModificationSession();
+			try {
+				modSession.replaceFileContent(fe, contentSource, session.getUsername());
+			} finally {
+				modSession.close();
+			}
+		} catch(Exception e) {
+			System.out.printf("!!! Exception: %s -- %s !!!\n", e.getClass().getName(), e.getMessage());
+			new SpaceErrorRecord(SpaceProblem.mediumFull).raise();
+		}
+		
+		// prolongate the sessions life if this took longer
+		session.continueUse();
 	}
 	
 	/*

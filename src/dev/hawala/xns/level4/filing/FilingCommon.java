@@ -88,6 +88,7 @@ public abstract class FilingCommon extends CrProgram {
 	public static final int UNDEFINEDERROR_UNIMPLEMENTED = 42; // unimplemented courier procedure
 	public static final int UNDEFINEDERROR_CANNOT_MODIFY_VOLUME = 43; // error while initiating a change to volume
 	public static final int UNDEFINEDERROR_ENCODE_ERROR = 44; // error while encoding some file value to courier
+	public static final int UNDEFINEDERROR_FILE_TOO_LARGE = 7000; // resulting filesize in replaceBytes too large
 	
 	/*
 	 * ************ TYPES AND CONSTANTS ************
@@ -757,6 +758,8 @@ public abstract class FilingCommon extends CrProgram {
 		private ByteRange() {}
 		public static ByteRange make() { return new ByteRange(); }
 	}
+	
+	public static final long END_OF_FILE = 0xFFFF_FFFFL; // 37777777777B (the comment above from a .cr file in the internet lacks a 7) 
 	
 	
 	/*

@@ -71,6 +71,12 @@ public class Session {
 		this.nextContinuanceDueMillisecs = System.currentTimeMillis() + this.continuanceDuranceMillisecs;
 		
 		this.username = this.userChsName.toString();
+		
+		this.logStatus("created");
+	}
+	
+	private void logStatus(String msg) {
+		// System.out.printf("+++++++++++++++++++++++++++++++++++++++++++++++++ Session 0x%08X :: %s\n", this.sessionId, msg);
 	}
 	
 	public Service getService() {
@@ -98,6 +104,7 @@ public class Session {
 	}
 
 	public synchronized int /* seconds */ continueUse() {
+		this.logStatus("continueUse");
 		this.disableClosing = false;
 		this.nextContinuanceDueMillisecs = System.currentTimeMillis() + this.continuanceDuranceMillisecs;
 		return this.continuanceDuranceMillisecs / 1000;
@@ -108,6 +115,7 @@ public class Session {
 	}
 	
 	public synchronized void close() {
+		this.logStatus("closed");
 		if (this.disableClosing) {
 			return;
 		}
