@@ -30,11 +30,14 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.function.Consumer;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
 import dev.hawala.xns.level4.filing.fs.FileEntry;
+import dev.hawala.xns.level4.filing.fs.Volume;
+import dev.hawala.xns.level4.filing.fs.Volume.Session;
 import dev.hawala.xns.level4.filing.fs.iContentSink;
 import dev.hawala.xns.level4.mailing.MailingCommon.MessageStatus;
 
@@ -195,7 +198,7 @@ public class MailboxEntry {
 	}
 	
 	/**
-	 * @return the cached status of the mail in thismailbox.
+	 * @return the cached status of the mail in this mailbox.
 	 */
 	public MessageStatus messageStatus() {
 		return this.messageStatus;
@@ -209,6 +212,29 @@ public class MailboxEntry {
 	public MailboxEntry messageStatus(MessageStatus status) {
 		this.messageStatus = status;
 		return this;
+	}
+	
+	/**
+	 * If the mailbox-entry is in status 'new', change it to state 'received'.
+	 * 
+	 * @param mailsVolume the filing volume where the mail resides
+	 * @param serviceNameFqn the xns name of the mail service
+	 */
+	public void moveFromNewToReceived(Volume mailsVolume, String serviceNameFqn) {
+		if (getMailStatus(this.inboxEntry) != MessageStatus.newMail) {
+			return;
+		}
+		String oldName = this.inboxEntry.getName();
+		String newName = oldName.substring(0, oldName.length() - MailService.INBOX_SUFFIX_NEW.length()) + MailService.INBOX_SUFFIX_RECEIVED;
+		try (Session session = mailsVolume.startModificationSession()) {
+			session.updateFileAttributes(
+				this.inboxEntry,
+				Arrays.asList( fe -> fe.setName(newName) ),
+				serviceNameFqn);
+			this.messageStatus = MessageStatus.received;
+		} catch (Exception e) {
+			// ignored, mail keeps the status, whatever is is currently
+		}
 	}
 	
 	/**

@@ -29,6 +29,7 @@ package dev.hawala.xns.level4.mailing;
 import java.util.List;
 
 import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
+import dev.hawala.xns.level4.mailing.MailingCommon.MessageStatus;
 
 /**
  * Representation for a Session for managing a mailbox by a user agent,
@@ -163,6 +164,19 @@ public class MailSession {
 	 */
 	public int getMailCount() {
 		return this.inboxMails.size();
+	}
+	
+	/**
+	 * @return the number of new entries in the mail list of this session.
+	 */
+	public int getNewMailCount() {
+		int newCount = 0;
+		for (MailboxEntry mail :  this.inboxMails) {
+		if (mail != null && mail.messageStatus() == MessageStatus.newMail) {
+				newCount++;
+			}
+		}
+		return newCount;
 	}
 	
 	/**

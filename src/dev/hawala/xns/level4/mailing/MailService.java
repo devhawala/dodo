@@ -535,8 +535,21 @@ public class MailService {
 			return new TransferErrorRecord(TransferProblem.aborted);
 		}
 		
+		// remove the "new" flag from the mail, if present
+		mail.moveFromNewToReceived(this.mailsVolume, this.serviceNameFqn);
+		
 		// successfully done
 		return null;
+	}
+	
+	/**
+	 * If the mailbox-entry is in status 'new', change it to state 'received'.
+	 * 
+	 * @param mail the mailbox entry to update 
+	 */
+	public void moveFromNewToReceived(MailboxEntry mail) {
+		if (mail == null) { return; }
+		mail.moveFromNewToReceived(this.mailsVolume, this.serviceNameFqn);
 	}
 	
 	/**

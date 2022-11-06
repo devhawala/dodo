@@ -52,7 +52,7 @@ public class STRING implements iWireData {
 	
 	private final int maxLength;
 	
-	private String str;
+	private String str = "";
 	
 	protected STRING(int maxLen) {
 		this.maxLength = maxLen;

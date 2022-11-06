@@ -367,12 +367,12 @@ public class InterpressUtils {
 						//   DOSAVESIMPLEBODY
 						//     TRANS
 						//     369 736 1 1 1
-						//     -369 0 TRANSLATE
-						//     369 2 MUL 0 TRANSLATE CONCAT  % fix wrong translation by translating twice in the other direction, by:
-						//                                   %   6 1 ROLL -- bring 369 to top
-						//                                   %   DUP      -- duplicate 369
-						//                                   %   7 6 ROLL -- bring duplicate in front again
-						//                                   %   2 MUL 0 TRANSLATE CONCAT -- double x, create translation and combine with original
+						//     369 0 TRANSLATE               % fix wrong translation by translating twice in the other direction,
+						//                                   % by replacing the TRANSLATE token with:
+						//                                   %   EXCH      -- bring 369 to top (exchange arguments to TRANSLATE)
+						//                                   %   -1 MUL    -- negate value, i.e. reverse shift direction
+						//                                   %   EXCH      -- bring both arguments to TRANSLATE on the stack in the right order again
+						//                                   %   TRANSLATE -- do the intended translation
 						//     8877943 524288 DIV SCALE
 						//     CONCATT                       % instead of changing the bitmap transformation: change the imaging transformation
 						if (fixNextCONCATs && "CONCAT".equals(keyword)) {
@@ -385,7 +385,7 @@ public class InterpressUtils {
 							continue;
 						}
 						if (fixNextTRANSLATE && "TRANSLATE".equals(keyword)) {
-							dest.printf("%sTRANSLATE 6 1 ROLL DUP 7 6 ROLL 2 MUL 0 TRANSLATE CONCAT\n", sep);
+							dest.printf("%sEXCH -1 MUL EXCH TRANSLATE\n", sep);
 							sep = indent;
 							fixNextCONCATs = true;
 							fixNextTRANSLATE = false;
@@ -649,7 +649,7 @@ public class InterpressUtils {
 								String identifier = new String(seqData);
 								if ("XC82-0-0".equals(identifier)) {
 									identifier = "XC1-1-1"; // map XDE's preferred charset to one known by the IP-to-PS processor
-								} else if ("XEROX".equals(identifier) && pageNo >= 0 && !dest.mayClose()) {
+								} else if (("XEROX".equals(identifier) || "Xerox".equals(identifier)) && pageNo >= 0 && !dest.mayClose()) {
 									// possible begin in-page font definition, ends with FSET
 									dest = new InterceptingWriter(dest);
 								}
@@ -837,7 +837,7 @@ public class InterpressUtils {
 		boolean inFontDef = false;
 		String line;
 		while((line = rdr.readLine()) != null) {
-			if (line.endsWith("/XEROX")) {
+			if (line.endsWith("/XEROX") || line.endsWith("/Xerox")) {
 				fontDef.clear();
 				fontDef.add(line.trim());
 				inFontDef = true;

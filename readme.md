@@ -711,6 +711,11 @@ still missing, like Mail protocols)
 
 ### Development history
 
+- 2022-11-06    
+-- MS: refined Courier structures based on the definitions in the Medley LAFITE mailclient (see [interlisp.org](https://github.com/Interlisp)-project    
+-- MS: fixes to implementation of new mail protocols (MailTransport 5 and Inbasket 2)    
+-- PS: improved the work-around for Interlisp-D produced Interpress bitmaps
+
 - 2022-10-15    
 -- FS: implemented Courier proc 'replaceBytes' (for Interlisp-D/Medley)
 

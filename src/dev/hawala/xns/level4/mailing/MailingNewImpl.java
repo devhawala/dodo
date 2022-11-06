@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.UnaryOperator;
 
+import dev.hawala.xns.level3.courier.CHOICE;
 import dev.hawala.xns.level3.courier.CourierRegistry;
 import dev.hawala.xns.level3.courier.ErrorRECORD;
 import dev.hawala.xns.level3.courier.RECORD;
@@ -62,66 +63,83 @@ import dev.hawala.xns.level4.filing.FilingCommon.Attribute;
 import dev.hawala.xns.level4.filing.FilingCommon.SerializedFile;
 import dev.hawala.xns.level4.filing.fs.iContentSource;
 import dev.hawala.xns.level4.mailing.Inbasket1.State;
-import dev.hawala.xns.level4.mailing.Inbasket2.GetMailPartParams;
+import dev.hawala.xns.level4.mailing.Inbasket2.ChangeBodyPartStatusParams;
+import dev.hawala.xns.level4.mailing.Inbasket2.ChangeBodyPartStatusResults;
+import dev.hawala.xns.level4.mailing.Inbasket2.DeleteParams;
 import dev.hawala.xns.level4.mailing.Inbasket2.GetNextMailParams;
 import dev.hawala.xns.level4.mailing.Inbasket2.GetNextMailResults;
-import dev.hawala.xns.level4.mailing.Inbasket2.HandleMailPartsParams;
-import dev.hawala.xns.level4.mailing.Inbasket2.HandleMailPartsResults;
-import dev.hawala.xns.level4.mailing.Inbasket2.InbasketPollParams;
-import dev.hawala.xns.level4.mailing.Inbasket2.InbasketPollResults;
 import dev.hawala.xns.level4.mailing.Inbasket2.LogoffParams;
 import dev.hawala.xns.level4.mailing.Inbasket2.LogonParams;
 import dev.hawala.xns.level4.mailing.Inbasket2.LogonResults;
+import dev.hawala.xns.level4.mailing.Inbasket2.MailCheckParams;
+import dev.hawala.xns.level4.mailing.Inbasket2.MailCheckResults;
+import dev.hawala.xns.level4.mailing.Inbasket2.MailPollParams;
+import dev.hawala.xns.level4.mailing.Inbasket2.MailPollResults;
 import dev.hawala.xns.level4.mailing.Inbasket2.MiMailPart;
 import dev.hawala.xns.level4.mailing.Inbasket2.MiMailParts;
 import dev.hawala.xns.level4.mailing.Inbasket2.MiMailServer;
 import dev.hawala.xns.level4.mailing.Inbasket2.MiSender;
 import dev.hawala.xns.level4.mailing.Inbasket2.MiTotalPartsLength;
 import dev.hawala.xns.level4.mailing.Inbasket2.MiWhatever;
+import dev.hawala.xns.level4.mailing.Inbasket2.OtherErrorRecord;
+import dev.hawala.xns.level4.mailing.Inbasket2.OtherProblem;
+import dev.hawala.xns.level4.mailing.Inbasket2.RetrieveBodyPartsParams;
 import dev.hawala.xns.level4.mailing.MailTransport4.ServiceErrorRecord;
-import dev.hawala.xns.level4.mailing.MailTransport5.ListOfThreePartNameWithTag;
-import dev.hawala.xns.level4.mailing.MailTransport5.PostBeginParams;
-import dev.hawala.xns.level4.mailing.MailTransport5.PostBeginResults;
-import dev.hawala.xns.level4.mailing.MailTransport5.PostEndParams;
-import dev.hawala.xns.level4.mailing.MailTransport5.PostEndResults;
-import dev.hawala.xns.level4.mailing.MailTransport5.PostMailPartParams;
+import dev.hawala.xns.level4.mailing.MailTransport4.SessionErrorRecord;
+import dev.hawala.xns.level4.mailing.MailTransport4.UndefinedErrorRecord;
+import dev.hawala.xns.level4.mailing.MailTransport5.BeginPostParams;
+import dev.hawala.xns.level4.mailing.MailTransport5.BeginPostResults;
+import dev.hawala.xns.level4.mailing.MailTransport5.EndPostParams;
+import dev.hawala.xns.level4.mailing.MailTransport5.EndPostResults;
+import dev.hawala.xns.level4.mailing.MailTransport5.InvalidName;
+import dev.hawala.xns.level4.mailing.MailTransport5.InvalidReason;
+import dev.hawala.xns.level4.mailing.MailTransport5.InvalidRecipientsRecord;
+import dev.hawala.xns.level4.mailing.MailTransport5.ListOfRName;
+import dev.hawala.xns.level4.mailing.MailTransport5.ListOfSimpleRName;
+import dev.hawala.xns.level4.mailing.MailTransport5.PostOneBodyPartParams;
+import dev.hawala.xns.level4.mailing.MailTransport5.RNameType;
+import dev.hawala.xns.level4.mailing.MailTransport5.Recipient;
+import dev.hawala.xns.level4.mailing.MailTransport5.ReportType;
 import dev.hawala.xns.level4.mailing.MailTransport5.ServerPollResults;
-import dev.hawala.xns.level4.mailing.MailTransport5.ThreePartNameWithTag;
-import dev.hawala.xns.level4.mailing.MailTransport5.ThreePartNameWithTagAndDateString;
+import dev.hawala.xns.level4.mailing.MailTransport5.SimpleIpMessageID;
+import dev.hawala.xns.level4.mailing.MailTransport5.SimpleRName;
 import dev.hawala.xns.level4.mailing.MailingCommon.AccessErrorRecord;
 import dev.hawala.xns.level4.mailing.MailingCommon.AccessProblem;
 import dev.hawala.xns.level4.mailing.MailingCommon.EncodedList;
 import dev.hawala.xns.level4.mailing.MailingCommon.MessageID;
 import dev.hawala.xns.level4.mailing.MailingCommon.NameList;
 import dev.hawala.xns.level4.mailing.MailingCommon.ServiceProblem;
+import dev.hawala.xns.level4.mailing.MailingCommon.SessionProblem;
 
 /**
  * Implementation of the Courier programs MailTransport5 and
  * Inbasket2, providing mailing support for GlobalView.
  * 
  * The support for GlobalView mailing is restricted in many ways.
+ * 
  * First: the courier definitions (structures, constants, procedures)
- * defined here are incomplete (e.g. errors codes that should be produced
- * are simply unknown) and partially possibly wrong.
+ * defined here may be incomplete and partially possibly wrong.
+ * 
  * Second: the implementation mimics the behavior as expected by resp.
- * observed on GlobalView (specifically GVWin 2.1), so other clients
- * using these mail services versions (should these be available) may
- * be unable to use this implementation.
+ * observed on GlobalView (specifically GVWin 2.1) and Interlisp-D
+ * (specifically Medley 3.51), so other clients using these mail services
+ * versions (should these be available) may be unable to use this implementation.
+ * 
  * Third: the newer mailing protocol implementation uses the internal mail
- * service used for the initial (older) mailing protocol implementation, so
- * mails are always stored by the mail service with the old (VP 2.0 / XDE)
- * compatible feature set, so newer mail features (like "importance" or all the
+ * service used for the initial implementation of the (older) mailing protocol,
+ * so mails are always stored by the mail service with the old (VP 2.0 / XDE)
+ * compatible feature set: newer mail features (like "importance" or all the
  * mail properties visible when switching to "Show fields: ALL" in GlobalView)
  * are discarded when a mail is sent from GlobalView and will not be present (i.e.
  * have default values) when receiving mails in GlobalView.
+ * 
  * Fourth: some behavior of newer procedures is forced to conform to the use-cases
  * of ViewPoint/XDE, for example it seems to be possible to delete single mail parts
  * with the newer protocols, but this implementation simply deletes the complete
- * mail when the procedure 3 (named "handleMailParts" here, not knowing the real name
- * and intended functionality defined by Xerox) is invoked.
+ * mail when the procedure 3 (changeBodyPartsStatus) is invoked.
  * 
- * So a mail posted by GlobalView is "scaled down" to the old functionality present
- * in ViewPoint/XDE.
+ * So a mail posted by GlobalView or Interlisp-D is "scaled down" to the old functionality
+ * present in ViewPoint/XDE.
  * 
  * When mails are requested by GlobalView using the Inbasket2-protocol, the
  * mails are "received" internally with the old format and transformed on the
@@ -169,8 +187,8 @@ public class MailingNewImpl {
 	 * @param network the network number serviced by the XNS services
 	 * @param machine the network number of the machine hosting the mail service
 	 * @param chsDatabase the Clearinghouse database to be used by the mail service
-	 * @param mailboxesVolumePath the OS file system path of the filing volume where
-	 *   the mail files will be stored.
+	 * @param existingMailService the mail-service to use (already created when
+	 *   instantiating the "old" mail implementation
 	 * @return {@code true} if the initialization was successful
 	 */
 	public static boolean init(long network, long machine, ChsDatabase chsDatabase, MailService existingMailService) {
@@ -208,18 +226,21 @@ public class MailingNewImpl {
 		// create the MailTransport version 5 Courier program
 		progMailTransport5 = new MailTransport5().setLogParamsAndResults(false);
 		progMailTransport5.ServerPoll.use(MailingNewImpl::transport5_serverPoll);
-		progMailTransport5.PostBegin.use(MailingNewImpl::transport5_postBegin);
-		progMailTransport5.PostMailPart.use(MailingNewImpl::transport5_postMailPart);
-		progMailTransport5.PostEnd.use(MailingNewImpl::transport5_postEnd);
+		progMailTransport5.BeginPost.use(MailingNewImpl::transport5_beginPost);
+		progMailTransport5.PostOneBodyPart.use(MailingNewImpl::transport5_postOneBodyPart);
+		progMailTransport5.EndPost.use(MailingNewImpl::transport5_endPost);
+		
 		
 		// create the Inbasket version 2 Courier program
 		progInbasket2 = new Inbasket2().setLogParamsAndResults(false);
-		progInbasket2.InbasketPoll.use(MailingNewImpl::inbasket2_inbasketPoll);
+		progInbasket2.MailPoll.use(MailingNewImpl::inbasket2_mailPoll);
 		progInbasket2.Logon.use(MailingNewImpl::inbasket2_logon);
 		progInbasket2.Logoff.use(MailingNewImpl::inbasket2_logoff);
 		progInbasket2.GetNextMail.use(MailingNewImpl::inbasket2_getNextMail);
-		progInbasket2.GetMailPart.use(MailingNewImpl::inbasket2_getMailPart);
-		progInbasket2.HandleMailParts.use(MailingNewImpl::inbasket2_handleMailParts);;
+		progInbasket2.RetrieveBodyParts.use(MailingNewImpl::inbasket2_retrieveBodyParts);
+		progInbasket2.ChangeBodyPartStatus.use(MailingNewImpl::inbasket2_changeBodyPartStatus);
+		progInbasket2.MailCheck.use(MailingNewImpl::inbasket2_mailCheck);
+		progInbasket2.Delete.use(MailingNewImpl::inbasket2_delete);
 		
 		// register the programs with the Courier dispatcher
 		CourierRegistry.register(progMailTransport5);
@@ -268,11 +289,12 @@ public class MailingNewImpl {
 		private final Time mailPostTime = Time.make().fromUnixMillisecs(System.currentTimeMillis());
 		
 		private ThreePartName senderName = null;
-		private ListOfThreePartNameWithTag toNames = null;
-		private ListOfThreePartNameWithTag ccNames = null;
+		private ListOfSimpleRName toNames = null;
+		private ListOfSimpleRName ccNames = null;
 		@SuppressWarnings("unused")
-		private ListOfThreePartNameWithTag replyToNames = null;
+		private ListOfSimpleRName replyToNames = null;
 		
+		private Map<String, ThreePartName> allRecipients = new HashMap<>();
 		private List<ThreePartName> recipients = new ArrayList<>();
 		
 		private STRING subject = null;
@@ -326,15 +348,15 @@ public class MailingNewImpl {
 	}
 	
 	/*
-	 * postBegin
-	 *  = procedure 1
+	 * beginPost
+	 *   = procedure 1
 	 */
-	private static void transport5_postBegin(PostBeginParams params, PostBeginResults results) {
+	private static void transport5_beginPost(BeginPostParams params,BeginPostResults results) {
 		// log ingoing data
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			params.append(sb, "  ", "params");
-			logf("##\n## procedure MailingNewImpl.transport5_postBegin() -- params\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.transport5_beginPost() -- params\n%s\n##\n", sb.toString());
 		}
 		
 		// check the credentials:
@@ -342,8 +364,8 @@ public class MailingNewImpl {
 		// - not for this specific mail service (which the 1st mail service name in the clearinghouse database)
 		// - so use the generic nameconversationKey
 		// - and: only the machine id for *this* mail service works...
-		Credentials credentials = params.getCredentials();
-		Verifier verifier = params.getVerifier();
+		Credentials credentials = params.credentials;
+		Verifier verifier = params.verifier;
 		StrongVerifier decodedVerifier = StrongVerifier.make();
 		int[] decodedConversationKey = new int[4];
 		ThreePartName senderName = mailService.checkCredentials( // throws an exception on invalid credentials
@@ -358,12 +380,53 @@ public class MailingNewImpl {
 		PostMailTransaction mailTransaction = createMailTransaction();
 		mailTransaction.senderName = senderName; // just to be sure we have some sender name
 		
-		// set return values
-		results.mailTransaction.set(mailTransaction.transactionId);
+		// check recipients
+		List<InvalidName> invalidNames = new ArrayList<>();
+		ChsDatabase chs = mailService.getChsDatabase();
+		for (int i = 0; i < params.postingData.recipients.size(); i++) {
+			Recipient recipient = params.postingData.recipients.get(i);
+			if (recipient.name.getChoice() != RNameType.xns) {
+				InvalidName invalidName = InvalidName.make();
+				invalidName.id.set(recipient.recipientId.get());
+				invalidName.reason.set(InvalidReason.IllegalName);
+				if (recipient.report.get() == ReportType.none ) {
+					invalidNames.add(invalidName);
+				} else {
+					results.invalidNames.add(invalidName);
+				}
+				continue;
+			}
+			ThreePartName rcpt = (ThreePartName)recipient.name.getContent();
+			String rcptFqn = chs.resolveName(rcpt);
+			List<Name> dlMemberNames;
+			if (rcptFqn != null && mailService.hasMailbox(rcptFqn)) {
+				Name rcptName = Name.make();
+				rcptName.from(rcptFqn);
+				mailTransaction.allRecipients.put(rcptFqn.toLowerCase(), rcptName);
+			} else if (rcptFqn != null && (dlMemberNames = MailingOldImpl.getUserGroupMembersLcFqns(rcptFqn)) != null) {
+				for (Name dlMember : dlMemberNames) {
+					mailTransaction.allRecipients.put(dlMember.getString().toLowerCase(), dlMember);
+				}
+			} else {
+				InvalidName invalidName = InvalidName.make();
+				invalidName.id.set(recipient.recipientId.get());
+				invalidName.reason.set(InvalidReason.NoSuchRecipient);
+				if (recipient.report.get() == ReportType.none ) {
+					invalidNames.add(invalidName);
+				} else {
+					results.invalidNames.add(invalidName);
+				}
+			}
+		}
+		if (!invalidNames.isEmpty()) {
+			new InvalidRecipientsRecord(invalidNames).raise();
+		}
 		
+		// set return values
+		results.session.token.set(mailTransaction.transactionId);
 		if (credentials.type.get() == CredentialsType.simple) {
 			// return the initiators verifier 
-			results.verifier.add().set(verifier.get(0).get());
+			results.session.verifier.add().set(verifier.get(0).get());
 		} else {
 			// create a strong verifier based on the received verifier
 			int[] conversationKey = decodedConversationKey; // session.getConversationKey();
@@ -393,7 +456,7 @@ public class MailingNewImpl {
 					int[] sourceBytes = writer.getWords();
 					int[] encrypted = StrongAuthUtils.xnsDesEncrypt(conversationKey, sourceBytes);
 					for (int i = 0; i < encrypted.length; i++) {
-						results.verifier.add().set(encrypted[i]);
+						results.session.verifier.add().set(encrypted[i]);
 					}
 				} catch (Exception e) {
 					// log and set no verifier => let the invoker decide if acceptable
@@ -402,32 +465,31 @@ public class MailingNewImpl {
 			}
 		}
 		
-		results.unknown0.set(0);
-		
 		// log outgoing data
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			results.append(sb, "  ", "results");
-			logf("##\n## procedure MailingNewImpl.transport5_postBegin() -- results\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.transport5_beginPost() -- results\n%s\n##\n", sb.toString());
 		}
+		
 	}
 
 	/*
-	 * postMailPart
+	 * postOneBodyPart
 	 *  = procedure 8
 	 */
-	private static void transport5_postMailPart(PostMailPartParams params, RECORD results) {
+	private static void transport5_postOneBodyPart(PostOneBodyPartParams params, RECORD results) {
 		// log ingoing data
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			params.append(sb, "  ", "params");
-			logf("##\n## procedure MailingNewImpl.transport5_postMailPart() -- params\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.transport5_postOneBodyPart() -- params\n%s\n##\n", sb.toString());
 		}
 		
-		// get the transaction, raising a generic courier exception as we do not know the real protocol...
-		PostMailTransaction mt = getMailTransaction(params.mailTransaction.get());
+		// get the transaction, raising a SessionError courier exception if invalid...
+		PostMailTransaction mt = getMailTransaction(params.session.token.get());
 		if (mt == null) {
-			throw new IllegalStateException("invalid mail-transaction");
+			new SessionErrorRecord(SessionProblem.handleInvalid).raise();
 		}
 		
 		// get mail part content via bulk-data transfer
@@ -435,10 +497,18 @@ public class MailingNewImpl {
 		String mailPartTypeName;
 		switch(mailPartType) {
 			case MailTransport5.mptEnvelope: mailPartTypeName = "mtpEnvelope"; break;
+			case MailTransport5.mptAttachmentFolder: mailPartTypeName = "mptAttachmentFolder"; break;
+			case MailTransport5.mptTextFile: mailPartTypeName = "mptTextFile"; break;
+			case MailTransport5.mptAttachmentDoc: mailPartTypeName = "mptAttachmentDoc"; break;
+			case MailTransport5.mptOtherFile: mailPartTypeName = "mptOtherFile"; break;
 			case MailTransport5.mptNoteGV: mailPartTypeName = "mtpNoteGV"; break;
 			case MailTransport5.mptNoteIA5: mailPartTypeName = "mtpNoteIA5"; break;
+			case MailTransport5.mptPilotFile: mailPartTypeName = "mptPilotFile"; break;
+			case MailTransport5.mptG3Fax: mailPartTypeName = "mptG3Fax"; break;
+			case MailTransport5.mptTeletex: mailPartTypeName = "mptTeletex"; break;
+			case MailTransport5.mptTelex: mailPartTypeName = "mptTelex"; break;
 			case MailTransport5.mptNoteISO6937: mailPartTypeName = "mtpNoteISO6937"; break;
-			case MailTransport5.mptAttachmentDoc: mailPartTypeName = "mptAttachmentDoc"; break;
+			case MailTransport5.mptInterpress: mailPartTypeName = "mptInterpress"; break;
 			default: mailPartTypeName = String.format("unknown[ %d ]", params.mailPartType.get());
 		}
 		logf("\n--- mail part content ( type: %s ):\n", mailPartTypeName);
@@ -461,30 +531,33 @@ public class MailingNewImpl {
 					int attrType = (int)(attr.type.get() & 0xFFFF_FFFFL);
 					switch(attrType) {
 					
-					case MailTransport5.atSenderAndDate: {
-							ThreePartNameWithTag attrValue = attr.decodeData(ThreePartNameWithTag::make);
-							if (attrValue.tag.get() != 0) {
-								throw new IllegalStateException("atSenderAndDate-Tag not zero");
+					case MailTransport5.atSender: {
+							CHOICE<RNameType> attrValue = attr.decodeData(MailTransport5.mkRName);
+							if (attrValue.getChoice() != RNameType.xns) {
+								new UndefinedErrorRecord(MailTransport5.SERVICE_ERROR_INVALID_ADDRESS_KIND).raise();
 							}
-							mt.senderName = attrValue.name;
+							mt.senderName = (ThreePartName)attrValue.getContent();
 						} break;
 					
 					case MailTransport5.atTo: {
-							mt.toNames = attr.decodeData(ListOfThreePartNameWithTag::make);
+							ListOfRName rNames = attr.decodeData(ListOfRName::make);
+							mt.toNames = copyRNamesToSimpleRNames(rNames);
 							for (int idx = 0; idx < mt.toNames.size(); idx++) {
 								mt.recipients.add(mt.toNames.get(idx).name);
 							}
 						} break;
 						
 					case MailTransport5.atCopiesTo: {
-							mt.ccNames = attr.decodeData(ListOfThreePartNameWithTag::make);
+							ListOfRName rNames = attr.decodeData(ListOfRName::make);
+							mt.ccNames = copyRNamesToSimpleRNames(rNames);
 							for (int idx = 0; idx < mt.ccNames.size(); idx++) {
 								mt.recipients.add(mt.ccNames.get(idx).name);
 							}
 						} break;
 						
 					case MailTransport5.atReplyTo: {
-							mt.replyToNames = attr.decodeData(ListOfThreePartNameWithTag::make);
+							ListOfRName rNames = attr.decodeData(ListOfRName::make);
+							mt.replyToNames = copyRNamesToSimpleRNames(rNames);
 						} break;
 						
 					case MailTransport5.atSubject: {
@@ -495,7 +568,7 @@ public class MailingNewImpl {
 				}
 			} catch (EndOfMessageException e) {
 				e.printStackTrace();
-				throw new IllegalStateException(e);
+				new UndefinedErrorRecord(MailTransport5.DECODE_ERROR_ON_SERIALIZED_DATA).raise();
 			}
 		} else if (mailPartType == MailTransport5.mptAttachmentDoc) {
 			// get the serialized document(-tree) from the bulk-stream
@@ -573,7 +646,7 @@ public class MailingNewImpl {
 				}
 			} catch (EndOfMessageException e) {
 				e.printStackTrace();
-				throw new IllegalStateException(e);
+				new UndefinedErrorRecord(MailTransport5.DECODE_ERROR_ON_SERIALIZED_DATA).raise();
 			}
 		}
 		
@@ -581,8 +654,20 @@ public class MailingNewImpl {
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			results.append(sb, "  ", "results");
-			logf("##\n## procedure MailingNewImpl.transport5_postMailPart() -- results\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.transport5_postOneBodyPart() -- results\n%s\n##\n", sb.toString());
 		}
+	}
+	
+	private static ListOfSimpleRName copyRNamesToSimpleRNames(ListOfRName rNames) {
+		ListOfSimpleRName simpleRNames = ListOfSimpleRName.make();
+		for (int idx = 0; idx < rNames.size(); idx++) {
+			CHOICE<RNameType> rName = rNames.get(idx);
+			if (rName.getChoice() != RNameType.xns) {
+				new UndefinedErrorRecord(MailTransport5.SERVICE_ERROR_INVALID_ADDRESS_KIND).raise();
+			}
+			simpleRNames.add().name.from((ThreePartName)rName.getContent());
+		}
+		return simpleRNames;
 	}
 	
 	private static void loadBulkStream(iWireData target, BulkData1.Source source) {
@@ -592,7 +677,7 @@ public class MailingNewImpl {
 			completeRead = true;
 		} catch (EndOfMessageException e) {
 			e.printStackTrace();
-			throw new IllegalStateException(e);
+			new UndefinedErrorRecord(MailTransport5.DECODE_ERROR_ON_SERIALIZED_DATA).raise();
 		} finally {
 			try {
 				source.unlockWireStream(completeRead);
@@ -651,7 +736,7 @@ public class MailingNewImpl {
 
 		@Override
 		protected int getByte() throws EndOfMessageException {
-			return (this.currPos >= this.maxPos) ? 0 : this.content[this.currPos++];
+			return (this.currPos >= this.maxPos) ? 0 : this.content[this.currPos++] & 0x00FF;
 		}		
 	}
 	
@@ -659,18 +744,18 @@ public class MailingNewImpl {
 	 * postEnd
 	 *  = procedure 9
 	 */
-	private static void transport5_postEnd(PostEndParams params, PostEndResults results) {
+	private static void transport5_endPost(EndPostParams params, EndPostResults results) {
 		// log ingoing data
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			params.append(sb, "  ", "params");
-			logf("##\n## procedure MailingNewImpl.transport5_postEnd() -- params\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.transport5_endPost() -- params\n%s\n##\n", sb.toString());
 		}
 		
-		// get the transaction, raising a generic courier exception as we do not know the real protocol...
-		PostMailTransaction mt = getMailTransaction(params.mailTransaction.get());
+		// get the transaction, raising a SessionError courier exception if invalid...
+		PostMailTransaction mt = getMailTransaction(params.session.token.get());
 		if (mt == null) {
-			throw new IllegalStateException("invalid mail-transaction");
+			new SessionErrorRecord(SessionProblem.handleInvalid).raise();
 		}
 		
 		// collect recipients
@@ -693,7 +778,7 @@ public class MailingNewImpl {
 			if (logParamsAndResults) {
 				StringBuilder sb = new StringBuilder();
 				results.append(sb, "  ", "results");
-				logf("##\n## procedure MailingNewImpl.transport5_postEnd() -- results (NO valid RECIPIENTS)\n%s\n##\n", sb.toString());
+				logf("##\n## procedure MailingNewImpl.transport5_endPost() -- results (NO valid RECIPIENTS)\n%s\n##\n", sb.toString());
 			}
 			return; // leave messageId as all-zeroes => (hopefully) NullID => (hopefully) message not sent
 		}
@@ -761,11 +846,11 @@ public class MailingNewImpl {
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			results.append(sb, "  ", "results");
-			logf("##\n## procedure MailingNewImpl.transport5_postEnd() -- results\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.transport5_endPost() -- results\n%s\n##\n", sb.toString());
 		}
 	}
 	
-	private static void copyNames(ListOfThreePartNameWithTag src, NameList dst) {
+	private static void copyNames(ListOfSimpleRName src, NameList dst) {
 		if (src == null) { return; }
 		for (int i = 0; i < src.size(); i++) {
 			dst.add().from(src.get(i).name);
@@ -782,12 +867,12 @@ public class MailingNewImpl {
 	 * inbasketPoll
 	 * 	= procedure 7
 	 */
-	private static void inbasket2_inbasketPoll(InbasketPollParams params, InbasketPollResults results) {
+	private static void inbasket2_mailPoll(MailPollParams params, MailPollResults results) {
 		// log ingoing data
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			params.append(sb, "  ", "params");
-			logf("##\n## procedure MailingNewImpl.inbasket2_inbasketPoll() -- params\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.inbasket2_mailPoll() -- params\n%s\n##\n", sb.toString());
 		}
 		
 		// check user credentials
@@ -809,7 +894,7 @@ public class MailingNewImpl {
 		if (mailboxFqn == null || !mailService.hasMailbox(mailboxFqn)) {
 			new AccessErrorRecord(AccessProblem.noSuchMailbox).raise();
 		}
-		logf("## Inbasket2.inbasketPoll for mailbox: %s\n", mailboxFqn);
+		logf("## inbasket2_mailPoll() for mailbox: %s\n", mailboxFqn);
 		Name mbxName = Name.make();
 		mbxName.from(mailboxFqn);
 		
@@ -823,7 +908,7 @@ public class MailingNewImpl {
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			results.append(sb, "  ", "results");
-			logf("##\n## procedure MailingNewImpl.inbasket2_inbasketPoll() -- results\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.inbasket2_mailPoll() -- results\n%s\n##\n", sb.toString());
 		}
 	}
 	
@@ -923,12 +1008,8 @@ public class MailingNewImpl {
 		results.machineId.set(machineId);
 		
 		// fill in the mailbox counts
-//		State pollState = State.make();
-//		mailService.getMailboxState(mbxName, pollState);
-//		results.lastIndex.set(pollState.lastIndex.get());
-//		results.newCount.set(pollState.newCount.get());
-		results.lastIndex.set(session.getMailCount());
-		results.newCount.set(session.getMailCount());
+		results.totalCount.set(session.getMailCount());
+		results.newCount.set(session.getNewMailCount());
 		
 		// log outgoing data
 		if (logParamsAndResults) {
@@ -1192,28 +1273,28 @@ public class MailingNewImpl {
 		NameList replyTo = xreplyTo;
 		STRING subject = (xsubject == null) ? STRING.make() : xsubject;
 		boolean isFolderAttachment = xisFolderAttachment;
-//		long mailCreatedOn = me.inboxEntry().getCreatedOn();
+		long mailCreatedOn = me.inboxEntry().getCreatedOn();
 		SEQUENCE<Attribute> newEnvelope = new SEQUENCE<>(Attribute::make);
-		newEnvelope.add().set(MailTransport5.atSenderAndDate, ThreePartNameWithTagAndDateString::make, v -> {
+		newEnvelope.add().set(MailTransport5.atMessageID, SimpleIpMessageID::make, v -> {
 			v.nameWithTag.name.from(from.get(0));
-			v.date.set("24-Jan-94 21:40:54"); // check where this thing possibly re-appears in GlobalView and if so implement as non-constant
+			v.uniqueString.set(Long.toOctalString(mailCreatedOn & 0xFFFF_FFFFL) + "." + Long.toOctalString(subject.get().hashCode() & 0xFFFF_FFFFL));
 		});
-		newEnvelope.add().set(MailTransport5.atSenderA, ThreePartNameWithTag::make, v -> {
+		newEnvelope.add().set(MailTransport5.atSender, SimpleRName::make, v -> {
 			v.name.from(from.get(0));
 		});
-		newEnvelope.add().set(MailTransport5.atSenderB, ListOfThreePartNameWithTag::make, v -> {
+		newEnvelope.add().set(MailTransport5.atFrom, ListOfSimpleRName::make, v -> {
 			copyNames(from, v);
 		});
-		newEnvelope.add().set(MailTransport5.atTo, ListOfThreePartNameWithTag::make, v -> {
+		newEnvelope.add().set(MailTransport5.atTo, ListOfSimpleRName::make, v -> {
 			copyNames(to, v);
 		});
 		if (cc != null && cc.size() > 0) {
-			newEnvelope.add().set(MailTransport5.atCopiesTo, ListOfThreePartNameWithTag::make, v -> {
+			newEnvelope.add().set(MailTransport5.atCopiesTo, ListOfSimpleRName::make, v -> {
 				copyNames(cc, v);
 			});
 		}
 		if (replyTo != null && replyTo.size() > 0) {
-			newEnvelope.add().set(MailTransport5.atReplyTo, ListOfThreePartNameWithTag::make, v -> {
+			newEnvelope.add().set(MailTransport5.atReplyTo, ListOfSimpleRName::make, v -> {
 				copyNames(replyTo, v);
 			});
 		}
@@ -1265,8 +1346,7 @@ public class MailingNewImpl {
 		dlogf("    ... miMailServer ... ");
 		results.mailInfos.value.add().set(Inbasket2.miMailServer, MiMailServer::make, v -> {
 			v.name.from(mailService.getServiceName());
-			v.unknown1.set(0xA926); // obscure ...
-			v.unknown2.set(0xEB6D); // ... constants?
+			v.mailTs.set(mailCreatedOn);
 		});
 		dlogf("ok\n");
 		dlogf("    ... miMessageId ... ");
@@ -1345,6 +1425,9 @@ public class MailingNewImpl {
 		}
 		dlogf("%d words\n", results.unknownSeq.size());
 		
+		// mark the mail as received
+		session.getService().moveFromNewToReceived(me);
+		
 		
 		// done: remember the data container with the mail-parts for later transfer and add the id to the returned data
 		session.setClientData(mailData);
@@ -1355,7 +1438,7 @@ public class MailingNewImpl {
 		retlog.apply(null);
 	}
 	
-	private static void copyNames(NameList src, ListOfThreePartNameWithTag dst) {
+	private static void copyNames(NameList src, ListOfSimpleRName dst) {
 		if (src == null) { return; }
 		for (int i = 0; i < src.size(); i++) {
 			dst.add().name.from(src.get(i));
@@ -1363,16 +1446,16 @@ public class MailingNewImpl {
 	}
 	
 	/*
-	 * getMailPart
+	 * retrieveBodyParts
 	 *   = procedure 8
 	 * (1 or more mail part content(s) are sent via bulk-data transfer to the invoker)
 	 */
-	private static void inbasket2_getMailPart(GetMailPartParams params, RECORD results) {
+	private static void inbasket2_retrieveBodyParts(RetrieveBodyPartsParams params, RECORD results) {
 		// log ingoing data
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			params.append(sb, "  ", "params");
-			logf("##\n## procedure MailingNewImpl.inbasket2_getMailPart() -- params\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.inbasket2_retrieveBodyParts() -- params\n%s\n##\n", sb.toString());
 		}
 		
 		// get the session (we do not check the verifier, as we trust our clients...)
@@ -1383,7 +1466,7 @@ public class MailingNewImpl {
 		long requestedTransferId = params.uniqueMailNo.get();
 		dlogf("  ... requestedTransferId = %d , currentTransferId = %d\n", requestedTransferId, mailData.mailTransferId);
 		if (mailData.mailTransferId != requestedTransferId) {
-			throw new IllegalStateException("invalid mail-transfer-id (protocol exception?)");
+			new OtherErrorRecord(OtherProblem.malformedMessage).raise();
 		}
 		
 		// send the requested mail part(s)
@@ -1394,6 +1477,13 @@ public class MailingNewImpl {
 				for (int i = 0; i < params.mailPartIndices.size(); i++) {
 					int idx = params.mailPartIndices.get(i).get();
 					if (idx >= 0 && idx < mailData.parts.size()) {
+						byte[] partBytes = mailData.parts.get(idx);
+						dlogf("    ... sending mailPart[ %d ] ,  length: %d bytes\n", idx, partBytes.length);
+						sink.write(partBytes, partBytes.length);
+					}
+				}
+				if (params.mailPartIndices.size() == 0) {
+					for (int idx = 0; idx < mailData.parts.size(); idx++) {
 						byte[] partBytes = mailData.parts.get(idx);
 						dlogf("    ... sending mailPart[ %d ] ,  length: %d bytes\n", idx, partBytes.length);
 						sink.write(partBytes, partBytes.length);
@@ -1412,20 +1502,20 @@ public class MailingNewImpl {
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			results.append(sb, "  ", "results");
-			logf("##\n## procedure MailingNewImpl.inbasket2_getMailPart() -- results\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.inbasket2_retrieveBodyParts() -- results\n%s\n##\n", sb.toString());
 		}
 	}
 	
 	/*
-	 * handleMailParts (?)
+	 * changeBodyPartStatus
 	 *   = procedure 3
 	 */
-	private static void inbasket2_handleMailParts(HandleMailPartsParams params, HandleMailPartsResults results) {
+	private static void inbasket2_changeBodyPartStatus(ChangeBodyPartStatusParams params, ChangeBodyPartStatusResults results) {
 		// log ingoing data
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			params.append(sb, "  ", "params");
-			logf("##\n## procedure MailingNewImpl.inbasket2_getMailPart() -- params\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.inbasket2_changeBodyPartStatus() -- params\n%s\n##\n", sb.toString());
 		}
 		
 		// get the session (we do not check the verifier, as we trust our clients...)
@@ -1434,7 +1524,7 @@ public class MailingNewImpl {
 		// check if we are working with the current mail-data
 		MailData mailData = session.getClientData();
 		if (mailData.mailTransferId != params.uniqueMailNo.get()) {
-			throw new IllegalStateException("invalid mail-transfer-id (protocol exception?)");
+			new OtherErrorRecord(OtherProblem.malformedMessage).raise();
 		}
 		
 		// we do not handle single parts of the mail, but simply delete the whole mail!
@@ -1461,7 +1551,68 @@ public class MailingNewImpl {
 		if (logParamsAndResults) {
 			StringBuilder sb = new StringBuilder();
 			results.append(sb, "  ", "results");
-			logf("##\n## procedure MailingNewImpl.inbasket2_getMailPart() -- results\n%s\n##\n", sb.toString());
+			logf("##\n## procedure MailingNewImpl.inbasket2_changeBodyPartStatus() -- results\n%s\n##\n", sb.toString());
+		}
+	}
+	
+	/*
+	 * mailCheck
+	 *  = procedure 6
+	 */
+	public static void inbasket2_mailCheck(MailCheckParams params, MailCheckResults results) {
+		// log ingoing data
+		if (logParamsAndResults) {
+			StringBuilder sb = new StringBuilder();
+			params.append(sb, "  ", "params");
+			logf("##\n## procedure MailingNewImpl.inbasket2_mailCheck() -- params\n%s\n##\n", sb.toString());
+		}
+		
+		// get the session (we do not check the verifier, as we trust our clients...)
+		MailSession session = mailService.getSession(params.sessionId.get());
+		
+		// set result values
+		results.totalCount.set(session.getMailCount());
+		results.newCount.set(session.getNewMailCount());
+		
+		// log outgoing data
+		if (logParamsAndResults) {
+			StringBuilder sb = new StringBuilder();
+			results.append(sb, "  ", "results");
+			logf("##\n## procedure MailingNewImpl.inbasket2_mailCheck() -- results\n%s\n##\n", sb.toString());
+		}
+	}
+	
+	/*
+	 * delete
+	 *  = procedure 1
+	 */
+	public static void inbasket2_delete(DeleteParams params, RECORD results) {
+		// log ingoing data
+		if (logParamsAndResults) {
+			StringBuilder sb = new StringBuilder();
+			params.append(sb, "  ", "params");
+			logf("##\n## procedure MailingNewImpl.inbasket2_delete() -- params\n%s\n##\n", sb.toString());
+		}
+		
+		// get the session (we do not check the verifier, as we trust our clients...)
+		MailSession session = mailService.getSession(params.sessionId.get());
+		
+		// delete the inbasket mails in the specified range
+		long offset = (params.range.low.get() == params.sessionId.get()) ? params.sessionId.get() : 1; // Interlisp-D/Medley offsets the range with the session-id for some obscure reason 
+		int firstIndex = Math.max(0, (int)(params.range.low.get() - offset));
+		int limitIndex = Math.min(session.getMailCount(), (int)(params.range.high.get() - offset) + 1);
+		System.out.printf("++ offset = %d , firstIndex = %d , limitIndex = %d , mail-count = %d\n", offset, firstIndex, limitIndex, session.getMailCount());
+		for (int i = firstIndex; i < limitIndex; i++) {
+			MailboxEntry mail = session.getMailEntry(i);
+			if (mail != null) {
+				System.out.printf("++ dropping mail '%s'\n", mail.inboxEntry().getName());
+				ErrorRECORD mailError = mailService.dropMail(session, mail);
+				if (mailError != null) {
+					mailError.raise();
+					return; // will never happen...
+				}
+				session.clearMailEntry(i);
+			}
 		}
 	}
 

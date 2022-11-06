@@ -114,7 +114,7 @@ public class MailingExpeditedCourierResponder extends AbstractBfsResponder {
 		}
 		
 		// check if it is for Inbasket2.inbasketPoll
-		if (isDoneBy(this.inbasket2, this.inbasket2.InbasketPoll, programNo, versionNo, procNo, transaction, wire)) {
+		if (isDoneBy(this.inbasket2, this.inbasket2.MailPoll, programNo, versionNo, procNo, transaction, wire)) {
 			return;
 		}
 		
