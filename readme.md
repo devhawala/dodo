@@ -333,12 +333,24 @@ _optional_, _default_: `true`
 do start Dodo's Boot service?    
 _optional_, _default_: `false`
 
-- `localTimeOffsetMinutes`    
+- `timeService.localTimeOffsetMinutes`    
 time zone parameter for the time service as
 difference between local time and GMT in minutes, with positive values being
 to the east and negative to the west (e.g. Germany is 60 without DST and 120
 with DST, whereas Alaska should be -560 without DST resp. -480 with DST)    
 _optional_, _default_: 0 (i.e. GMT)
+
+- `timeService.dstFirstDay`    
+  `timeService.dstLastDay`    
+  begin resp. end of daylight savings (DST), given as the sunday at or before this day
+  in the year, counted for a leap year, e.g. for central europe these are 85 (last
+  sunday in march) resp. 299 (last sunday in october).    
+  Valid values as 0..367, with specifying "no DST" is both 0 for Pilot-bases OSes resp.
+  dstFirstDay 367 for Interlisp-D systems. Giving values out of range will reset both to 0.     
+  **WARNING**: using 367 for Pilot-based OSes has been observed to break the system after
+  shutting down the system normally (saving changes to disk), resulting in disk problems
+  (MP 0947 for GlobalView 2.1 resp. MP 0948 for VP 2.0.5) on *next* restart of the system!    
+  _optional_, _default_: 0 (i.e. no DST)
 
 - `daysBackInTime`    
 number of days to subtract from the current date to get the final timestamp
@@ -710,6 +722,10 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2022-11-20    
+-- MS: added support for TEdit-formatted mails sent by LAFITE (Medley 3.51)    
+-- TS: Dodo has new config parameters `timeService.dstFirstDay` and `timeService.dstLastDay` for specifying the DST parameters returned by the time service
 
 - 2022-11-06    
 -- MS: refined Courier structures based on the definitions in the Medley LAFITE mailclient (see [interlisp.org](https://github.com/Interlisp)-project    

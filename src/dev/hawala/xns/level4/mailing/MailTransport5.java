@@ -533,7 +533,7 @@ public class MailTransport5 extends CrProgram {
 	
 	public static final int mptEnvelope         = 0x0000; // mail-envelope => SEQUENCE<Attribute>
 	public static final int mptAttachmentFolder = 0x0001; // folder
-	public static final int mptTextFile         = 0x0002; // text file 
+	public static final int mptTextFile         = 0x0002; // text file (used by Interlisp-D for a formatted TEdit text mail body)
 	public static final int mptAttachmentDoc    = 0x0003; // document (Star/VP/GV)
 	public static final int mptOtherFile        = 0x0004; // other file type 
 	public static final int mptNoteGV           = 0x0005; // "GlobalView" mail text, bulk-data => raw text (!! may have odd length !!)

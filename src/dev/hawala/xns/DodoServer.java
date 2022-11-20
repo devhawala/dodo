@@ -82,6 +82,8 @@ public class DodoServer {
 	private static int netHubPort = 3333;
 	
 	private static int localTimeOffsetMinutes = 0;
+	private static int dstFirstDay = 0;
+	private static int dstLastDay = 0;
 	private static int daysBackInTime = 0;
 	private static int timeServiceSendingTimeGap = 0;
 	
@@ -145,6 +147,12 @@ public class DodoServer {
 		
 		localTimeOffsetMinutes = props.getInt("localTimeOffsetMinutes", localTimeOffsetMinutes);
 		localTimeOffsetMinutes = props.getInt("timeService.localTimeOffsetMinutes", localTimeOffsetMinutes);
+		dstFirstDay = props.getInt("timeService.dstFirstDay", dstFirstDay);
+		dstLastDay = props.getInt("timeService.dstLastDay", dstLastDay);
+		if (dstFirstDay < 0 || dstFirstDay > 367 || dstLastDay < 0 || dstLastDay > 367) {
+			dstFirstDay = 0;
+			dstLastDay = 0;
+		}
 		daysBackInTime = props.getInt("daysBackInTime", daysBackInTime);
 		daysBackInTime = props.getInt("timeService.daysBackInTime", daysBackInTime);
 		timeServiceSendingTimeGap = props.getInt("timeService.sendingTimeGap", timeServiceSendingTimeGap);
@@ -334,7 +342,7 @@ public class DodoServer {
 		if (startTimeService) {
 			localSite.pexListen(
 					IDP.KnownSocket.TIME.getSocket(), 
-					new TimeServiceResponder(localTimeOffsetMinutes, timeServiceSendingTimeGap));
+					new TimeServiceResponder(localTimeOffsetMinutes, dstFirstDay, dstLastDay, timeServiceSendingTimeGap));
 		}
 		
 		// routing protocol responder

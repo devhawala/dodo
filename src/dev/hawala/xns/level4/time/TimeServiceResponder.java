@@ -43,6 +43,8 @@ public class TimeServiceResponder implements iPexResponder {
 	private final short direction; // 0 = west, 1 = east
 	private final short offsetHours;
 	private final short offsetMinutes;
+	private final short dstFirstDay;
+	private final short dstLastDay;
 	
 	// milliseconds to wait before sending the response
 	private final int sendingTimeGap;
@@ -56,9 +58,11 @@ public class TimeServiceResponder implements iPexResponder {
 	 * 		minutes, with positive values being to the east and negative
 	 * 		to the west (e.g. Germany is +60 without DST and +120 with DST
 	 * 		whereas Alaska is -560 without DST resp -480 with DST).
+	 * @param dstFirstday first daylight savings day to put into response packets
+	 * @param dstLastday last daylight savings day to put into response packets
 	 * @param sendingTimeGap milliseconds to wait before sending the response 
 	 */
-	public TimeServiceResponder(int gmtOffsetMinutes, int sendingTimeGap) {
+	public TimeServiceResponder(int gmtOffsetMinutes, int dstFirstDay, int dstLastDay, int sendingTimeGap) {
 		if (gmtOffsetMinutes >= 0) {
 			this.direction = 1;
 		} else {
@@ -68,6 +72,8 @@ public class TimeServiceResponder implements iPexResponder {
 		gmtOffsetMinutes = gmtOffsetMinutes % 720;
 		this.offsetHours = (short)(gmtOffsetMinutes / 60);
 		this.offsetMinutes = (short)(gmtOffsetMinutes % 60);
+		this.dstFirstDay = (short)dstFirstDay;
+		this.dstLastDay = (short)dstLastDay;
 		this.sendingTimeGap = sendingTimeGap;
 	}
 
@@ -111,8 +117,8 @@ public class TimeServiceResponder implements iPexResponder {
 		setWord(b, 4, this.direction);     // zoneS(4): System.WestEast
 		setWord(b, 5, this.offsetHours);   // zoneH(5): [0..177B]
 		setWord(b, 6, this.offsetMinutes); // zoneM(6): [0..377B]
-		setWord(b, 7, 0);                  // beginDST(7): WORD -- no dst (temp)
-		setWord(b, 8, 0);                  // endDST(8): WORD -- no dst (temp)
+		setWord(b, 7, this.dstFirstDay);   // beginDST(7): WORD -- [0..367], DST begins on sunday at or before this day in the year, counted for leap years, 0 (Pilot) or 367 (Interlisp) for no DST
+		setWord(b, 8, this.dstLastDay);    // endDST(8): WORD -- [0..367], DST end on sunday at or before this day in the year, counted for leap years, 0 (Pilot) or 367 (Interlisp) for no DST
 		setWord(b, 9, 1);                  // errorAccurate(9): BOOLEAN -- true
 		setWord(b, 10, 0);                 // absoluteError(10): WireLong]
 		setWord(b, 11, (short)((milliSecs > 500) ? 1000 - milliSecs : milliSecs)); // no direction ?? (plus or minus)?

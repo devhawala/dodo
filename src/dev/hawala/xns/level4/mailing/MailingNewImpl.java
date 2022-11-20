@@ -37,6 +37,7 @@ import java.util.function.UnaryOperator;
 import dev.hawala.xns.level3.courier.CHOICE;
 import dev.hawala.xns.level3.courier.CourierRegistry;
 import dev.hawala.xns.level3.courier.ErrorRECORD;
+import dev.hawala.xns.level3.courier.LONG_CARDINAL;
 import dev.hawala.xns.level3.courier.RECORD;
 import dev.hawala.xns.level3.courier.SEQUENCE;
 import dev.hawala.xns.level3.courier.STRING;
@@ -60,6 +61,7 @@ import dev.hawala.xns.level4.filing.ByteContentSink;
 import dev.hawala.xns.level4.filing.ByteContentSource;
 import dev.hawala.xns.level4.filing.FilingCommon;
 import dev.hawala.xns.level4.filing.FilingCommon.Attribute;
+import dev.hawala.xns.level4.filing.FilingCommon.Content;
 import dev.hawala.xns.level4.filing.FilingCommon.SerializedFile;
 import dev.hawala.xns.level4.filing.fs.iContentSource;
 import dev.hawala.xns.level4.mailing.Inbasket1.State;
@@ -299,6 +301,7 @@ public class MailingNewImpl {
 		
 		private STRING subject = null;
 		private STRING mailText = null;
+		private ByteSequence rawTextFile = null;
 		
 		private SerializedFile attachment = null;
 		
@@ -306,6 +309,8 @@ public class MailingNewImpl {
 			this.transactionId = mailTransaction++;
 		}
 	}
+	
+	private static final int MAILATTR_TEXTFILECONTENT = 0x4200_0001;
 	
 	private static final Map<Long,PostMailTransaction> currentTransactions = new HashMap<>();
 	
@@ -638,6 +643,19 @@ public class MailingNewImpl {
 					}
 					iws = new ByteArrayWireInputStream(len, mailPartContent);
 					break;
+				case MailTransport5.mptTextFile: // Interlisp-D/LAFITE - TEdit formatted mail body
+					// save the original mail body for Inbasket2 clients (in the hope the recipient knows the format, i.e. is a LAFITE mail client)
+					mt.rawTextFile = new ByteSequence(mailPartContent);
+					
+					// save the unformatted text part as standard mail-text for Inbasket1 clients
+					// (mailPartContent is a serialized file-tree, with the plain text being the file content
+					// of the only file  which also has the 2 attributes 0x0011 (file-type, 2 = text) and 0x132F
+					// (TEdit text formatting info)
+					iWireStream textpartStream = new ByteArrayWireInputStream(mailPartContent);
+					SerializedFile textFile = new SerializedFile(null, true); 
+					textFile.deserialize(textpartStream);
+					iws = new ByteArrayWireInputStream(textFile.file.content);
+					break;
 				}
 				if (iws != null) {
 					STRING s = STRING.make();
@@ -706,6 +724,36 @@ public class MailingNewImpl {
 			this.content = data;
 			this.maxPos = data.length;
 		}
+		
+		private ByteArrayWireInputStream(Content stringContent) {
+			int byteLen = stringContent.data.size() * 2;
+			if (!stringContent.lastByteSignificant.get()) {
+				byteLen--;
+			}
+			
+			byte[] buffer = new byte[byteLen + 2]; // +2 for string length word
+			buffer[0] = (byte)((byteLen >> 8) & 0xFF);
+			buffer[1] = (byte)(byteLen & 0xFF);
+			
+			int pos = 2;
+			for (int i = 0; i < (stringContent.data.size() - 1); i++) {
+				int w = stringContent.data.get(i);
+				buffer[pos++] = transl((w >> 8) & 0xFF);
+				buffer[pos++] = transl(w & 0xFF);
+			}
+			int w = stringContent.data.get(stringContent.data.size() - 1);
+			buffer[pos++] = transl((w >> 8) & 0xFF);
+			if (stringContent.lastByteSignificant.get()) {
+				buffer[pos++] = transl(w & 0xFF);
+			}
+			this.content = buffer;
+			this.maxPos = buffer.length;
+		}
+		
+		private static byte transl(int b) {
+			if (b == 0x0A) { return (byte)0x0D; } // LAFITE/TEdit sends LF for line-end instead of Xerox usual CR
+			return (byte)b;
+		}
 
 		@Override
 		public void writeEOM() throws NoMoreWriteSpaceException { }
@@ -738,6 +786,83 @@ public class MailingNewImpl {
 		protected int getByte() throws EndOfMessageException {
 			return (this.currPos >= this.maxPos) ? 0 : this.content[this.currPos++] & 0x00FF;
 		}		
+	}
+	
+	private static class ByteSequence implements iWireData {
+		
+		public final LONG_CARDINAL byteLength = LONG_CARDINAL.make();
+		private byte[] content = null;
+		
+		private ByteSequence(byte[] contentBytes) {
+			this.content = contentBytes; // no copy => must be invariant
+			this.byteLength.set((this.content == null) ? 0 : this.content.length);
+		}
+		
+		public long length() {
+			return (this.content == null) ? 0 : this.byteLength.get();
+		}
+		
+		public byte[] getBytes() {
+			return (this.content == null) ? new byte[0] : this.content;
+		}
+		
+		public ByteSequence set(ByteSequence other) {
+			this.content = other.getBytes(); // no copy => must be invariant
+			this.byteLength.set((this.content == null) ? 0 : this.content.length);
+			return this;
+		}
+
+		@Override
+		public void serialize(iWireStream ws) throws NoMoreWriteSpaceException {
+			this.byteLength.set((this.content == null) ? 0 : this.content.length);
+			this.byteLength.serialize(ws);
+			if (this.content != null) {
+				for (int i = 0; i < this.content.length; i++) {
+					ws.writeI8(this.content[i]);
+				}
+				if ((this.content.length & 1) != 0) { ws.writeI8(0); }
+			}
+		}
+
+		@Override
+		public void deserialize(iWireStream ws) throws EndOfMessageException {
+			this.byteLength.deserialize(ws);
+			this.content = new byte[(int)this.byteLength.get()];
+			for (int i = 0; i < this.content.length; i++) {
+				this.content[i] = (byte)ws.readI8();
+			}
+			if ((this.content.length & 1) != 0) { ws.readI8(); }
+		}
+
+		@Override
+		public StringBuilder append(StringBuilder to, String indent, String fieldName) {
+			to.append(indent).append(fieldName).append(": ByteSequence[").append(this.length()).append("]");
+			return to;
+		}
+		
+		public void dump() {
+			StringBuilder sb = new StringBuilder();
+			byte[] bytes = this.getBytes();
+			for (int i = 0; i < bytes.length; i++) {
+				int b = bytes[i]& 0xFF;
+				if ((i % 16) == 0) {
+					logf("%s\n              0x%03X :", sb.toString(), i);
+					sb.setLength(0);
+					sb.append("  ");
+				}
+				logf(" %02X", b);
+				if (b >= 32 && b < 127) {
+					sb.append((char)b);
+				} else {
+					sb.append("∙");
+				}
+			}
+			int gap = bytes.length % 16;
+			String filler = (gap == 0) ? "" : blanks.substring(0, (16 - gap) * 3);
+			logf("%s%s\n", filler, sb.toString());
+		}
+		
+		public static ByteSequence make() { return new ByteSequence(null); }
 	}
 	
 	/*
@@ -810,6 +935,9 @@ public class MailingNewImpl {
 			attrs.add().set(               MailingCommon.to,             NameList::make, v -> copyNames(mt.toNames, v));
 			attrs.add().set(               MailingCommon.comments,       STRING::make,   v -> v.set(mt.mailText));
 			attrs.add().set(               MailingCommon.cc,             NameList::make, v -> copyNames(mt.ccNames, v));
+			if (mt.rawTextFile != null) {
+				attrs.add().set(           MAILATTR_TEXTFILECONTENT,     ByteSequence::make, v -> v.set(mt.rawTextFile));
+			}
 		} else {
 			// check if all required Star..VP2.x attributes are present, adding the missing ones if necessary
 			boolean hasMailFrom = false;
@@ -1064,6 +1192,8 @@ public class MailingNewImpl {
 		private byte[] mailtextBytes = null;
 		private byte[] attachmentBytes = null;
 		
+		private int mailtextPartType = MailTransport5.mptNoteGV;
+		
 		private final List<byte[]> parts = new ArrayList<>();
 		
 		private MailData(long id, int index) {
@@ -1161,6 +1291,7 @@ public class MailingNewImpl {
 		NameList xreplyTo = null;
 		STRING xsubject = null;
 		STRING mailText = null;
+		ByteSequence rawMailText = null;
 		boolean xisFolderAttachment = false;
 		SEQUENCE<Attribute> attrs = mailContentFile.file.attributes.value;
 		for (int i = 0; i < attrs.size(); i++) {
@@ -1196,6 +1327,8 @@ public class MailingNewImpl {
 					xisFolderAttachment = attr.getAsBoolean();
 					dlogf("    ... found isDirectory\n");
 					break;
+				case MAILATTR_TEXTFILECONTENT:
+					rawMailText = attr.decodeData(ByteSequence::make);
 				}
 			} catch (EndOfMessageException e) {
 				// invalid mail file content??
@@ -1316,7 +1449,11 @@ public class MailingNewImpl {
 		mailData.envelopeBytes = wireWriter.getBytes();
 		dlogf("ok, %d bytes\n", mailData.envelopeBytes.length);
 		
-		if (mailText != null && mailText.get() != null) {
+		if (rawMailText != null) {
+			mailData.mailtextPartType = MailTransport5.mptTextFile;
+			mailData.mailtextBytes = rawMailText.getBytes();
+			dlogf("  ... created mail-text (comments) bytes from RAW mail-text with %d bytes\n", mailData.mailtextBytes.length);
+		} else if (mailText != null && mailText.get() != null) {
 			dlogf("  ... creating mail-text (comments) bytes ... ");
 			wireWriter = new WireWriter();
 			try {
@@ -1373,7 +1510,7 @@ public class MailingNewImpl {
 			// having mail-text?
 			if (mailData.mailtextBytes != null) {
 				MiMailPart mailTextPart = v.add();
-				mailTextPart.mailPartType.set(MailTransport5.mptNoteGV);
+				mailTextPart.mailPartType.set(mailData.mailtextPartType);
 				mailTextPart.mailPartLength.set(mailData.mailtextBytes.length);
 				lengthSum[0] += mailData.mailtextBytes.length;
 				mailData.parts.add(mailData.mailtextBytes);
