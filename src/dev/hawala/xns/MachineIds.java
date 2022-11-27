@@ -110,6 +110,13 @@ public class MachineIds {
 	 */
 	public static final String CFG_SPP_RESEND_PACKET_COUNT = "spp.resendPacketCount";
 	
+	/**
+	 * PUP network number (high byte) and the PUP host number (low byte) in the format
+	 * {@code octal-network#octal-host#}, where both *octal*-values are in the range 0..377 (octal).
+	 * <br/>Default: (none)
+	 */
+	public static final String CFG_PUP_HOST_ADDRESS = "pup.hostAddress";
+	
 	
 	/*
 	 * internal maps etc. for machine IDs and assigned values
@@ -275,19 +282,31 @@ public class MachineIds {
 						String[] parts = line.substring(1).trim().split("=");
 						if (parts.length == 2) {
 							String key = parts[0].trim();
-							try {
-								String valueText = parts[1].trim().toLowerCase();
-								final long value;
-								if ("false".equals(valueText)) {
-									value = 0L;
-								} else if ("true".equals(valueText)) {
-									value = 1L;
+							String valueText = parts[1].trim().toLowerCase();
+							if (valueText.matches("[0-7]+#[0-7]+#")) {
+								String[] addrParts = valueText.split("#");
+								int pupNetwork = Integer.parseInt(addrParts[0], 8);
+								int pupHost = Integer.parseInt(addrParts[1], 8);
+								if (pupNetwork >= 0 && pupNetwork <= 255 && pupHost >= 0 && pupHost <= 255) {
+									long pupAddress = (pupNetwork << 8) | pupHost;
+									machineValues.get(currMachineId).put(key, pupAddress);
 								} else {
-									value = Long.parseLong(valueText);
+									System.out.printf("** machine '%s': invalid value '%s' given for '%s'\n", currMachineName, valueText, key);
 								}
-								machineValues.get(currMachineId).put(key, value);
-							} catch(NumberFormatException nfe) {
-								// ignore value
+							} else {
+								try {
+									final long value;
+									if ("false".equals(valueText)) {
+										value = 0L;
+									} else if ("true".equals(valueText)) {
+										value = 1L;
+									} else {
+										value = Long.parseLong(valueText);
+									}
+									machineValues.get(currMachineId).put(key, value);
+								} catch(NumberFormatException nfe) {
+									System.out.printf("** machine '%s': invalid value '%s' given for '%s'\n", currMachineName, parts[1], parts[0]);
+								}
 							}
 						}
 					}

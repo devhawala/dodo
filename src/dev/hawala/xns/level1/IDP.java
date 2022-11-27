@@ -45,6 +45,8 @@ public class IDP extends Payload {
 		PEX("PEX", 4),
 		SPP("SPP", 5),
 		
+		PUP_HOST_LOOKUP("PupHostLookup", 6),
+		
 		BOOT_SERVER_PACKET("BootServerPacket", 9),
 		
 		PUP("PUP", 12),

@@ -111,6 +111,9 @@ information
 	(Inbasket: Courier program 18, version 1 and 2)    
 	the subset of protocol procedures actively used by XDE and Star/Viewpoint/GlobalView
 	for sending and receiving mails is implemented.
+    - NStoPupHostLookup    
+	(Interlisp-D specific)     
+	Responder for delivering the PUP network and host numbers for a machine
 
 The network configuration of a Dodo server instance and the services provided
 can be configured through a property file specified when starting the Dodo program.
@@ -325,8 +328,10 @@ do start Dodo's Routing Information Protocol service?
 _optional_, _default_: `true`
 
 - `startChsAndAuthServices`    
-do start Dodo's Clearinghouse service and Authentication service? (both can only
+do start Dodo's Clearinghouse, Authentication and NStoPupHostLookup services? (these can only
 be started (or not) together, as they serve the same domain jointly)    
+(see the definition of the file [machines.cfg](#dodo-server-machine-ids-file) for defining the
+PUP identifications served by the NStoPupHostLookup service)    
 _optional_, _default_: `true`
 
 - `startBootService`    
@@ -362,7 +367,7 @@ _optional_, _default_: `0` (i.e. no date change)
 `chsDatabaseRoot`    
 `allowBlanksInObjectNames`    
 `authSkipTimestampChecks`    
-these 5 properties define the Clearinghouse service provided by this
+these 5 properties define the Clearinghouse and Authentication services provided by this
 Dodo instance;    
 see [Clearinghouse configuration](./chs-config-files.md) for details
 
@@ -474,6 +479,7 @@ darkstar-1 = 10-00-AA-10-00-11
 + authSkipTimestampChecks = true
 + spp.resendDelay = 60
 + spp.sendingTimeGap = 60
++ pup.hostAddress = 131#5#
 ```
 
 The following configuration parameters can be specified for a machine in a machine
@@ -488,11 +494,24 @@ ids file to override the global settings:
 - `spp.handshakeMaxResends`
 - `spp.resendPacketCount`
 
-(other configuration parameters are ignored)
+(other global configuration parameters are ignored)
+
+Additionally, the PUP address - consisting of the PUP network number (high byte) and
+the PUP host number (low byte) - for a machine can be specified with:
+
+```
++ pup.hostAddress = <net>#<adr>#
+```
+
+where `<net>` is the octal PUP network number and `<adr>` is the octal PUP host number
+to be delivered by the NStoPupHostLookup service.
 
 If several client machines need the same parameter overrides, it is not necessary
 to duplicate the parameters, instead it is possible to copy the settings from another
-machine with a line: `:like `_other-machine_
+machine with a line:    
+`  :like `&nbsp;*other-machine*    
+and possibly add specific parameters for overriding values taken from the *other-machine*
+(overrides must come after the `like:` line).
 
 For example:
 
@@ -502,6 +521,7 @@ For example:
 #
 darkstar-2 = 10-00-AA-10-00-12
 :like darkstar-1
++ pup.hostAddress = 131#42#
 ```
 
 #### NetHubGateway
@@ -722,6 +742,10 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2022-11-27    
+-- added new responder for "PUP host lookup" broadcast packets for Interlisp-D (Medley)   
+-- new "pup.hostAddress"-option in `machines.cfg` allows to define 48bit to PUP address-mappings 
 
 - 2022-11-20    
 -- MS: added support for TEdit-formatted mails sent by LAFITE (Medley 3.51)    

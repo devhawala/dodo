@@ -49,6 +49,7 @@ import dev.hawala.xns.level4.mailing.MailingExpeditedCourierResponder;
 import dev.hawala.xns.level4.mailing.MailingOldImpl;
 import dev.hawala.xns.level4.mailing.MailingNewImpl;
 import dev.hawala.xns.level4.printing.Printing3Impl;
+import dev.hawala.xns.level4.pup.PupHostLookupResponder;
 import dev.hawala.xns.level4.rip.RipResponder;
 import dev.hawala.xns.level4.time.TimeServiceResponder;
 
@@ -383,6 +384,9 @@ public class DodoServer {
 				MailingNewImpl.register();
 				localSite.pexListen(0x001A, new MailingExpeditedCourierResponder());
 			}
+			
+			// start the Pup host lookup responder
+			localSite.clientBindToSocket(9, new PupHostLookupResponder(dumpChs));
 		}
 		
 		// print service
