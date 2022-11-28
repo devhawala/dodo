@@ -71,9 +71,9 @@ public class PupHostLookupResponder implements iIDPReceiver {
 		}
 		
 		// assumed "NS-to-PUP host lookup" packet structure:
-		//   ??          (2 words: 0000 0006)
-		//   packet-type (1 word: request (1), response (2), or negative (3))
-		//   data        (request => 3 words for 48-bit host address , response => 1 word for PUP::net+host , negative => empty)
+		//   identification (2 words)
+		//   packet-type    (1 word: request (1), response (2), or negative (3))
+		//   data           (request => 3 words for 48-bit host address , response => 1 word for PUP::net+host , negative => empty)
 		if (idp.getPayloadLength() >= 12 && idp.rdCardinal(4) == 1) {
 			long w0 = idp.rdCardinal(6);
 			long w1 = idp.rdCardinal(8);
@@ -85,12 +85,12 @@ public class PupHostLookupResponder implements iIDPReceiver {
 			response.setPacketType(IDP.PacketType.PUP_HOST_LOOKUP);
 			if (pupAddress >= 0) {
 				response.setPayloadLength(8);
-				response.wrLongCardinal(0, 6);
+				response.wrLongCardinal(0, idp.rdLongCardinal(0));
 				response.wrCardinal(4, 2);     // response
 				response.wrCardinal(6, (int)(pupAddress & 0xFFFFL));
 			} else {
 				response.setPayloadLength(6);
-				response.wrLongCardinal(0, 6);
+				response.wrLongCardinal(0, idp.rdLongCardinal(0));
 				response.wrCardinal(4, 3);     // negative
 			}
 			

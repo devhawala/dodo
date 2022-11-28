@@ -743,7 +743,7 @@ still missing, like Mail protocols)
 
 ### Development history
 
-- 2022-11-27    
+- 2022-11-27,28    
 -- added new responder for "PUP host lookup" broadcast packets for Interlisp-D (Medley)   
 -- new "pup.hostAddress"-option in `machines.cfg` allows to define 48bit to PUP address-mappings 
 
