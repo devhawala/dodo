@@ -43,6 +43,8 @@ import dev.hawala.xns.level3.courier.SEQUENCE;
 import dev.hawala.xns.level3.courier.STRING;
 import dev.hawala.xns.level3.courier.WireBaseStream;
 import dev.hawala.xns.level3.courier.WireWriter;
+import dev.hawala.xns.level3.courier.iJsonReader;
+import dev.hawala.xns.level3.courier.iJsonWriter;
 import dev.hawala.xns.level3.courier.iWireData;
 import dev.hawala.xns.level3.courier.iWireStream;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
@@ -832,6 +834,16 @@ public class MailingNewImpl {
 				this.content[i] = (byte)ws.readI8();
 			}
 			if ((this.content.length & 1) != 0) { ws.readI8(); }
+		}
+
+		@Override
+		public void serialize(iJsonWriter wr) {
+			throw new IllegalStateException("JSON serializing not supported here");
+		}
+
+		@Override
+		public void deserialize(iJsonReader rd) {
+			throw new IllegalStateException("JSON deserializing not supported here");
 		}
 
 		@Override

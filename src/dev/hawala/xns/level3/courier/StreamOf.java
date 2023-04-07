@@ -38,7 +38,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
  * elements, each CHOICE specifying if it is the non-last or the last
  * element in the SEQUENCE. 
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public class StreamOf<T extends iWireData> implements iWireData {
 
@@ -125,6 +125,21 @@ public class StreamOf<T extends iWireData> implements iWireData {
 				this.elems.add(elem);
 			}
 		}
+	}
+
+	@Override
+	public void serialize(iJsonWriter wr) {
+		wr.openArray();
+		for (int i = 0; i < this.elems.size(); i++) {
+			this.elems.get(i).serialize(wr);
+		}
+		wr.closeArray();
+	}
+
+	@Override
+	public void deserialize(iJsonReader rd) {
+		this.elems.clear();
+		rd.readArray(this.elemBuilder, e -> this.elems.add(e));
 	}
 
 	@Override

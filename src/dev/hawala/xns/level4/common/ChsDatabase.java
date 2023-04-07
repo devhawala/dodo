@@ -26,18 +26,27 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package dev.hawala.xns.level4.common;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import dev.hawala.xns.Log;
 import dev.hawala.xns.MachineIds;
 import dev.hawala.xns.PropertiesExt;
+import dev.hawala.xns.level3.courier.JsonStringReader;
 import dev.hawala.xns.level3.courier.STRING;
 import dev.hawala.xns.level3.courier.iWireData;
 import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
@@ -58,7 +67,7 @@ import dev.hawala.xns.level4.common.AuthChsCommon.ThreePartName;
  * Clearinghouse database, supporting exactly one domain and
  * initialized from property files holding the entry data.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018,2019,2022)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019,2022,2023)
  */
 public class ChsDatabase {
 	
@@ -174,7 +183,9 @@ public class ChsDatabase {
 				if (fn.startsWith("p~")) { entry = new ChsPrintSvc(ef); } else
 				if (fn.startsWith("u~")) { entry = new ChsUser(ef); } else
 				if (fn.startsWith("ug~")) { entry = new ChsUserGroup(ef); } else
-				if (fn.startsWith("ws~")) { entry = new ChsWorkstation(ef); }
+				if (fn.startsWith("ws~")) { entry = new ChsWorkstation(ef); } else
+				if (fn.startsWith("ec-tty~")) { entry = new ChsEcsGapTTY(ef); } else
+				if (fn.startsWith("ec-ibm~")) { entry = new ChsEcsGapIBM(ef); }
 			} catch (Exception e) {
 				System.out.printf("Unable to load CHS entry from file '%s': %s\n", ef.getName(), e.getMessage());
 				continue;
@@ -508,9 +519,10 @@ public class ChsDatabase {
 	 * ***** in-memory representation of clearinghouse entries 
 	 */
 	
-	private abstract class ChsEntry {
+	private abstract class ChsEntry implements iUpdatableChsEntry {
 		
 		private final String cfgFilename;
+		protected final String cfgAbsoluteFilename; 
 		
 		protected final String objNameFromCfgFile;
 		protected final int entryType;
@@ -522,10 +534,12 @@ public class ChsDatabase {
 		protected String fqn = null;
 		
 		private final Map<Integer,Item> itemProperties = new HashMap<>();
+		private final List<Integer> dynItemPropertyIds = new ArrayList<>();
 		private final Map<Integer,List<ThreePartName>> groupProperties = new HashMap<>();
 		
 		public ChsEntry(int type, File propsFile) {
 			this.cfgFilename = propsFile.getName();
+			this.cfgAbsoluteFilename = propsFile.getAbsolutePath();
 			this.entryType = type;
 			this.props = new PropertiesExt(propsFile);
 			
@@ -549,6 +563,19 @@ public class ChsDatabase {
 			String[] cfgAliases = aliasesList.split(",");
 			for (String ca : cfgAliases) {
 				this.addCfgAlias(ca.trim());
+			}
+			
+			// get dynamic properties
+			String dynPropIdList = this.props.getString("dynamicProperties", "");
+			String[] dynPropIds = dynPropIdList.split(",");
+			for (String dynId : dynPropIds) {
+				String id = dynId.trim();
+				if (id.isEmpty()) { continue; }
+				try {
+					this.dynItemPropertyIds.add(Integer.parseInt(id));
+				} catch (NumberFormatException nfe) {
+					System.out.printf("file '%s': invalid value '%s' in dynamicProperties\n", filename, id);
+				}
 			}
 		}
 		
@@ -670,7 +697,22 @@ public class ChsDatabase {
 		}
 		
 		public Item getItemProperty(int property) {
-			return this.itemProperties.get(property);
+			if (this.itemProperties.containsKey(property)) {
+				return this.itemProperties.get(property);
+			}
+			
+			if (this.dynItemPropertyIds.contains(property)) {
+				iWireData value = loadDynamicData(this.cfgAbsoluteFilename, property);
+				if (value != null) {
+					try {
+						return Item.from(value);
+					} catch (NoMoreWriteSpaceException e) {
+						return null;
+					}
+				}
+			}
+			
+			return null;
 		}
 		
 		public List<ThreePartName> getGroupProperty(int property) {
@@ -678,11 +720,35 @@ public class ChsDatabase {
 		}
 		
 		public Set<Integer> getItemPropertyIds() {
-			return this.itemProperties.keySet();
+			Set<Integer> ids = new HashSet<>(this.itemProperties.keySet());
+			ids.addAll(this.dynItemPropertyIds);
+			return ids;
 		}
 		
 		public Set<Integer> getGroupPropertyIds() {
 			return this.groupProperties.keySet();
+		}
+		
+		// iUpdatableChsEntry methods
+		
+		@Override
+		public String getFqn() {
+			return this.fqn;
+		}
+		
+		@Override
+		public List<String> getUninterpretedProperties() {
+			return Collections.emptyList();
+		}
+
+		@Override
+		public String getUninterpretedProperty(String name) {
+			return null;
+		}
+		
+		@Override
+		public void setChsProperty(int property, iWireData value) {
+			// unimplemented by default
 		}
 		
 	}
@@ -1079,21 +1145,22 @@ public class ChsDatabase {
 		
 	}
 	
-	private class ChsWorkstation extends ChsEntry {
+	private abstract class ChsNetworkEntry extends ChsEntry {
 		
 		private final String description;
 		private final long machineId;
+		private final Map<String,String> uninterpretedProperties = new HashMap<>();
 		
-		protected ChsWorkstation(File cfgFile) {
-			super(CHEntries0.workstation, cfgFile);
+		protected ChsNetworkEntry(int type, String machinePropName, String defaultDescPrefix, File cfgFile) {
+			super(type, cfgFile);
 			
 			String desc = this.props.getProperty("description", null);
 			if (desc == null) {
-				desc = "Workstation " + this.objNameFromCfgFile;
+				desc =  defaultDescPrefix + this.objNameFromCfgFile;
 			}
 			this.description = desc;
 			
-			this.machineId = ChsDatabase.getMachineId(this.props, "workstation", this.objNameFromCfgFile);
+			this.machineId = ChsDatabase.getMachineId(this.props, machinePropName, this.objNameFromCfgFile);
 		}
 		
 		@Override
@@ -1127,6 +1194,95 @@ public class ChsDatabase {
 		public long getMachineId() {
 			return machineId;
 		}
+		
+		@Override
+		public List<String> getUninterpretedProperties() {
+			return new ArrayList<>(this.uninterpretedProperties.keySet());
+		}
+		
+		protected void setUninterpretedProperty(String name, String value) {
+			this.uninterpretedProperties.put(name, value);
+		}
+
+		@Override
+		public String getUninterpretedProperty(String name) {
+			return this.uninterpretedProperties.get(name);
+		}
+		
+		@Override
+		public void setChsProperty(int property, iWireData value) {
+			this.putItemProperty(property, value);
+		}
+	}
+	
+	private class ChsWorkstation extends ChsNetworkEntry {
+		
+		protected ChsWorkstation(File cfgFile) {
+			super(CHEntries0.workstation, "workstation", "Workstation ", cfgFile);
+		}
+		
+	}
+	
+	private class ChsEcsGapTTY extends ChsNetworkEntry {
+		
+		protected ChsEcsGapTTY(File cfgFile) {
+			super(CHEntries0.rs232CPort, "machineId", "TTY-Gateway ", cfgFile);
+			
+			int lineNumber = this.props.getInt("lineNumber", -1);
+			if (lineNumber < 1 || lineNumber > 65535) {
+				String key = this.objNameFromCfgFile.toLowerCase() + "#" + this.objNameFromCfgFile.toUpperCase();
+				lineNumber = key.hashCode() & 0xFFFF;
+			}
+			this.setUninterpretedProperty("lineNumber", Integer.toString(lineNumber));
+			
+			String ttyType = this.props.getString("ttyType", "telnet").toLowerCase();
+			ttyType = (!"telnet".equals(ttyType) && !"shell".equals(ttyType)  && !"simple".equals(ttyType)) ? "simple" : ttyType;
+			String connectAddress = this.props.getString("connectAddress", "localhost");
+			int connectPort = this.props.getInt("connectPort", 23);
+			String terminalType = this.props.getString("terminalType", "vt100");
+			String mapCarriageReturn = this.props.getString("mapCarriageReturn", "none");    // string-enum: none, crlf, lf
+			String mapBreak = this.props.getString("mapBreak", "CtrlC");    // string-enum: none, ctrlC, ctrlNextChar
+			String mapBackspace = this.props.getString("mapBackspace", "none"); // string-enum: none, rubout
+			String connectScript = this.props.getString("connectScript", "gap/" + this.objNameFromCfgFile.toLowerCase());
+			
+			this.setUninterpretedProperty("ttyType", ttyType);
+			this.setUninterpretedProperty("connectAddress", connectAddress);
+			this.setUninterpretedProperty("connectPort", Integer.toString(connectPort));
+			this.setUninterpretedProperty("terminalType", terminalType);
+			this.setUninterpretedProperty("mapCarriageReturn", mapCarriageReturn);
+			this.setUninterpretedProperty("mapBreak", mapBreak);
+			this.setUninterpretedProperty("mapBackspace", mapBackspace);
+			this.setUninterpretedProperty("connectScript", connectScript);
+		}
+		
+	}
+	
+	private class ChsEcsGapIBM extends ChsNetworkEntry {
+		
+		protected ChsEcsGapIBM(File cfgFile) {
+			super(CHEntries0.ibm3270Host, "machineId", "IBM3270Host-Gateway ", cfgFile);
+			
+			int controllerAddress = this.props.getInt("controllerAddress", -1);
+			if (controllerAddress < 1 || controllerAddress > 65535) {
+				String key = this.objNameFromCfgFile.toLowerCase() + "#" + this.objNameFromCfgFile.toUpperCase();
+				controllerAddress = key.hashCode() & 0xFFFF;
+			}
+			this.setUninterpretedProperty("controllerAddress", Integer.toString(controllerAddress));
+
+			String connectType = this.props.getString("connectType", "host").toLowerCase();
+			connectType = (!"host".equals(connectType) && !"simple".equals(connectType)) ? "simple" : connectType;
+			String connectAddress = this.props.getString("connectAddress", "localhost");
+			int connectPort = this.props.getInt("connectPort", 3270);
+			String connectLUName = this.props.getString("connectLUName", null);
+			String language = this.props.getString("language", null);
+			
+			this.setUninterpretedProperty("connectType", connectType);
+			this.setUninterpretedProperty("connectAddress", connectAddress);
+			this.setUninterpretedProperty("connectPort", Integer.toString(connectPort));
+			this.setUninterpretedProperty("connectLUName", connectLUName);
+			this.setUninterpretedProperty("language", language);
+		}
+		
 	}
 	
 	/*
@@ -1279,6 +1435,83 @@ public class ChsDatabase {
 		if (members == null) { return null; }
 		
 		return new ArrayList<>(members);
+	}
+	
+	/*
+	 * items for loading properties dynamically from files 
+	 */
+	
+	private static iWireData errMessage(String msg) {
+		System.out.printf("\n##\n### loadDynamicData(): %s\n##\n", msg);
+		return null;
+	}
+	
+	public static iWireData loadDynamicData(String cfgAbsoluteFilename, int propertyId) {
+		String fn = cfgAbsoluteFilename + "--" + propertyId + ".dyn";
+		File f = new File(fn);
+		if (!f.canRead()) { return errMessage("file not found: " + fn); } // file not found
+		
+		String typeName = null;
+		String jsonData = null; 
+		try(BufferedReader br = new BufferedReader(new FileReader(f))) {
+			String line = br.readLine();
+			if (line == null) { return errMessage("file is empty: " + fn); }
+			typeName = line;
+			
+			line = br.readLine();
+			if (line == null || !line.startsWith("####")) {
+				return errMessage("missing separator line:" + fn);
+			}
+			
+			StringBuilder sb = new StringBuilder();
+			line = br.readLine();
+			String sep = "";
+			while (line != null) {
+				sb.append(sep).append(line);
+				sep = "\n";
+				line = br.readLine();
+			}
+			jsonData = sb.toString();
+		} catch (IOException e) {
+			return errMessage("error reading file: " + fn + "\n### reason: " + e.getMessage());
+		}
+		
+		iWireData propertyData = null;
+		try {
+			Class<?> clazz = Class.forName(typeName);
+			Method make = clazz.getMethod("make");
+			propertyData = (iWireData)make.invoke(null);
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+			return errMessage("ClassNotFoundException on class: " + typeName);
+		} catch (NoSuchMethodException e) {
+			return errMessage("NoSuchMethodException on class: " + typeName);
+		} catch (SecurityException e) {
+			return errMessage("SecurityException on class: " + typeName);
+		} catch (IllegalAccessException e) {
+			return errMessage("IllegalAccessException when ::make() on class: " + typeName);
+		} catch (IllegalArgumentException e) {
+			return errMessage("IllegalArgumentException when ::make() on class: " + typeName);
+		} catch (InvocationTargetException e) {
+			return errMessage("InvocationTargetException when ::make() on class: " + typeName);
+		} catch(Exception e) {
+			return errMessage(e.getClass().getSimpleName() + " on class: " + typeName + "\n### reason: " + e.getMessage());
+		}
+		if (propertyData == null) {
+			return errMessage("make() returned null for file:" + fn);
+		}
+		
+		JsonStringReader jsonReader = new JsonStringReader(jsonData);
+		try {
+			propertyData.deserialize(jsonReader);
+		} catch(Exception e) {
+			return errMessage("invalid JSON in file: " + typeName + "\n### reason: " + e.getMessage());
+		}
+		return propertyData;
+	}
+	
+	public List<iUpdatableChsEntry> listUpdatableEntries(int type) {
+		return this.entries.values().stream().filter( e -> e.getType() == type ).collect(Collectors.toList());
 	}
 	
 	/*

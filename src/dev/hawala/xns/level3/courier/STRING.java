@@ -46,7 +46,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
  * client, ensuring that the original content is returned.
  * </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019,2023)
  */
 public class STRING implements iWireData {
 	
@@ -154,6 +154,16 @@ public class STRING implements iWireData {
 		
 		// result: XNS Character Encoding Standard => reversibly obfuscated in unicode string
 		this.str = sb.toString();
+	}
+
+	@Override
+	public void serialize(iJsonWriter wr) {
+		wr.writeString(this.str);
+	}
+
+	@Override
+	public void deserialize(iJsonReader rd) {
+		this.str = rd.readString();
 	}
 	
 	@Override

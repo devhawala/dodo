@@ -29,7 +29,7 @@ package dev.hawala.xns;
 /**
  * SPP connection with a remote destination.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2016-2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2016-2018,2023)
  */
 public interface iSppSocket {
 
@@ -61,5 +61,18 @@ public interface iSppSocket {
 	 * Close the SPP connection to the remote end.
 	 */
 	void close();
+	
+	/**
+	 * If the other end actively initiated the connection close protocol,
+	 * should we wait in a small time-frame for an active re-use if this
+	 * connection (although in closed state) by the remote end and then
+	 * re-open this same connection again?
+	 * <br/>
+	 * (this is {@code false} by default, so closed connections stay closed)
+	 * 
+	 * @param allowReAwaking if {@code true}, the connection will be kept in
+	 *     passive state for some time, awaiting a re-awaking the the remote end
+	 */
+	void handleAwakeAfterCloseByRemote(boolean allowReAwaking);
 	
 }

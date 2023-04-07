@@ -32,7 +32,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 /**
  * Representation of the Courier BOOLEAN datatype.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public class BOOLEAN implements iWireData {
 
@@ -62,6 +62,16 @@ public class BOOLEAN implements iWireData {
 	public StringBuilder append(StringBuilder to, String indent, String fieldName) {
 		to.append(indent).append(fieldName).append(": ").append(Boolean.toString(this.value));
 		return to;
+	}
+
+	@Override
+	public void serialize(iJsonWriter wr) {
+		wr.writeBoolean(this.value);
+	}
+
+	@Override
+	public void deserialize(iJsonReader rd) {
+		this.set(rd.readBoolean());
 	}
 	
 	public static BOOLEAN make() { return new BOOLEAN(); }

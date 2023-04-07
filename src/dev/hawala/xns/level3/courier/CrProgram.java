@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 
 import dev.hawala.xns.Log;
+import dev.hawala.xns.iSppSocket;
 import dev.hawala.xns.level3.courier.iWireStream.DeserializeException;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
@@ -42,7 +43,7 @@ import dev.hawala.xns.level3.courier.exception.CourierRuntimeException;
 /**
  * Base class for the definition of the interface of Courier programs.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public abstract class CrProgram {
 	
@@ -68,10 +69,16 @@ public abstract class CrProgram {
 		
 		private final Map<Short,T> wire2enum;
 		private final Map<T,Short> enum2wire;
+		private final Map<String,T> json2enum;
 		
 		private RealENUM(Map<Short,T> w2e, Map<T,Short> e2w) {
 			this.wire2enum = w2e;
 			this.enum2wire = e2w;
+			
+			this.json2enum = new HashMap<>();
+			for (T e : e2w.keySet()) {
+				this.json2enum.put(e.toString(), e);
+			}
 		}
 		
 		@Override
@@ -81,7 +88,7 @@ public abstract class CrProgram {
 			}
 			Short wireValue = this.enum2wire.get(this.value);
 			if (wireValue == null) {
-				throw new SerializeException("no wire representaiton available for enum value :" + this.value);
+				throw new SerializeException("no wire representation available for enum value :" + this.value);
 			}
 			ws.writeI16(wireValue & 0xFFFF);
 		}
@@ -106,6 +113,35 @@ public abstract class CrProgram {
 		@Override
 		protected boolean isAcceptable(T val) {
 			return this.enum2wire.containsKey(val);
+		}
+
+		@Override
+		public void serialize(iJsonWriter wr) {
+			if (this.value == null) {
+				throw new IllegalStateException("no enum value present on serialize()");
+			}
+//			Short wireValue = this.enum2wire.get(this.value);
+//			if (wireValue == null) {
+//				throw new SerializeException("no wire representation available for enum value :" + this.value);
+//			}
+//			wr.writeNumber(wireValue);
+			wr.writeString(this.value.toString());
+		}
+
+		@Override
+		public void deserialize(iJsonReader rd) {
+//			Short wireValue = Short.valueOf((short)rd.readNumber());
+//			if (this.wire2enum.containsKey(wireValue)) {
+//				this.value = this.wire2enum.get(wireValue);
+//			} else {
+//				throw new DeserializeException("no enum value mapped for wire value: " + wireValue);
+//			}
+			String wireValue = rd.readString();
+			if (this.json2enum.containsKey(wireValue)) {
+				this.value = this.json2enum.get(wireValue);
+			} else {
+				throw new DeserializeException("no enum value mapped for wire value: " + wireValue);
+			}
 		}
 	}
 	
@@ -239,6 +275,15 @@ public abstract class CrProgram {
 		protected boolean isAcceptableChoice(T val) {
 			return this.choiceMap.containsKey(val);
 		}
+		
+		private T getChoice(String name) {
+			for (T c : this.choiceMap.keySet()) {
+				if (c.name().equals(name)) {
+					return c;
+				}
+			}
+			throw new IllegalArgumentException("value for CHOICE tag is undefined");
+		}
 
 		@Override
 		protected RECORD createContentFor(T choiceValue) {
@@ -247,6 +292,28 @@ public abstract class CrProgram {
 				throw new IllegalArgumentException("value for CHOICE has no mapped content definition");
 			}
 			return contentMaker.make();
+		}
+
+		@Override
+		public void serialize(iJsonWriter wr) {
+			if (this.choiceContent == null) {
+				throw new IllegalStateException("no content choice present on serialize()");
+			}
+			wr.openStruct();
+			wr.writeFieldLabel(this.choiceValue.get().name());
+			this.choiceContent.serialize(wr);
+			wr.closeStruct();
+		}
+
+		@Override
+		public void deserialize(iJsonReader rd) {
+			rd.readStructure( (f,r) -> {
+				T choice = this.getChoice(f);
+				this.choiceValue.set(choice);
+				this.choiceContent = this.createContentFor(this.choiceValue.get());
+				r.readStruct(this.choiceContent);
+				return false;
+			});
 		}
 		
 	}
@@ -369,7 +436,7 @@ public abstract class CrProgram {
 	
 	private final Map<Integer,PROC<?,?>> procImplementations = new HashMap<>();
 	
-	public void dispatch(
+	public iRawCourierConnectionClient dispatch(
 					int transaction,
 					iWireStream connection) throws NoMoreWriteSpaceException, EndOfMessageException {
 		int procNo = connection.readI16();
@@ -380,18 +447,28 @@ public abstract class CrProgram {
 			connection.writeI16(1); // MessageType.reject(1)
 			connection.writeI16(2); // RejectCode.noSuchProcedureValue(2)
 			connection.writeEOM();
-			return;
+			return null;
 		}
 		
 		PROC<?,?> proc = this.procImplementations.get(procNo);
 		Log.C.printf(null, "%s.dispatch() -- invoking proc %s\n", this.getPgmIntro(), proc.getName());
-		proc.process(transaction, connection);
+		iRawCourierConnectionClient connectionClient = proc.process(transaction, connection);
 		Log.C.printf(null, "%s.dispatch() -- finished proc %s\n", this.getPgmIntro(), proc.getName());
+		return connectionClient;
 	}
 	
 	@FunctionalInterface
 	public interface CourierProcedureImplementation<P extends RECORD, R extends RECORD> {
 		void execute(P callParameters, R returnParameters);
+	}
+	
+	@FunctionalInterface
+	public interface iRawCourierConnectionClient {
+		void useConnection(iSppSocket sppSocket);
+	}
+	
+	public static abstract class RawCourierConnectionClientResults extends RECORD {
+		public abstract iRawCourierConnectionClient getConnectionClient();
 	}
 	
 	public class PROC<P extends RECORD, R extends RECORD> {
@@ -440,7 +517,7 @@ public abstract class CrProgram {
 			return this.procNumber;
 		}
 		
-		public void process(
+		public iRawCourierConnectionClient process(
 				int transaction,
 				iWireStream connection) throws NoMoreWriteSpaceException, EndOfMessageException {
 			
@@ -448,7 +525,7 @@ public abstract class CrProgram {
 			if (this.implementation == null) {
 				connection.dropToEOM(Constants.SPPSST_RPC); 
 				this.encodeReject(transaction, 2, connection); // RejectCode.noSuchProcedureValue(2)
-				return;
+				return null;
 			}
 			
 			// create the call and return data structures
@@ -460,12 +537,12 @@ public abstract class CrProgram {
 				inParams.deserialize(connection);
 			} catch (Exception e) {
 				this.encodeInvalidArgumentsReject(transaction, connection);
-				return;
+				return null;
 			}
 			if (!connection.isAtEnd()) {
 				connection.dropToEOM(Constants.SPPSST_RPC);
 				this.encodeInvalidArgumentsReject(transaction, connection);
-				return;
+				return null;
 			}
 			CrProgram.this.log(procName, "call", "params", inParams);
 			
@@ -480,7 +557,7 @@ public abstract class CrProgram {
 				for (ERROR<?> e: this.declaredErrors) {
 					if (e.is(errorData)) {
 						this.encodeAbort(transaction, connection, errorData);
-						return;
+						return null;
 					}
 				}
 				
@@ -489,18 +566,18 @@ public abstract class CrProgram {
 				ce.printStackTrace(System.out);
 				System.out.printf("\n###\n\n");
 				this.encodeInvalidArgumentsReject(transaction, connection);
-				return;
+				return null;
 			} catch (Throwable thr) {
 				// do a fallback handling for any other error
 				System.out.printf("\n###\n### rejecting because of unexpected unchecked exception raised: %s : %s\n", thr.getClass().getName(), thr.getMessage());
 				thr.printStackTrace(System.out);
 				System.out.printf("\n###\n\n");
 				this.encodeInvalidArgumentsReject(transaction, connection);
-				return;
+				return null;
 			}
 			
 			// send back the return data
-			this.encodeReturn(transaction, connection, outParams);
+			return this.encodeReturn(transaction, connection, outParams);
 		}
 		
 		private void encodeReject(int transaction, int reason, iWireStream connection) throws NoMoreWriteSpaceException {
@@ -524,12 +601,16 @@ public abstract class CrProgram {
 			connection.writeEOM();
 		}
 		
-		private void encodeReturn(int transaction, iWireStream connection, RECORD resultData) throws NoMoreWriteSpaceException {
+		private iRawCourierConnectionClient encodeReturn(int transaction, iWireStream connection, RECORD resultData) throws NoMoreWriteSpaceException {
 			CrProgram.this.log(procName, "encodeReturn", "resultData", resultData);
 			connection.writeI16(2); // MessageType.return(2)
 			connection.writeI16(transaction);
 			resultData.serialize(connection);
 			connection.writeEOM();
+			if (resultData instanceof RawCourierConnectionClientResults) {
+				return ((RawCourierConnectionClientResults)resultData).getConnectionClient();
+			}
+			return null;
 		}
 		
 	}

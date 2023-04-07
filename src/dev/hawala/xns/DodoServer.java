@@ -45,6 +45,7 @@ import dev.hawala.xns.level4.common.ChsDatabase;
 import dev.hawala.xns.level4.common.Time2;
 import dev.hawala.xns.level4.echo.EchoResponder;
 import dev.hawala.xns.level4.filing.FilingImpl;
+import dev.hawala.xns.level4.gap.Gap3Impl;
 import dev.hawala.xns.level4.mailing.MailingExpeditedCourierResponder;
 import dev.hawala.xns.level4.mailing.MailingOldImpl;
 import dev.hawala.xns.level4.mailing.MailingNewImpl;
@@ -63,7 +64,7 @@ import dev.hawala.xns.level4.time.TimeServiceResponder;
  * extinct Dodo bird came up).   
  *  </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018,2019,2020)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019,2020,2023)
  */
 public class DodoServer {
 
@@ -427,6 +428,10 @@ public class DodoServer {
 				System.out.printf("No volumes opened successfully, not registering Filing to Courier");
 			}
 		}
+		
+		// Gateway Access Services
+		Gap3Impl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase);
+		Gap3Impl.register();
 		
 		// run courier server with dispatcher
 		CourierServer courierServer = new CourierServer(localSite);

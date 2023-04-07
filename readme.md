@@ -4,6 +4,7 @@ Dodo Services implement **Xerox Network Services** (XNS) protocols in Java, prov
 services to existing emulated or real Xerox client machines.
     
 Currently the following XNS services are provided by Dodo:
+
 - Time
 - Routing Information
 - Clearinghouse
@@ -12,6 +13,7 @@ Currently the following XNS services are provided by Dodo:
 - Printing
 - Filing
 - Mailing
+- External Communication
 
 (although in most cases the implementation is incomplete regarding the specification,
 the services provide a working and useful subset for working "as usual" with XDE resp.
@@ -109,8 +111,13 @@ information
     - Mailing    
 	(MailTransport: Courier program 17, version 4 and 5)    
 	(Inbasket: Courier program 18, version 1 and 2)    
-	the subset of protocol procedures actively used by XDE and Star/Viewpoint/GlobalView
+	the subset of protocol procedures actively used by XDE, Star/Viewpoint/GlobalView and Interlisp-D
 	for sending and receiving mails is implemented.
+    - External Communication    
+	(Gateway Access Protocol: Courier program 3, version 3)    
+	all protocol procedures are implemented, providing access to "foreign systems" through plain
+	telnet (simulating RS-232C/TTY lines), tn3270 telnet (simulating 3270 BSC/SDLC attachments to emulated
+	or real IBM-type mainframes) or stdin/stdout piping to local commands/scripts.
     - NStoPupHostLookup    
 	(Interlisp-D specific)     
 	Responder for delivering the PUP network and host numbers for a machine
@@ -124,6 +131,14 @@ The following network example from the "old days" can be used for discussing the
 components:
 
 ![example real network to be emulated](network-sample.png)
+
+The client part of the network features several workstation generations from *8010 Star*
+and *6085 with XDE* workstations (both could also run *ViewPoint* or *Interlisp*) to a
+PC running *GlobalView*.    
+The server part of the network has the most common XNS backends like the required *Clearinghouse/Authentication Service*
+(also hosting a *Mail Service*) as well as the usual *File* and *Print Services*. Interactive access to
+"foreign systems" like mainframes or mid-range systems is provided through an *External Communication Server* with
+its companion *CIU* (*Communication Interface Unit*).
 
 In a more contemporary environment of emulated Xerox machines, the original Star 8010 workstation
 could be subtituted by the Darkstar emulator, the Dwarf emulator could replace the PC with GlobalView.    
@@ -509,7 +524,7 @@ to be delivered by the NStoPupHostLookup service.
 If several client machines need the same parameter overrides, it is not necessary
 to duplicate the parameters, instead it is possible to copy the settings from another
 machine with a line:    
-`  :like `&nbsp;*other-machine*    
+`&nbsp;&nbsp;:like `&nbsp;*other-machine*    
 and possibly add specific parameters for overriding values taken from the *other-machine*
 (overrides must come after the `like:` line).
 
@@ -742,6 +757,14 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2023-04-07    
+-- added first version of _External Communication Services_ for TTY and 3270 connections    
+-- implementation of the Gateway Access Protocol (GAP, Courier program 3 version 3)    
+-- connections for client TTY emulators via telnet for legacy Unixoids, VMS or the like    
+-- connections for client 3270 emulators via tn3270 for IBM-type mainframes    
+-- with simple local echo applications for TTY and 3270 type services for tests    
+-- added (de)serialization of Courier data structures from/to JSON 
 
 - 2022-11-27,28    
 -- added new responder for "PUP host lookup" broadcast packets for Interlisp-D (Medley)   

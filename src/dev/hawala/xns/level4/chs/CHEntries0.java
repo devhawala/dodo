@@ -40,7 +40,7 @@ import dev.hawala.xns.level4.common.Time2.Time;
  * <br/>(with some additions from CHEntries0.cr/CHPIDs.mesa)
  * </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public class CHEntries0 extends CrProgram {
 
@@ -196,6 +196,8 @@ public class CHEntries0 extends CrProgram {
 	
 	/*
 	 * ***** additional primary properties:  all have associated Item == Description
+	 * 
+	 * (see also: https://stuff.mit.edu/afs/athena/astaff/reference/4.3network/xns/courierlib/CHEntries0.cr)
 	 */
 	
 	/*
@@ -205,5 +207,36 @@ public class CHEntries0 extends CrProgram {
 	 *   workstation: Clearinghouse.Property = 10005;
 	 */
 	public static final int workstation = 10005;
+	
+	/*
+	 * ExternalCommunicationsService: {
+	 *     (workstation, Description),
+	 *     (addressList, AddressListValue)}
+	 * externalCommunicationsService: Clearinghouse.Property = 10006;
+	 */
+	public static final int externalCommunicationsService = 10006;
+	
+	/*
+	 * RS232CPort: {
+	 *     (rs232CPort, Description),
+	 *     (rs232CData, RS232CData),
+	 *     (addressList, AddressListValue)}
+	 * 
+	 * rs232CPort: Clearinghouse.Property = 10007;
+	 */
+	public static final int rs232CPort = 10007;
+	public static final int rs232CData = 20001;
+	
+	/*
+	 * IBM3270Host: {
+	 *     (rs232CPort, Description),
+	 *     (ibm3270HostData, IBM3270HostData),
+	 *     (addressList, AddressListValue)}
+	 * 
+	 * ibm3270Host: Clearinghouse.Property = 10010;
+	 */
+	public static final int ibm3270Host = 10010;
+	public static final int ibm3270HostData = 20002;
+	
 	
 }

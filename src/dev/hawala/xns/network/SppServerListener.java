@@ -47,7 +47,7 @@ import dev.hawala.xns.level2.SppConnection;
  * connections on a local port.
  * </p>
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public class SppServerListener implements iIDPReceiver, iSppServerSocket {
 
@@ -164,6 +164,11 @@ public class SppServerListener implements iIDPReceiver, iSppServerSocket {
 			if (this.connection != null) {
 				this.connection.closeConnection(100); // 100ms max. wait time
 			}
+		}
+
+		@Override
+		public void handleAwakeAfterCloseByRemote(boolean allowReAwaking) {
+			this.connection.handleAwakeAfterCloseByRemote(allowReAwaking);
 		}
 		
 	}

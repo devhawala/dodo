@@ -35,7 +35,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 /**
  * Representation of the Courier ARRAY datatype.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public class ARRAY<T extends iWireData> implements iWireData {
 
@@ -82,6 +82,24 @@ public class ARRAY<T extends iWireData> implements iWireData {
 		}
 		to.append(newIndent).append("]");
 		return to;
+	}
+
+	@Override
+	public void serialize(iJsonWriter wr) {
+		wr.openArray();
+		for (int i = 0; i < this.elemCount; i++) {
+			this.elems.get(i).serialize(wr);
+		}
+		wr.closeArray();
+	}
+
+	@Override
+	public void deserialize(iJsonReader rd) {
+		this.elems.clear();
+		rd.readArray(this.elemBuilder, e -> { if (this.elems.size() < elemCount) { this.elems.add(e); } });
+		for(int i = this.elems.size(); i < this.elemCount; i++) {
+			this.elems.add(this.elemBuilder.make());
+		}
 	}
 	
 }

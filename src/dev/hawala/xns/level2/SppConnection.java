@@ -55,8 +55,21 @@ import dev.hawala.xns.network.iSocketUnbinder;
  * connections initiated remotely (by handling the first packet sent by the other end).
  * After initiating the connection, there is no difference regarding the work done
  * in this class.
+ * </p>
+ * <p>
+ * If allowed through a call to method {@code handleAwakeAfterCloseByRemote()}, the other
+ * side may re-awake a regularly closed connection by continuing to use it: this allows for
+ * the Gateway Access Protocol specific use-case where the SPP connection of a Courier
+ * connection is "borrowed" for non-Courier usage, where closing the SPP connection gives
+ * back the SPP-ownership to the Courier layer on both sides, so the remote side may then
+ * continue using the SPP connection for Courier requests (re-awakening the connection)
+ * or leave the connection closed.
+ * <br/>
+ * For this use-case, the local Courier implementation may allow a re-awakening of the closed
+ * connection, which must happen in 10 seconds after the connection was closed.
+ * </p>
  * 
- * @author Dr. Hans-Walter Latz, Berlin (Germany), 2016-2019
+ * @author Dr. Hans-Walter Latz, Berlin (Germany), 2016-2019,2023
  *
  */
 public class SppConnection {
@@ -115,14 +128,30 @@ public class SppConnection {
 	}
 	
 	private static synchronized void addActiveConnection(SppConnection c) {
-		if (activeConnections.contains(c)) { return; }
+		// create the new active connections state
 		List<SppConnection> conns = new ArrayList<>(activeConnections);
-		conns.add(c);
+		
+		// remove obsolete connections
+		// (closed connections without remote activity since 5 secs are considered finalized and thus obsolete)
+		long terminationTs = System.currentTimeMillis() - 5_000;
+		for (SppConnection cand : activeConnections) {
+			if (cand.isObsolete(terminationTs)) {
+				conns.remove(cand);
+				cand.socketUnbinder.unbind();
+				//System.out.printf("******* unbound and removed local connection with socket 0x%04X from actives ****************\n", cand.myEndpoint.socket);
+			}
+		}
+		
+		// add the new connection
+		if (!activeConnections.contains(c)) {
+			conns.add(c);
+		}
 		activeConnections = conns;
 	}
 	
 	private static synchronized void removeActiveConnection(SppConnection c) {
 		if (!activeConnections.contains(c)) { return; }
+		//System.out.printf("******* dropped local connection with socket 0x%04X from actives ****************\n", c.myEndpoint.socket);
 		List<SppConnection> conns = new ArrayList<>(activeConnections);
 		conns.remove(c);
 		activeConnections = conns;
@@ -245,8 +274,6 @@ public class SppConnection {
 		this.initClientSpecifics(); // set specific configuration for 'othersEndpoint'
 		
 		this.intro = "clnt";
-
-		/*this.state = State.NEW;*/
 		
 		this.inMaxAllowedSeqNo = windowLength + FIRST_SEQNO - 1;
 		
@@ -352,16 +379,18 @@ public class SppConnection {
 			SPP spp = new SPP(idp);
 			boolean doNotify = false;
 			
-			if (this.state == State.CLOSED) {
-				return; // well that's clear!
-			}
-			
 			long now = System.currentTimeMillis();
 			this.lastOthersActivity = now;
 			this.resendRetries = 0;
 			
 			try {
 				int sst = spp.getDatastreamType() & 0xFF;
+				
+				if (this.state == State.CLOSED && !spp.isSystemPacket()) {
+					// data traffic on closed socket ?? 
+					this.idpSender.send(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
+					return;
+				}
 				
 				// check for correct connection
 				if (this.state != State.CONNECTING) {
@@ -372,51 +401,11 @@ public class SppConnection {
 					}
 				}
 				
-				// ignore all when closing except close confirmation
-				if (this.state == State.CLOSING) {
-					if (sst == SST_CLOSE_CONFIRM) {
-						Log.L3.printf(this.intro, "** handleIngonePacket(): received close-ack, connection now closed\n");
-						this.state = State.CLOSED;
-						removeActiveConnection(this);
-						if (!this.otherRequestedClose) {
-							int seqNo = this.myNextSeqNo++;
-							SPP closeAck = this.fillSppConnectionData(new SPP())
-									.setSequenceNumber(seqNo)
-									.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-							this.sendSequencedOOB(closeAck);
-							Log.L3.printf(this.intro, "** handleIngonePacket(): sent final close-ack (as close-initiator)\n");
-						}
-						// unbind listener socket for this connection and inform others
-						this.socketUnbinder.unbind();
-						this.notifyAll();
-					}
-					if (sst == SST_CLOSE_REQUEST) {
-						// overlapping close requests
-						// we send our confirmation and wait for others confirmation 
-						int seqNo = this.myNextSeqNo++;
-						SPP closeAck = this.fillSppConnectionData(new SPP())
-								.setSequenceNumber(seqNo)
-								.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-						this.sendSequencedOOB(closeAck);
-						this.otherRequestedClose = true;
-						Log.L3.printf(this.intro, "** handleIngonePacket(): received close-request while waiting for close-ack, sent close-ack\n");
-					}
-					if (spp.isSendAcknowledge()) {
-						// BSD-4.3 uses SendAcks when closing/confirming close,
-						// but the following packet will probably not be received
-						// due to NO_SOCKET (!) => we will get an error packet(!!)
-						SPP ack = this.fillSppConnectionData(new SPP())
-								.asSystemPacket()
-								.setAcknowledgeNumber(spp.getSequenceNumber() + 1); // we allow us to lie to the other end, as the connection is going down 
-						this.transmitPacket(ack.idp);
-					}
-					return;
-				}
-				
 				// only system packets are allowed until really connected
 				if (this.state == State.CONNECTING && !spp.isSystemPacket()) {
 					if (sst == SST_CLOSE_REQUEST || sst == SST_CLOSE_CONFIRM) {
 						this.state = State.CLOSED;
+						this.socketUnbinder.unbind();
 						removeActiveConnection(this);
 					}
 					this.transmitPacket(new Error(ErrorCode.PROTOCOL_VIOLATION, 0, spp.idp).idp);
@@ -455,6 +444,13 @@ public class SppConnection {
 				}
 								
 				// interpret connection control flags
+				if (spp.isSendAcknowledge() && (this.state == State.CLOSED || this.state == State.CLOSING)) {
+					// respond to acknowledge requests if closed, even if the following packet will
+					// possibly not be received due to NO_SOCKET (!) => we may get an error packet(!!)
+					SPP ack = this.fillSppConnectionData(new SPP()).asSystemPacket();
+					this.transmitPacket(ack.idp);
+					return;
+				}
 				if (spp.isSendAcknowledge() && this.ackCountdown == 0) {
 					// enlist sending acknowledgment if not already pending
 					this.ackCountdown = this.sppHandshakeSendackCountdown;
@@ -462,7 +458,8 @@ public class SppConnection {
 				}
 				if (spp.isAttention()) {
 					if (spp.getPayloadLength() > 0) {
-						this.pendingAttentions.add(spp.rdByte(0));
+						byte attnCode = spp.rdByte(0);
+						this.pendingAttentions.add(attnCode);
 					}
 				}
 				if (spp.isSystemPacket()) {
@@ -529,72 +526,153 @@ public class SppConnection {
 		}
 	}
 	
+	private boolean allowReAwaking = false;
+	private Long closedReawakeTimeout = null;
+	
+	public void handleAwakeAfterCloseByRemote(boolean allowReAwaking) {
+		this.allowReAwaking = allowReAwaking;
+	}
+	
 	public SPP dequeueIngonePacket() throws InterruptedException {
+		synchronized(this) {
+			if (this.state == State.CLOSED) {
+				return null;
+			}
+			
+			SPP packet = this.innerdequeueIngonePacket(null);
+			
+			if (this.closedReawakeTimeout == null) {
+				return packet;
+			}
+			
+			try {
+				//System.out.printf("** dequeueIngonePacket( local socket 0x%04X ): waiting for re-awakening packet\n", this.myEndpoint.socket);
+				if (packet == null) {
+					long now = System.currentTimeMillis();
+					long timeout = now + this.closedReawakeTimeout;
+					
+					while(packet == null && now < timeout) {
+						packet = this.innerdequeueIngonePacket(5L);
+						now = System.currentTimeMillis();
+						if (packet != null) {
+							//System.out.printf("** dequeueIngonePacket( local socket 0x%04X ): got packet, payload.length = %s\n", this.myEndpoint.socket, packet.getPayloadLength());
+						}
+						if (packet != null && packet.getPayloadLength() < 1) {
+							packet = null;
+						}
+						if (this.state != State.CONNECTED) {
+							break;
+						}
+					}
+				}
+			} finally {
+				//System.out.printf("** dequeueIngonePacket( local socket 0x%04X ): done waiting for re-awake, current state: %s\n", this.myEndpoint.socket, this.state);
+				this.closedReawakeTimeout = null;
+				this.state = (packet == null || this.state != State.CONNECTED) ? State.CLOSED : State.CONNECTED;
+				//System.out.printf("** dequeueIngonePacket( local socket 0x%04X ): re-awakening state: %s\n", this.myEndpoint.socket, this.state);
+			}
+			
+			return packet;
+		}
+	}
+	
+	private SPP innerdequeueIngonePacket(Long timeout) throws InterruptedException {
 		SPP dequeued = null;
 		while (dequeued == null || dequeued.isAttention()) { // ignore OOB packets in the sequence, as attentions are handled separately
-			synchronized(this) {
-				// make sure (possibly wait for) that there is a packet to dequeue
-				while(this.ingonePackets[0] == null) {
-					if (this.state == State.CLOSED || this.state == State.CLOSING) {
+			// make sure (possibly wait for) that there is a packet to dequeue
+			while(this.ingonePackets[0] == null) {
+				if (timeout == null) {
+					this.wait();
+				} else {
+					this.wait(timeout);
+					if (this.ingonePackets[0] == null) {
 						return null;
 					}
-					this.wait();
 				}
-				
-				// if the in-window is full, de-queueing allows the other to send one more packet...
-				// but send the notification also if we have something to send to avoid deadlocks
-				boolean sendWindowUpdate 
-						= (this.ingonePackets[this.windowLength - 1] != null)
-						|| (this.inNextExpectedSeqNo >= this.inMaxAllowedSeqNo)
-						|| this.outgoingPackets[0] != null; 
-				
-				// extract the first packet and shift the in-window up by one
-				dequeued = this.ingonePackets[0];
-				for(int i = 1; i < this.windowLength; i++) {
-					this.ingonePackets[i - 1] = this.ingonePackets[i];
-					this.ingonePackets[i] = null;
+				if (this.pendingAttentions.size() > 0) {
+					return null; // give the client a chance to check for OOB packets
 				}
-				this.inMaxAllowedSeqNo++;
-				this.inFirstSeqNo++;
-				
-				// check if there is a fitting spill-over packet
-				if (!this.spillOver.isEmpty()) {
-					SPP spp = this.spillOver.get(0);
-					int seqNo = spp.getSequenceNumber();
-					if (seqNo == this.inMaxAllowedSeqNo) {
-						// put the spilled over packet in the in-queue
-						this.ingonePackets[seqNo - this.inFirstSeqNo] = spp;
-						this.spillOver.remove(0);
-						// update the acknowledgment data (from us to the other end)
-						for (int i = 0; i < this.windowLength; i++) {
-							SPP ingone = this.ingonePackets[i];
-							if (ingone == null) { break; }
-							this.inNextExpectedSeqNo = ingone.getSequenceNumber() + 1;
-						}
-						// force an information of the other
-						sendWindowUpdate = true;
+			}
+			
+			// if the in-window is full, de-queueing allows the other to send one more packet...
+			// but send the notification also if we have something to send to avoid deadlocks
+			boolean sendWindowUpdate 
+					= (this.ingonePackets[this.windowLength - 1] != null)
+					|| (this.inNextExpectedSeqNo >= this.inMaxAllowedSeqNo)
+					|| this.outgoingPackets[0] != null; 
+			
+			// extract the first packet and shift the in-window up by one
+			dequeued = this.ingonePackets[0];
+			for(int i = 1; i < this.windowLength; i++) {
+				this.ingonePackets[i - 1] = this.ingonePackets[i];
+				this.ingonePackets[i] = null;
+			}
+			this.inMaxAllowedSeqNo++;
+			this.inFirstSeqNo++;
+			
+			// check if there is a fitting spill-over packet
+			if (!this.spillOver.isEmpty()) {
+				SPP spp = this.spillOver.get(0);
+				int seqNo = spp.getSequenceNumber();
+				if (seqNo == this.inMaxAllowedSeqNo) {
+					// put the spilled over packet in the in-queue
+					this.ingonePackets[seqNo - this.inFirstSeqNo] = spp;
+					this.spillOver.remove(0);
+					// update the acknowledgment data (from us to the other end)
+					for (int i = 0; i < this.windowLength; i++) {
+						SPP ingone = this.ingonePackets[i];
+						if (ingone == null) { break; }
+						this.inNextExpectedSeqNo = ingone.getSequenceNumber() + 1;
 					}
+					// force an information of the other
+					sendWindowUpdate = true;
 				}
-				
-				// inform the other about new space if necessary
-				if (sendWindowUpdate) {
-					SPP ack = this.fillSppConnectionData(new SPP()).asSystemPacket();
-					this.transmitPacket(ack.idp);
-				}
-				
-				// handle closing the connection
-				int sst = dequeued.getDatastreamType() & 0xFF;
-				if (sst == SST_CLOSE_REQUEST) {
-					this.state = State.CLOSING;
-					this.otherRequestedClose = true;
+			}
+			
+			// inform the other about new space if necessary
+			if (sendWindowUpdate) {
+				SPP ack = this.fillSppConnectionData(new SPP()).asSystemPacket();
+				this.transmitPacket(ack.idp);
+			}
+			
+			// handle closing the connection
+			int sst = dequeued.getDatastreamType() & 0xFF;
+			if (sst == SST_CLOSE_REQUEST) {
+				this.state = State.CLOSING;
+				this.otherRequestedClose = true;
+				int seqNo = this.myNextSeqNo++;
+				SPP closeAck = this.fillSppConnectionData(new SPP())
+						.setSequenceNumber(seqNo)
+						.setDatastreamType((byte)SST_CLOSE_CONFIRM);
+				this.transmitPacket(closeAck.idp);
+				Log.L3.printf(this.intro, "** dequeueIngonePacket(): received close-request, sent close-ack\n");
+				//System.out.printf("** dequeueIngonePacket( local socket 0x%04X ): received close-request, sent close-ack\n", this.myEndpoint.socket);
+				dequeued = null; // we consumed this packet instead of the caller ...
+				continue; // ... so possibly return the next incoming packet
+			}
+			if (sst == SST_CLOSE_CONFIRM) {
+				Log.L3.printf(this.intro, "** dequeueIngonePacket(): received close-ack, connection now closed\n");
+				//System.out.printf("** dequeueIngonePacket( local socket 0x%04X ): received close-ack, connection now closed\n", this.myEndpoint.socket);
+				this.state = State.CLOSED;
+				if (!this.otherRequestedClose) {
 					int seqNo = this.myNextSeqNo++;
 					SPP closeAck = this.fillSppConnectionData(new SPP())
 							.setSequenceNumber(seqNo)
 							.setDatastreamType((byte)SST_CLOSE_CONFIRM);
-					this.sendSequencedOOB(closeAck);
-					Log.L3.printf(this.intro, "** dequeueIngonePacket(): received close-request, sent close-ack\n");
-					return null; // as we are closing, anything ingoing is ignored from now
+					this.transmitPacket(closeAck.idp);
+					Log.L3.printf(this.intro, "** dequeueIngonePacket(): sent final close-ack (as close-initiator)\n");
+					//System.out.printf("** dequeueIngonePacket( local socket 0x%04X ): sent final close-ack (as close-initiator)\n", this.myEndpoint.socket);
+				} else {
+					String awakeningInfo = "";
+					if (this.allowReAwaking) {
+						closedReawakeTimeout = 10_000L;
+						this.state = State.CONNECTED;
+						awakeningInfo = " ... waiting for re-awakening";
+					}
+					Log.L3.printf(this.intro, "** dequeueIngonePacket(): (close-initiating) OTHER end confirmed connection close%s\n", awakeningInfo);
+					//System.out.printf("** dequeueIngonePacket( local socket 0x%04X ): (close-initiating) OTHER end confirmed connection close%s\n", this.myEndpoint.socket, awakeningInfo);
 				}
+				return null; // signal to the caller that connection is now closed (dropping the still active connection will happen later at the occasion of a new connection)
 			}
 		}
 		
@@ -676,12 +754,16 @@ public class SppConnection {
 	}
 	
 	public void sendAttention(byte attnByte) {
+		this.sendAttention(attnByte, (byte)0);
+	}
+	
+	public void sendAttention(byte attnByte, byte datastreamType) {
 		byte[] attnPayload = { attnByte };
 		synchronized(this) {
 			if (this.state == State.CLOSED || this.state == State.CLOSING) {
 				return;
 			}
-			SPP attn = this.fillSppConnectionData(new SPP(attnPayload)).asAttention();
+			SPP attn = this.fillSppConnectionData(new SPP(attnPayload)).setDatastreamType(datastreamType).asAttention();
 			this.sendSequencedOOB(attn);
 		}
 	}
@@ -786,11 +868,14 @@ public class SppConnection {
 			}
 			if (this.state != State.CONNECTED) {
 				Log.L3.printf(this.intro, "** closeConnection(): not yet connected\n");
+				// give up this connection and unbind listener socket for this connection
 				this.state = State.CLOSED;
-				// unbind listener socket for this connection
+				removeActiveConnection(this);
 				this.socketUnbinder.unbind();
 				return;
 			}
+
+			System.out.printf("++++ closeConnection(): start closing SPP connection with local socket 0x%04X\n", this.myEndpoint.socket);
 			
 			// phase 1: initiate and request close
 			this.state = State.CLOSING;
@@ -798,31 +883,30 @@ public class SppConnection {
 			SPP closeReq = this.fillSppConnectionData(new SPP())
 					.setSequenceNumber(seqNo)
 					.setDatastreamType((byte)SST_CLOSE_REQUEST);
-			this.sendSequencedOOB(closeReq);
+			this.transmitPacket(closeReq.idp);
 			Log.L3.printf(this.intro, "** closeConnection(): sent close initiating packet\n");
 			
 			// phase 2: wait for confirmation
-			int waitsLeft = Math.max(1,  (maxWaitMs + 9) / 10);
+			int waitsLeft = Math.max(1,  (maxWaitMs + 9) / 10); // subdivide 'maxWaitMs' in 10 msec partitions
 			while(this.state != State.CLOSED && waitsLeft > 0) {
 				try {
-					this.wait(10);
+					this.innerdequeueIngonePacket(10L); // wait max. 10 msecs
 				} catch (InterruptedException e) {
 					break;
 				}
 				waitsLeft--;
 			}
 			if (this.state == State.CLOSED) {
-				// unbinding the socket was already done when state
 				// switched to CLOSED in handleIngonePacket() at end
 				// of close protocol handshake
+				System.out.printf("++++ closeConnection(): SPP connection with local socket 0x%04X successfully closed\n", this.myEndpoint.socket);
 				return;
 			}
 			
 			// fallback: no close confirmation from other end after maxWaitMs:
-			// set state to closed and unbind listener socket for this connection
+			// set state to closed
 			this.state = State.CLOSED;
-			removeActiveConnection(this);
-			this.socketUnbinder.unbind();
+			System.out.printf("++++ closeConnection(): SPP connection with local socket 0x%04X closed after TIME-OUT\n", this.myEndpoint.socket);
 			Log.L3.printf(this.intro, "** closeConnection(): closed after time-out\n");
 		}
 	}
@@ -830,6 +914,12 @@ public class SppConnection {
 	public boolean isClosed() {
 		synchronized(this) {
 			return this.state == State.CLOSED || this.state == State.CLOSING;
+		}
+	}
+	
+	private boolean isObsolete(long refTs) {
+		synchronized(this) {
+			return this.state == State.CLOSED && this.lastOthersActivity <= refTs;
 		}
 	}
 	
@@ -908,7 +998,7 @@ public class SppConnection {
 		sppPacket
 			.setDstConnectionId(this.othersConnectionId)
 			.setSrcConnectionId(this.myConnectionId)
-			.setAcknowledgeNumber(this.inNextExpectedSeqNo)
+			.setAcknowledgeNumber(this.inNextExpectedSeqNo + 1)
 			.setAllocationNumber(this.inMaxAllowedSeqNo)
 			.setSequenceNumber(Math.max(0, this.myNextSeqNo - 1));
 		sppPacket.idp

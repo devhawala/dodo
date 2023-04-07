@@ -32,7 +32,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 /**
  * Representation of the Courier CARDINAL datatype.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public class CARDINAL implements iWireData {
 	
@@ -61,6 +61,16 @@ public class CARDINAL implements iWireData {
 	public StringBuilder append(StringBuilder to, String indent, String fieldName) {
 		to.append(indent).append(fieldName).append(": ").append(Integer.toString(this.value));
 		return to;
+	}
+
+	@Override
+	public void serialize(iJsonWriter wr) {
+		wr.writeNumber(this.value);
+	}
+
+	@Override
+	public void deserialize(iJsonReader rd) {
+		this.set((int)rd.readNumber());
 	}
 	
 	public static CARDINAL make() { return new CARDINAL(); }

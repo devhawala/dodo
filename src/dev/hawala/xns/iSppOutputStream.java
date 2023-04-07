@@ -29,13 +29,15 @@ package dev.hawala.xns;
 /**
  * Functionality of the sending (output) stream of an SPP connection.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2016-2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2016-2018,2023)
  */
 public interface iSppOutputStream {
 	
 	boolean isClosed();
 	
 	void sendAttention(byte attentionByte) throws XnsException, InterruptedException;
+	
+	void sendAttention(byte attentionByte, byte datastreamType) throws XnsException, InterruptedException;
 
 	int write(byte[] buffer, byte datastreamType) throws XnsException, InterruptedException;
 	

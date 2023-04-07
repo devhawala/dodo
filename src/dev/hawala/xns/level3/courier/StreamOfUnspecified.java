@@ -36,7 +36,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
  * Non-generic implementation equivalent for {@code StreamOf<UNSPECIFIED>} with
  * a much smaller heap footprint and probably faster.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2019)
+ * @author Dr. Hans-Walter Latz / Berlin (2019,2023)
  */
 public class StreamOfUnspecified implements iWireData {
 
@@ -148,6 +148,21 @@ public class StreamOfUnspecified implements iWireData {
 				this.add(w);
 			}
 		}
+	}
+
+	@Override
+	public void serialize(iJsonWriter wr) {
+		wr.openArray();
+		for (int i = 0; i < this.size(); i++) {
+			wr.writeNumber(this.get(i));
+		}
+		wr.closeArray();
+	}
+
+	@Override
+	public void deserialize(iJsonReader rd) {
+		this.contents.clear();
+		rd.readNumberArray( v -> this.add(v.intValue()) );
 	}
 
 	@Override

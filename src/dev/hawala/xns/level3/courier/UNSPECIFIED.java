@@ -32,7 +32,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 /**
  * Representation of the Courier UNSPECIFIED datatype (1 word).
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public class UNSPECIFIED implements iWireData {
 	
@@ -55,6 +55,16 @@ public class UNSPECIFIED implements iWireData {
 	@Override
 	public void deserialize(iWireStream ws) throws EndOfMessageException {
 		this.value = ws.readI16() & 0xFFFF;
+	}
+
+	@Override
+	public void serialize(iJsonWriter wr) {
+		wr.writeNumber(this.value);
+	}
+
+	@Override
+	public void deserialize(iJsonReader rd) {
+		this.set((int)rd.readNumber());
 	}
 	
 	@Override

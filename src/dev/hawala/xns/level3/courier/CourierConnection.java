@@ -27,6 +27,7 @@ ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package dev.hawala.xns.level3.courier;
 
 import dev.hawala.xns.Log;
+import dev.hawala.xns.level3.courier.CrProgram.iRawCourierConnectionClient;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 
@@ -54,7 +55,7 @@ public class CourierConnection {
 		this.connId = connId;
 	}
 	
-	public void processSingleCall() throws EndOfMessageException, NoMoreWriteSpaceException {
+	public iRawCourierConnectionClient processSingleCall() throws EndOfMessageException, NoMoreWriteSpaceException {
 		// make sure we are in RPC stream
 		if (this.wireStream.getStreamType() != Constants.SPPSST_RPC) {
 			this.wireStream.dropToEOM(Constants.SPPSST_RPC);
@@ -76,7 +77,7 @@ public class CourierConnection {
 				this.wireStream.writeI16(transaction);
 				this.wireStream.writeI16(0); // RejectCode.noSuchProgramNumber(0)
 				this.wireStream.writeEOM();
-				return;
+				return null;
 			}
 			// this goes to the min . commonprotocol version: if (othersLow > this.courierVersion) { this.courierVersion = othersLow; }
 			// use the max. possible common version
@@ -106,14 +107,15 @@ public class CourierConnection {
 			this.wireStream.writeI16(transaction);
 			this.wireStream.writeI16(3); // RejectCode.invalidArguments(3) ... best we have...?
 			this.wireStream.writeEOM();
-			return;
+			return null;
 		}
 		
 		// get the conversation id for this call and dispatch this call
 		int transaction = this.wireStream.readI16();
 		Log.C.printf(this.connId, "CourierConnection - dispatching call with transaction %d\n", transaction);
-		CourierRegistry.dispatch(this.courierVersion, transaction, this.wireStream);
+		iRawCourierConnectionClient connectionClient = CourierRegistry.dispatch(this.courierVersion, transaction, this.wireStream);
 		Log.C.printf(this.connId, "CourierConnection - done call with transaction %d\n\n", transaction);
+		return connectionClient;
 	}
 
 }

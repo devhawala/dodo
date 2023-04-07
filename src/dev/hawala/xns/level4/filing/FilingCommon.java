@@ -47,6 +47,8 @@ import dev.hawala.xns.level3.courier.UNSPECIFIED;
 import dev.hawala.xns.level3.courier.UNSPECIFIED2;
 import dev.hawala.xns.level3.courier.WireSeqOfUnspecifiedReader;
 import dev.hawala.xns.level3.courier.WireWriter;
+import dev.hawala.xns.level3.courier.iJsonReader;
+import dev.hawala.xns.level3.courier.iJsonWriter;
 import dev.hawala.xns.level3.courier.iWireData;
 import dev.hawala.xns.level3.courier.iWireDynamic;
 import dev.hawala.xns.level3.courier.iWireStream;
@@ -438,6 +440,16 @@ public abstract class FilingCommon extends CrProgram {
 					// there should be no more data for this item (if really Filing4), but who knows...
 				}
 			}
+		}
+
+		@Override
+		public void serialize(iJsonWriter wr) {
+			throw new IllegalStateException("JSON serializing not supported here");
+		}
+
+		@Override
+		public void deserialize(iJsonReader rd) {
+			throw new IllegalStateException("JSON deserializing not supported here");
 		}
 	
 		@Override

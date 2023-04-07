@@ -34,7 +34,7 @@ import dev.hawala.xns.level2.SppConnection;
  * SPP connection initiated by a client, connecting to a socket on
  * a remote server (or even the local machine).
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public class SppClientConnection extends SppAbstractConnection {
 	
@@ -103,6 +103,11 @@ public class SppClientConnection extends SppAbstractConnection {
 		}
 		// this.netMachine.stopListening(this.localSocket);
 		// TODO: prevent sending packets
+	}
+
+	@Override
+	public void handleAwakeAfterCloseByRemote(boolean allowReAwaking) {
+		this.connection.handleAwakeAfterCloseByRemote(allowReAwaking);
 	}
 
 }

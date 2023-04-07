@@ -32,15 +32,54 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 /**
  * Definition of the interface for serializable Courier data values.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  *
  */
 public interface iWireData {
 
+	/**
+	 * Serialize a Courier data value to a Courier sink. 
+	 * @param ws the Courier sink to use
+	 * @throws NoMoreWriteSpaceException
+	 */
 	void serialize(iWireStream ws) throws NoMoreWriteSpaceException;
 	
+	/**
+	 * Deserialize a Courier data value from a Courier source.
+	 * @param ws the Courier source to use
+	 * @throws EndOfMessageException
+	 */
 	void deserialize(iWireStream ws) throws EndOfMessageException;
 	
+	/**
+	 * Produce the readable string representation of the data value.
+	 * @param to destination where to append the string representation
+	 * @param indent number of blanks to prepend to each line for representing the hierarchical structure of the parent items 
+	 * @param fieldName the name of this data value in the parents structure
+	 * @return {@code to} for fluent API
+	 */
 	StringBuilder append(StringBuilder to, String indent, String fieldName);
 	
+	/**
+	 * Serialize a Courier data value to a JSON sink. 
+	 * @param ws the JSON sink to use
+	 * @throws NoMoreWriteSpaceException
+	 */
+	void serialize(iJsonWriter wr);
+	
+	/**
+	 * Deserialize a Courier data value from a JSON source.
+	 * @param ws the JSON source to use
+	 * @throws EndOfMessageException
+	 */
+	void deserialize(iJsonReader rd);
+	
+	/**
+	 * Deserialize the structure member {@code fieldName} of this object (Courier RECORD type) from a JSON source.
+	 * @param fieldName the name of the member to deserialize
+	 * @param rd the JSON source to use
+	 */
+	default void handleField(String fieldName, iJsonReader rd) {
+		rd.fail();
+	}
 }

@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 
 import dev.hawala.xns.Log;
+import dev.hawala.xns.level3.courier.CrProgram.iRawCourierConnectionClient;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 
@@ -80,7 +81,7 @@ public class CourierRegistry {
 		return key;
 	}
 	
-	public static void dispatch(
+	public static iRawCourierConnectionClient dispatch(
 						int courierVersion,
 						int transaction,
 						iWireStream connection) throws NoMoreWriteSpaceException, EndOfMessageException {
@@ -92,8 +93,7 @@ public class CourierRegistry {
 		if (crPrograms.containsKey(key)) {
 			Log.C.printf(null, "CourierRegistry: dispatching to program %d version %d\n", programNo, programVersion);
 			CrProgram program = crPrograms.get(key);
-			program.dispatch(transaction, connection);
-			return;
+			return program.dispatch(transaction, connection);
 		}
 		
 		// fail: not registered => find out if not at all or not in the requested version
@@ -128,6 +128,8 @@ public class CourierRegistry {
 			}
 		}
 		connection.writeEOM();
+		
+		return null;
 	}
 	
 }

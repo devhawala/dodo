@@ -42,7 +42,7 @@ import dev.hawala.xns.level2.SppConnection;
  * Common functionality for SPP client and server connections, providing
  * the stream implementations for SPP connections.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2023)
  */
 public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver {
 	
@@ -219,12 +219,17 @@ public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver 
 			}
 			
 			if (this.currSpp == null) {
+				this.consumedBytes = 0;
 				this.currSpp = this.connection.dequeueIngonePacket();
+				if (this.connection.getAttentionState()) {
+					this.attnPending = true;
+					this.attnByte = this.connection.consumePendingAttention();
+					return new SppIAttentionResult(this.attnByte, this::resetAttention, datastreamType);
+				}
 				if (this.currSpp == null) {
 					this.closed = true;
 					return null;
 				}
-				this.consumedBytes = 0;
 			}
 			
 			boolean isEndOfMessage = false;
@@ -276,6 +281,12 @@ public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver 
 			if (this.isClosed()) { throw new XnsException(ExceptionType.ConnectionClosed); }
 			this.connection.sendAttention(attnByte);
 		}
+		
+		@Override
+		public void sendAttention(byte attnByte, byte datastreamType) throws XnsException {
+			if (this.isClosed()) { throw new XnsException(ExceptionType.ConnectionClosed); }
+			this.connection.sendAttention(attnByte, datastreamType);
+		}
 
 		@Override
 		public int write(byte[] buffer, byte datastreamType) throws InterruptedException, XnsException {
@@ -307,6 +318,7 @@ public abstract class SppAbstractConnection implements iSppSocket, iIDPReceiver 
 				}
 				sendLength -= sent;
 				totalLength += sent;
+				offset += sent;
 			}
 			int sent = this.connection.enqueueOutgoingPacket(buffer, offset, sendLength, datastreamType, isEndOfMessage);
 			if (sent < 0) {

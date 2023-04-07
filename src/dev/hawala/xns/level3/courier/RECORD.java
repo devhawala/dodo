@@ -39,7 +39,7 @@ import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
  * Representation of the Courier RECORD datatype
  * as base class for real RECORDs.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018,2019)
+ * @author Dr. Hans-Walter Latz / Berlin (2018,2019,2023)
  */
 public abstract class RECORD implements iWireData {
 	
@@ -177,6 +177,37 @@ public abstract class RECORD implements iWireData {
 		for (iWireData member : this.wireSequence) {
 			member.deserialize(ws);
 		}
+	}
+	
+	@Override
+	public void serialize(iJsonWriter wr) {
+		String[] memberNames = this.getMemberNames();
+		int wireCount = this.wireSequence.size();
+		wr.openStruct();
+		for (int i = 0; i < wireCount; i++) {
+			wr.writeFieldLabel(memberNames[i]);
+			this.wireSequence.get(i).serialize(wr);
+		}
+		wr.closeStruct();
+	}
+	
+	private String[] memberNames = null;
+	
+	@Override
+	public void handleField(String fieldName, iJsonReader rd) {
+		if (this.memberNames == null) { this.memberNames = this.getMemberNames(); }
+		for (int i = 0; i < this.memberNames.length; i++) {
+			if (this.memberNames[i].equals(fieldName)) {
+				this.wireSequence.get(i).deserialize(rd);
+				return;
+			}
+		}
+		rd.skip();
+	}
+
+	@Override
+	public void deserialize(iJsonReader rd) {
+		rd.readStruct(this);
 	}
 	
 	private String[] getMemberNames() {

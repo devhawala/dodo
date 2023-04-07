@@ -30,7 +30,7 @@ package dev.hawala.xns.level3.courier;
  * Special Courier type for getting the remote host-id, but with no effects on the
  * Courier communication.
  * 
- * @author Dr. Hans-Walter Latz / Berlin 2019,2020
+ * @author Dr. Hans-Walter Latz / Berlin 2019,2020,2023
  */
 public class RemoteHostId implements iWireData {
 	
@@ -54,5 +54,11 @@ public class RemoteHostId implements iWireData {
 	
 	private RemoteHostId() {}
 	public static RemoteHostId make() { return new RemoteHostId(); }
+
+	@Override
+	public void serialize(iJsonWriter wr) { return; }
+
+	@Override
+	public void deserialize(iJsonReader rd) { return ; /* ignored !! */ }
 	
 }

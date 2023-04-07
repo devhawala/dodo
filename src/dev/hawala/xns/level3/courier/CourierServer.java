@@ -37,15 +37,25 @@ import dev.hawala.xns.iSppOutputStream;
 import dev.hawala.xns.iSppServerSocket;
 import dev.hawala.xns.iSppSocket;
 import dev.hawala.xns.level1.IDP;
+import dev.hawala.xns.level3.courier.CrProgram.iRawCourierConnectionClient;
 import dev.hawala.xns.level3.courier.iWireStream.EndOfMessageException;
 import dev.hawala.xns.level3.courier.iWireStream.NoMoreWriteSpaceException;
 
 /**
  * SPP server on the Courier port, accepting ingoing Courier connections
- * and starting a separate thread for handling procedure invications
- * over that SPP connection. 
+ * and starting a separate thread for handling procedure invocations
+ * over that SPP connection.
+ * <br/>
+ * To support the Gateway Access Protocol (GAP) and more specifically the usage of
+ * the SPP connection of a Courier session for the direct end-to-end data transmission
+ * between the client and the remote system (where this Courier server is only the
+ * mediator instance), the SPP connection can temporarily be borrowed from Courier
+ * for the lifetime of the end-to-end connection. The usage pattern seems to be that
+ * the end of the end-to-end connection is signaled by closing the SPP connection
+ * (i.e. destroying it!) and possibly re-awake this same connection in the next 5 seconds
+ * by continuing to use it by sending the next Courier call ... this is how ViewPoint does it.
  * 
- * @author Dr. Hans-Walter Latz / Berlin (2018)
+ * @author Dr. Hans-Walter Latz / Berlin (2018, 2023)
  */
 public class CourierServer implements Runnable {
 	
@@ -148,7 +158,12 @@ public class CourierServer implements Runnable {
 		public void run() {
 			try {
 				while(!this.isClosed()) {
-					this.crConn.processSingleCall();
+					iRawCourierConnectionClient connectionClient = this.crConn.processSingleCall();
+					this.clientSocket.handleAwakeAfterCloseByRemote(false);
+					if (connectionClient != null) {
+						this.clientSocket.handleAwakeAfterCloseByRemote(true);
+						connectionClient.useConnection(this.clientSocket);
+					}
 				}
 			} catch (EndOfMessageException | NoMoreWriteSpaceException e) {
 				synchronized(this) {
