@@ -94,6 +94,7 @@ public class DodoServer {
 	private static boolean startChsAndAuth = true;
 	private static boolean startRipService = true;
 	private static boolean startBootService = false;
+	private static boolean startExternalCommunicationService = true;
 	
 	private static String organizationName = "hawala";
 	private static String domainName = "dev";
@@ -164,6 +165,7 @@ public class DodoServer {
 		startChsAndAuth = props.getBoolean("startChsAndAuthServices", startChsAndAuth);
 		startRipService = props.getBoolean("startRipService", startRipService);
 		startBootService = props.getBoolean("startBootService", startBootService);
+		startExternalCommunicationService = props.getBoolean("startExternalCommunicationService", startExternalCommunicationService);
 		
 		allowBlanksInObjectNames = props.getBoolean("allowBlanksInObjectNames", allowBlanksInObjectNames);
 		authSkipTimestampChecks = props.getBoolean(MachineIds.CFG_AUTH_SKIP_TIMESTAMP_CHECKS, authSkipTimestampChecks);
@@ -178,7 +180,7 @@ public class DodoServer {
 		printServiceIp2PsProcFilename = props.getString("printService.ip2PsProcFilename", printServiceIp2PsProcFilename);
 		printServicePsPostprocessor = props.getString("printService.psPostprocessor", printServicePsPostprocessor);
 		
-		bootServiceBasedir = props.getString("bootService.basedir", bootServiceBasedir);
+		bootServiceBasedir = props.getString("bootService.baseDir", bootServiceBasedir);
 		bootServiceVerbose = props.getBoolean("bootService.verbose", bootServiceVerbose);
 		bootServiceSimpleDataSendInterval = props.getInt(MachineIds.CFG_BOOTSVC_SIMPLEDATA_SEND_INTERVAL, bootServiceSimpleDataSendInterval);
 		bootServiceSppDataSendInterval = props.getInt(MachineIds.CFG_BOOTSVC_SPPDATA_SEND_INTERVAL, bootServiceSppDataSendInterval);
@@ -430,8 +432,10 @@ public class DodoServer {
 		}
 		
 		// Gateway Access Services
-		Gap3Impl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase);
-		Gap3Impl.register();
+		if (startExternalCommunicationService && chsDatabase != null) {
+			Gap3Impl.init(localSite.getNetworkId(), localSite.getMachineId(), chsDatabase);
+			Gap3Impl.register();
+		}
 		
 		// run courier server with dispatcher
 		CourierServer courierServer = new CourierServer(localSite);

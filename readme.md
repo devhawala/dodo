@@ -353,6 +353,12 @@ _optional_, _default_: `true`
 do start Dodo's Boot service?    
 _optional_, _default_: `false`
 
+- `startExternalCommunicationService`    
+do start Dodo's External Communication Service?    
+The service will only be started if this Dodo instance also runs the Clearinghouse service,
+furthermore only one Dodo instance in the network should provide the External Communication Service   
+_optional_, _default: `true`
+
 - `timeService.localTimeOffsetMinutes`    
 time zone parameter for the time service as
 difference between local time and GMT in minutes, with positive values being
@@ -757,6 +763,11 @@ still missing, like Mail protocols)
     - [Boot_Service_10.0_1986.pdf](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/xns_services/services_10.0/Network_Shared_Services_10.0/610E02850_Boot_Service_10.0_1986.pdf)
 
 ### Development history
+
+- 2023-09-12    
+-- ECS: added option *startExternalCommunicationService*    
+-- ECS: fox for starting the service only if CHS is also started on this instance    
+-- BS: fixed config parameter *bootService.baseDir* to match documentation
 
 - 2023-04-07    
 -- added first version of _External Communication Services_ for TTY and 3270 connections    
